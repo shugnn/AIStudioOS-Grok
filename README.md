@@ -16,35 +16,54 @@ Parallel track: AIStudioOS-ChatGPT (led by ChatGPT)
 - Unified evaluation metrics for later objective comparison
 - Possibility of integrating proven components later
 
-Suggested GitHub repository: **shugnn/AIStudioOS-Grok**
+**GitHub**: https://github.com/shugnn/AIStudioOS-Grok
 
-## Current Phase (2026-10-22)
+## Current Status (2026-10-22)
 
-**Technical Investigation → Minimal Experiment Design**
+**Phase 1: Thin Control Plane + Minimal Experiment**
 
-- [x] Project structure initialized
-- [x] Technical Investigation Report v0.1 (7 candidate technologies)
-- [x] Minimal Experiment Protocol draft
-- [x] Dual-track alignment & unified metrics documented
-- [ ] Finalize experiment target task
-- [ ] Implement thinnest Control Plane (Goal / Task / Budget / Permission / Checkpoint)
-- [ ] Run first closed-loop experiment
+- [x] Technical Investigation Report v0.1
+- [x] Dual-track alignment & unified metrics
+- [x] Minimal Experiment Protocol v1 (locked)
+- [x] Thin Control Plane prototype (Goal / Task / Budget / Permission / Checkpoint)
+- [x] Unit tests for Control Plane (6/6 passed)
+- [ ] Run Exp-01 (Tiny Word-Count CLI) closed loop
+- [ ] Record metrics & recovery test
+
+## Quick Start
+
+```bash
+# Run Control Plane unit tests
+PYTHONPATH=. python -m pytest tests/test_control_plane.py -v
+
+# Inspect Control Plane status (after a goal is created)
+PYTHONPATH=. python -m control_plane.cli status
+```
 
 ## Key Documents
 
-- `docs/00-project-log.md`
-- `docs/01-technical-investigation-report.md`
-- `docs/02-minimal-experiment-protocol-draft.md`
-- `docs/03-dual-track-and-evaluation-metrics.md`
+| Doc | Description |
+|-----|-------------|
+| `docs/01-technical-investigation-report.md` | Evidence-based evaluation of 7 candidate technologies |
+| `docs/03-dual-track-and-evaluation-metrics.md` | Parallel R&D rules + unified metrics |
+| `docs/04-minimal-experiment-protocol-v1.md` | Binding protocol for Phase 1 experiment |
+| `experiments/exp01-tiny-cli/` | First concrete experiment target |
 
-## Core Architecture Intent
+## Architecture (Phase 1)
 
-Independent **Control Plane** that owns:
-- Goals & milestones
-- Task queue
-- State & memory
-- Budget & resource limits
-- Hard permission / policy enforcement
-- Human approval gates
+```
+Human Founder
+    │
+    ▼
+Control Plane  (control_plane/)
+  - Goal / Task queue
+  - Hard Budget envelope
+  - Hard Permission policy
+  - Durable Checkpoints
+    │
+    ├── Manager   (proposes only)
+    ├── Worker    (executes approved work)
+    └── Verifier  (independent accept/reject)
+```
 
-AI Manager proposes; Control Plane + Independent Verifier decide and enforce.
+Manager never decides acceptance. Budget & permissions are enforced in code, not only by prompts.

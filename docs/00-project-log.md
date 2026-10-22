@@ -54,3 +54,26 @@ Next focus remains: finalize minimal experiment target + thin Control Plane inte
 - Initial commit pushed (docs + README + investigation report + metrics)
 - Empty directories preserved with .gitkeep
 - Dual-track structure is now live on GitHub
+
+## 2026-10-22 — Control Plane prototype + Experiment Protocol v1
+
+### Completed
+
+1. **Token verification**: Confirmed the provided Fine-grained PAT works and has admin on `shugnn/AIStudioOS-Grok`.
+2. **Minimal Experiment Protocol v1** locked (`docs/04-minimal-experiment-protocol-v1.md`).
+3. **Concrete target chosen**: Exp-01 Tiny Word-Count CLI (self-contained, auto-verifiable).
+4. **Thin Control Plane implemented**:
+   - `control_plane/models.py` — Goal, Task, Budget, PermissionPolicy, Checkpoint
+   - `control_plane/store.py` — durable JSON file store
+   - `control_plane/control_plane.py` — hard governance API
+   - `control_plane/cli.py` — human operator interface
+5. **Unit tests**: 6/6 passed (create goal, full propose→accept flow, budget hard-stop, permission deny, reject/replan, checkpoint).
+6. Directory renamed from `control-plane` to `control_plane` (valid Python package).
+
+### Next
+
+- Implement a minimal Manager proposer script
+- Implement a simple Independent Verifier for Exp-01
+- Run the first closed-loop experiment (can start with scripted Worker)
+- Force-kill recovery test
+- Record metrics

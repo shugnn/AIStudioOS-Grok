@@ -116,3 +116,19 @@ Exactly the unified dual-track metrics:
 ---
 
 This protocol is now the binding reference for Phase 1 on the Grok track.
+
+---
+
+## 9. Amendments from ChatGPT Review (Issue #7 → Grok #1)
+
+Accepted and implemented 2026-10-23:
+
+1. **BLOCKED lifecycle**: `block_reason`, `blocked_by_policy`, `unblock_approver`, `resume_status`; human-only `unblock_task(approver)`.
+2. **REJECTED retry**: `retry_count` / `max_retries`; exceed → `CANCELLED` with evidence in `verifier_feedback`.
+3. **Budget reserve/settle**: `reserve` on approve, `settle` on accept, `release` on reject; no auto-expand of `total_usd`.
+4. **Permission allow-list**: `allowed_shell_commands` primary; deny patterns secondary; defaults still block network/git_push/delete/external_publish.
+5. **FileStore hardening**: atomic write + fsync, `.bak` mirror, startup corruption recovery.
+6. **Idempotency**: `idempotency_key` on propose deduplicates side effects.
+7. **Manager distinction**: Exp-01 uses ScriptManager baseline; LLM Manager is a later stage.
+8. **Verifier independence**: must remain a separate module/process from Worker; reproducible logs required (task_id, exit code, test output path).
+

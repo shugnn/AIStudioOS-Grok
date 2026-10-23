@@ -30,6 +30,10 @@ def main():
     p_approve = sub.add_parser("approve", help="Approve a proposed/rejected task")
     p_approve.add_argument("task_id")
 
+    p_unblock = sub.add_parser("unblock", help="Human unblocks a BLOCKED task")
+    p_unblock.add_argument("task_id")
+    p_unblock.add_argument("--approver", default="founder")
+
     # list-tasks
     p_list = sub.add_parser("list-tasks", help="List tasks for a goal")
     p_list.add_argument("goal_id")
@@ -66,6 +70,14 @@ def main():
         try:
             t = cp.approve_task(args.task_id)
             print(f"Approved: {t.id} -> {t.status.value}")
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.cmd == "unblock":
+        try:
+            t = cp.unblock_task(args.task_id, approver=args.approver)
+            print(f"Unblocked by {args.approver}: {t.id} -> {t.status.value}")
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)

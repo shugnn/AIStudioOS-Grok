@@ -29,6 +29,7 @@ class FileStore:
 
     def __init__(self, path: str | Path = "control_plane/state.json"):
         self.path = Path(path)
+        self.bak_path = self.path.with_suffix(".bak")
         self._lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
@@ -40,18 +41,37 @@ class FileStore:
                 "checkpoints": {},
                 "meta": {"version": 1},
             })
+        else:
+            self._read()  # corruption detection on startup
 
     def _read(self) -> dict:
         with self._lock:
-            with open(self.path, "r", encoding="utf-8") as f:
-                return json.load(f)
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                if self.bak_path.exists():
+                    with open(self.bak_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    self._write(data)
+                    return data
+                raise RuntimeError(
+                    f"State file corrupt and no usable backup: {self.path} ({e})"
+                ) from e
 
     def _write(self, data: dict) -> None:
         with self._lock:
             tmp = self.path.with_suffix(".tmp")
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             tmp.replace(self.path)
+            try:
+                import shutil
+                shutil.copy2(self.path, self.bak_path)
+            except OSError:
+                pass
 
     # ---- Goal ----
     def save_goal(self, goal: Goal) -> None:

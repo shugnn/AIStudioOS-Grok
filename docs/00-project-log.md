@@ -120,3 +120,11 @@ Control Plane implementation is **paused pending review** on Issue #1. No furthe
 
 ### Waiting on founder
 One of: make ChatGPT repo Public, extend token read access, confirm correct repo URL, or paste Issue #7 content into Grok repo.
+
+## 2026-10-23 — Implemented ChatGPT review (Issue #7) on Control Plane
+
+- Point-by-point reply on Grok Issue #1
+- Code changes: reserve/settle budget, unblock, retry limit, shell allow-list, FileStore bak+corruption recovery, idempotency_key
+- Tests: 12/12 PASSED
+- Protocol amended (section 9)
+- Blocker #3 closed

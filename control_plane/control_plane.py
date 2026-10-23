@@ -82,35 +82,78 @@ class ControlPlane:
         description: str,
         proposed_by: str = "manager",
         estimated_cost_usd: float = 0.0,
+        idempotency_key: Optional[str] = None,
         **meta,
     ) -> Task:
-        """Manager calls this. Control Plane may auto-approve or leave as PROPOSED."""
+        """Manager calls this. Control Plane may auto-approve or leave as PROPOSED.
+
+        If idempotency_key is provided and a non-cancelled task with the same key
+        already exists for this goal, return that task (side-effect dedup).
+        """
         self._require_goal(goal_id)
-        task = Task.create(goal_id, title, description, proposed_by=proposed_by, **meta)
+        if idempotency_key:
+            for existing in self.store.list_tasks(goal_id=goal_id):
+                if existing.idempotency_key == idempotency_key and existing.status != TaskStatus.CANCELLED:
+                    return existing
+        task = Task.create(
+            goal_id, title, description,
+            proposed_by=proposed_by,
+            idempotency_key=idempotency_key,
+            **meta,
+        )
         task.metadata["estimated_cost_usd"] = estimated_cost_usd
         self.store.save_task(task)
         return task
 
     def approve_task(self, task_id: str) -> Task:
+        """Approve and *reserve* estimated budget. Does not settle actual spend."""
         task = self._require_task(task_id)
         if task.status not in (TaskStatus.PROPOSED, TaskStatus.REJECTED):
             raise ControlPlaneError(f"Cannot approve task in status {task.status}")
 
         budget = self.store.get_budget()
         est = float(task.metadata.get("estimated_cost_usd", 0.0))
-        if not budget.can_spend(est):
+        if est > 0 and not budget.can_spend(est):
             task.status = TaskStatus.BLOCKED
+            task.block_reason = (
+                f"Budget remaining ${budget.remaining_usd():.2f}, estimated need ${est:.2f}"
+            )
+            task.blocked_by_policy = "budget"
+            task.resume_status = TaskStatus.PROPOSED.value
             task.updated_at = _now()
             self.store.save_task(task)
-            raise BudgetExceeded(
-                f"Budget remaining ${budget.remaining_usd():.2f}, "
-                f"estimated need ${est:.2f}. Task blocked pending human approval."
-            )
+            self._checkpoint(task.goal_id, f"task_blocked_{task.id}", {"task": task.to_dict()})
+            raise BudgetExceeded(task.block_reason + ". Task blocked pending human approval.")
+
+        if est > 0:
+            budget.reserve(est)
+            self.store.save_budget(budget)
+            task.reserved_usd = est
 
         task.status = TaskStatus.APPROVED
+        task.block_reason = None
+        task.blocked_by_policy = None
         task.updated_at = _now()
         self.store.save_task(task)
         self._checkpoint(task.goal_id, f"task_approved_{task.id}", {"task": task.to_dict()})
+        return task
+
+    def unblock_task(self, task_id: str, approver: str = "founder") -> Task:
+        """Human-only: clear BLOCKED and restore to resume_status (default PROPOSED)."""
+        task = self._require_task(task_id)
+        if task.status != TaskStatus.BLOCKED:
+            raise ControlPlaneError(f"Task is not BLOCKED: {task.status}")
+        resume = TaskStatus(task.resume_status) if task.resume_status else TaskStatus.PROPOSED
+        task.status = resume
+        task.unblock_approver = approver
+        task.block_reason = None
+        task.blocked_by_policy = None
+        task.resume_status = None
+        task.updated_at = _now()
+        self.store.save_task(task)
+        self._checkpoint(task.goal_id, f"task_unblocked_{task.id}", {
+            "task": task.to_dict(), "approver": approver,
+        })
         return task
 
     def mark_running(self, task_id: str) -> Task:
@@ -139,46 +182,70 @@ class ControlPlane:
         cost_usd: float = 0.0,
         cost_tokens: int = 0,
     ) -> Task:
-        """Called only by Independent Verifier (or human)."""
+        """Called only by Independent Verifier (or human). Settles reservation."""
         task = self._require_task(task_id)
         if task.status != TaskStatus.VERIFYING:
             raise ControlPlaneError(f"Task must be VERIFYING to accept, got {task.status}")
 
-        # Hard budget enforcement at acceptance time as well
         budget = self.store.get_budget()
-        if cost_usd > 0 and not budget.can_spend(cost_usd):
+        reserved = task.reserved_usd
+        # If actual exceeds remaining capacity beyond reservation, block
+        extra_needed = max(0.0, cost_usd - reserved)
+        if extra_needed > 0 and not budget.can_spend(extra_needed):
             task.status = TaskStatus.BLOCKED
-            task.verifier_feedback = "Budget exceeded at acceptance"
+            task.block_reason = "Budget exceeded at acceptance (actual > reserved + remaining)"
+            task.blocked_by_policy = "budget"
+            task.resume_status = TaskStatus.VERIFYING.value
+            task.verifier_feedback = task.block_reason
             task.updated_at = _now()
             self.store.save_task(task)
-            raise BudgetExceeded("Cannot accept: budget would be exceeded")
+            raise BudgetExceeded(task.block_reason)
 
-        if cost_usd > 0:
-            budget.record_spend(cost_usd, cost_tokens)
-            self.store.save_budget(budget)
+        budget.settle(reserved=reserved, actual=cost_usd, tokens=cost_tokens)
+        self.store.save_budget(budget)
 
         task.status = TaskStatus.ACCEPTED
         task.verifier_feedback = feedback
         task.cost_usd = cost_usd
         task.cost_tokens = cost_tokens
+        task.reserved_usd = 0.0
         task.updated_at = _now()
         self.store.save_task(task)
         self._checkpoint(task.goal_id, f"task_accepted_{task.id}", {"task": task.to_dict()})
         return task
 
     def reject_task(self, task_id: str, feedback: str) -> Task:
+        """Verifier reject: release reservation, increment retry; cancel if over max_retries."""
         task = self._require_task(task_id)
         if task.status != TaskStatus.VERIFYING:
             raise ControlPlaneError(f"Task must be VERIFYING to reject, got {task.status}")
-        task.status = TaskStatus.REJECTED
+
+        budget = self.store.get_budget()
+        if task.reserved_usd > 0:
+            budget.release(task.reserved_usd)
+            self.store.save_budget(budget)
+            task.reserved_usd = 0.0
+
+        task.retry_count += 1
         task.verifier_feedback = feedback
         task.updated_at = _now()
+
+        if task.retry_count > task.max_retries:
+            task.status = TaskStatus.CANCELLED
+            task.verifier_feedback = (
+                f"{feedback} | cancelled: exceeded max_retries={task.max_retries}"
+            )
+            self.store.save_task(task)
+            self._checkpoint(task.goal_id, f"task_cancelled_{task.id}", {"task": task.to_dict()})
+            return task
+
+        task.status = TaskStatus.REJECTED
         self.store.save_task(task)
         self._checkpoint(task.goal_id, f"task_rejected_{task.id}", {"task": task.to_dict()})
         return task
 
     # ------------------------------------------------------------------
-    # Permission checks (hard)
+    # Permission checks (hard) — allow-list preferred
     # ------------------------------------------------------------------
     def check_permission(self, action: str, **kwargs) -> None:
         """Raise PermissionDenied if the action is not allowed by hard policy."""
@@ -188,13 +255,26 @@ class ControlPlane:
             if not policy.allow_file_write:
                 raise PermissionDenied("file_write is disabled by policy")
             path = kwargs.get("path", "")
-            if policy.allowed_paths and not any(path.startswith(p) for p in policy.allowed_paths):
+            if policy.allowed_paths and not any(
+                path.startswith(p) or path.startswith("./" + p.lstrip("./"))
+                for p in policy.allowed_paths
+            ):
                 raise PermissionDenied(f"Path '{path}' not in allowed_paths")
 
         elif action == "shell":
             if not policy.allow_shell:
                 raise PermissionDenied("shell is disabled by policy")
-            cmd = kwargs.get("command", "")
+            cmd = (kwargs.get("command") or "").strip()
+            # Primary: structured allow-list (first token must match)
+            if policy.allowed_shell_commands:
+                first = cmd.split()[0] if cmd else ""
+                # allow python -m pytest style: check base binary
+                base = first.split("/")[-1]
+                if base not in policy.allowed_shell_commands and first not in policy.allowed_shell_commands:
+                    raise PermissionDenied(
+                        f"Command '{first}' not in allowed_shell_commands whitelist"
+                    )
+            # Secondary: deny patterns
             for denied in policy.denied_commands:
                 if denied in cmd:
                     raise PermissionDenied(f"Command contains denied pattern: {denied}")

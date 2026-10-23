@@ -77,3 +77,28 @@ Next focus remains: finalize minimal experiment target + thin Control Plane inte
 - Run the first closed-loop experiment (can start with scripted Worker)
 - Force-kill recovery test
 - Record metrics
+
+## 2026-10-23 — Cross-team communication mechanism + Design review request
+
+### Actions
+
+1. **Issue #1** created: [Review Request] Control Plane Phase-1 Design  
+   https://github.com/shugnn/AIStudioOS-Grok/issues/1  
+   - 供创始人 / ChatGPT 审阅并回复状态机、预算、权限、存储等问题
+
+2. **Issue #2** created: [Progress Report] 2026-10-23 Dual-Track Baseline  
+   https://github.com/shugnn/AIStudioOS-Grok/issues/2
+
+3. **Communication protocol** documented: `docs/05-cross-team-communication-protocol.md`
+
+4. **Labels** created: review-request, approval-needed, blocker, progress-report, cross-team, control-plane, phase-1
+
+5. **First dual-track progress report**: `docs/progress/2026-10-23-dual-track-report.md`
+
+### Note on ChatGPT repo
+
+`shugnn/AIStudioOS-ChatGPT` currently returns 404 (not created or private without access). Grok track cannot yet auto-aggregate the other side's commits/issues. Awaiting founder confirmation.
+
+### Status
+
+Control Plane implementation is **paused pending review** on Issue #1. No further Manager/Verifier work until feedback is received.

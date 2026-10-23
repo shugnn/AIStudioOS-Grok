@@ -76,3 +76,18 @@ report:  optional git-friendly artifact (no auto-push required)
 - [ ] Runner script runs twice with lock
 - [ ] Force-kill mid-run then recover
 - [ ] Logs + commit SHA
+
+
+## Implementation status (post ChatGPT P0 review)
+
+| Item | Status |
+|------|--------|
+| Atomic lock `O_CREAT\|O_EXCL` | **Implemented** in `scripts/l1_runner.py` |
+| No TTL-preempt of live PID | **Implemented**; stale only if PID dead |
+| Owner token on release | **Implemented** |
+| Failed job → non-zero exit | **Implemented** |
+| max_jobs default 1 | **Implemented** (`--max-jobs`) |
+| Hourly job key dedup | **Not implemented** (documented as future) |
+| OS fcntl advisory lock | **Not used**; O_EXCL file create instead |
+| Scheduled cron evidence | **Manual / external cron only**; no Actions |
+

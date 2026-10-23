@@ -102,3 +102,21 @@ Next focus remains: finalize minimal experiment target + thin Control Plane inte
 ### Status
 
 Control Plane implementation is **paused pending review** on Issue #1. No further Manager/Verifier work until feedback is received.
+
+## 2026-10-23 — Dual-team collaboration formal start; blocked on ChatGPT Issue #7
+
+### Founder directive
+- ChatGPT authorized as AIStudioOS-ChatGPT lead and as representative to review Grok designs
+- Grok must point-by-point review ChatGPT Issue #7, reply adopt/defer/reject with rationale
+- All important design/blockers/approvals via GitHub Issues/PRs
+- Daily dual progress reports; prefer Issue comments over manual relay
+- No unauthorized modification of ChatGPT repo; no unauthorized paid spend
+
+### Actions taken
+1. Attempted to read https://github.com/shugnn/AIStudioOS-ChatGPT/issues/7 → **404** (with PAT and public)
+2. Opened **Blocker #3**: https://github.com/shugnn/AIStudioOS-Grok/issues/3
+3. Recorded handling plan as comment on **Issue #1**: https://github.com/shugnn/AIStudioOS-Grok/issues/1#issuecomment-6354757978
+4. Control Plane / Exp-01 work remains **paused** until review cycle can complete
+
+### Waiting on founder
+One of: make ChatGPT repo Public, extend token read access, confirm correct repo URL, or paste Issue #7 content into Grok repo.

@@ -1,0 +1,107 @@
+{
+  "type": "l1_heartbeat",
+  "track": "AIStudioOS-Grok",
+  "utc": "2026-10-23T05:03:55.554135+00:00",
+  "repos": {
+    "grok": {
+      "open_issues": 5,
+      "issues": [
+        {
+          "number": 6,
+          "title": "[Experiment Result] Exp-01 ScriptManager baseline — PASS (0 interventions, $0)",
+          "labels": [
+            "phase-1",
+            "progress-report",
+            "cross-team"
+          ],
+          "updated_at": "2026-10-23T04:50:52Z"
+        },
+        {
+          "number": 5,
+          "title": "[Cross-team] 双向沟通有效性评估 + 是否引入自动推进机制 — 征求双方意见",
+          "labels": [
+            "phase-1",
+            "approval-needed",
+            "progress-report",
+            "cross-team"
+          ],
+          "updated_at": "2026-10-23T04:50:54Z"
+        },
+        {
+          "number": 4,
+          "title": "[Cross-team RFC] 双向通信验收与持续推进机制（请 Grok 发表独立意见）",
+          "labels": [],
+          "updated_at": "2026-10-23T05:03:35Z"
+        },
+        {
+          "number": 2,
+          "title": "[Progress Report] 2026-10-23 Dual-Track Baseline + Communication Bootstrap",
+          "labels": [
+            "phase-1",
+            "progress-report",
+            "cross-team"
+          ],
+          "updated_at": "2026-10-23T01:02:04Z"
+        },
+        {
+          "number": 1,
+          "title": "[Review Request] Control Plane Phase-1 Design — 请创始人 / ChatGPT 审阅并回复",
+          "labels": [
+            "review-request",
+            "control-plane",
+            "phase-1",
+            "approval-needed"
+          ],
+          "updated_at": "2026-10-23T04:50:53Z"
+        }
+      ]
+    },
+    "chatgpt": {
+      "open_issues": 6,
+      "issues": [
+        {
+          "number": 7,
+          "title": "[Cross-team Review] Grok Control Plane #1 — 审查意见待送达",
+          "labels": [],
+          "updated_at": "2026-10-23T03:03:35Z"
+        },
+        {
+          "number": 5,
+          "title": "T-005 独立验证器与持续运行验收",
+          "labels": [],
+          "updated_at": "2026-10-22T02:28:32Z"
+        },
+        {
+          "number": 4,
+          "title": "T-004 隔离实验：LCS-Watcher 或合成任务",
+          "labels": [],
+          "updated_at": "2026-10-22T02:28:30Z"
+        },
+        {
+          "number": 3,
+          "title": "T-003 安全护栏：预算、权限、人工审批",
+          "labels": [],
+          "updated_at": "2026-10-22T02:28:28Z"
+        },
+        {
+          "number": 2,
+          "title": "T-002 最小控制平面：任务状态机与持久化",
+          "labels": [],
+          "updated_at": "2026-10-22T02:28:26Z"
+        },
+        {
+          "number": 1,
+          "title": "T-001 技术尽调：TheBotCompany 与候选框架",
+          "labels": [],
+          "updated_at": "2026-10-22T02:28:24Z"
+        }
+      ]
+    }
+  },
+  "blockers": [],
+  "approval_needed": [
+    "grok#5",
+    "grok#1"
+  ],
+  "notes": "L1 scan only — no task execution, no LLM spend"
+}

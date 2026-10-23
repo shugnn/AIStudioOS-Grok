@@ -255,11 +255,16 @@ class ControlPlane:
             if not policy.allow_file_write:
                 raise PermissionDenied("file_write is disabled by policy")
             path = kwargs.get("path", "")
-            if policy.allowed_paths and not any(
-                path.startswith(p) or path.startswith("./" + p.lstrip("./"))
-                for p in policy.allowed_paths
-            ):
-                raise PermissionDenied(f"Path '{path}' not in allowed_paths")
+            if policy.allowed_paths:
+                norm = path.replace("\\", "/")
+                ok = False
+                for p in policy.allowed_paths:
+                    pnorm = p.replace("\\", "/").lstrip("./")
+                    if pnorm in norm or norm.startswith(p) or norm.startswith("./" + pnorm):
+                        ok = True
+                        break
+                if not ok:
+                    raise PermissionDenied(f"Path '{path}' not in allowed_paths")
 
         elif action == "shell":
             if not policy.allow_shell:

@@ -204,7 +204,7 @@ class PermissionPolicy:
     allow_external_publish: bool = False
     max_file_size_mb: float = 10.0
     # Structured allow-lists (preferred)
-    allowed_paths: list[str] = field(default_factory=lambda: ["./workspace", "./artifacts", "experiments/"])
+    allowed_paths: list[str] = field(default_factory=lambda: ["./workspace", "./artifacts", "experiments/", "workspace"])
     allowed_shell_commands: list[str] = field(default_factory=lambda: [
         "python", "python3", "pytest", "ls", "cat", "echo", "mkdir", "touch", "cp", "mv", "wc",
     ])

@@ -13,3 +13,9 @@ build/
 *.log
 node_modules/
 .tokens
+experiments/**/cp_state.json
+experiments/**/cp_state.bak
+experiments/**/__pycache__/
+experiments/**/.pytest_cache/
+*.pyc
+.pytest_cache/

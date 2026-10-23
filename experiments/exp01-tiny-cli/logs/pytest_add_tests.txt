@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+rootdir: /home/workdir/artifacts/AIStudioOS-Grok/experiments/exp01-tiny-cli/workspace
+plugins: anyio-4.13.0
+collecting ... collected 6 items
+
+test_wcmini.py::test_count_file_lines_words_bytes PASSED                 [ 16%]
+test_wcmini.py::test_count_empty PASSED                                  [ 33%]
+test_wcmini.py::test_cli_help PASSED                                     [ 50%]
+test_wcmini.py::test_cli_on_fixture PASSED                               [ 66%]
+test_wcmini.py::test_cli_missing_file PASSED                             [ 83%]
+test_wcmini.py::test_version_import PASSED                               [100%]
+
+============================== 6 passed in 8.91s ===============================
+

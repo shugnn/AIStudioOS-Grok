@@ -1,0 +1,25 @@
+{
+  "goal_id": "goal_4036e60ed631",
+  "accepted": [
+    "scaffold package",
+    "implement core",
+    "add tests",
+    "verify acceptance"
+  ],
+  "goal_complete": true,
+  "idempotency": true,
+  "budget_block_test": true,
+  "recovery_ok": true,
+  "interventions": [],
+  "budget": {
+    "total_usd": 5.0,
+    "spent_usd": 0.0,
+    "reserved_usd": 0.0,
+    "total_tokens": 0,
+    "spent_tokens": 0,
+    "hard_stop": false,
+    "last_updated": "2026-10-23T04:49:26.612044+00:00"
+  },
+  "manager": "script_manager",
+  "commit_note": "see git log"
+}

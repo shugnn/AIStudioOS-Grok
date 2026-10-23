@@ -1,0 +1,19 @@
+{
+  "type": "l1_runner",
+  "run_id": "20261023051019-731599",
+  "utc": "2026-10-23T05:10:19.658243+00:00",
+  "pid": 473,
+  "jobs": [
+    {
+      "job": "dry_protocol_check",
+      "ok": true,
+      "missing": []
+    }
+  ],
+  "budget_usd": 0,
+  "human_interventions": 0,
+  "verify": {
+    "all_protocol_ok": true,
+    "no_llm_spend": true
+  }
+}

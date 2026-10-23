@@ -40,3 +40,8 @@ PYTHONPATH=. python experiments/exp01-tiny-cli/run_exp01.py
 - Path allowlist matching fixed for absolute paths under `experiments/`
 - Fixture word count corrected (7 words)
 - Zero LLM / zero external API cost
+
+## Supplementary recovery (2026-10-23)
+
+- Control Plane: process restart + `FileStore` reload retained 4 ACCEPTED tasks (`RECOVERY ok=True`).
+- L1 Runner: `kill -9` during `--simulate-hang` then re-run acquired stale lock and completed (`scripts/l1_runner.py`).

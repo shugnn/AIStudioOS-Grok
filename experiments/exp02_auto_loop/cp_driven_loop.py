@@ -71,6 +71,11 @@ def seed_if_empty(cp: ControlPlane, goal_id: str) -> None:
         ("word_count", {"text": "wake execute verify next"}, "exp02b-wc2"),
         ("checksum", {"n": 20}, "exp02b-cs2"),
     ]
+    # optional long queue via env EXP02_STRESS=1
+    import os
+    if os.environ.get("EXP02_STRESS") == "1":
+        for i in range(6):
+            specs.append(("checksum", {"n": 5 + i}, f"exp02b-stress-{i}"))
     for kind, payload, key in specs:
         t = cp.propose_task(
             goal_id,

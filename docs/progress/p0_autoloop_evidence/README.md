@@ -30,3 +30,9 @@ python3 experiments/exp02_auto_loop/cp_driven_loop.py --reset --inject-fail --ma
 python3 -c "from experiments.exp02_auto_loop.cp_driven_loop import run; run(max_steps=0)"
 for i in 1 2 3; do python3 scripts/l1_runner.py --job auto_loop_once; sleep 15; done
 ```
+
+## Added 2026-10-25 (8h window kickoff)
+- 8 concurrent L1 stress: scripts/test_l1_runner_lock_stress.py → STRESS PASS (1 ok + 7 lock_held); see 06_lock_stress.json
+- p1_scheduled_runner supports JOB=auto_loop_once
+- Automations: 07:00 and 11:00 JST work wakes
+

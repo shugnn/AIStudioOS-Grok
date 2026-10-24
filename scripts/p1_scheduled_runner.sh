@@ -6,16 +6,17 @@ EVIDENCE_DIR="$ROOT/docs/progress/p1_cron_evidence"
 mkdir -p "$EVIDENCE_DIR"
 LOG="$EVIDENCE_DIR/scheduler.log"
 INTERVAL_SEC="${INTERVAL_SEC:-25}"
+JOB="${JOB:-dry_protocol_check}"
 RUNS="${RUNS:-3}"
 
 echo "=== P1 local scheduler start $(date -u +%Y-%m-%dT%H:%M:%SZ) ===" | tee "$LOG"
-echo "interval_sec=$INTERVAL_SEC runs=$RUNS root=$ROOT" | tee -a "$LOG"
+echo "interval_sec=$INTERVAL_SEC runs=$RUNS job=$JOB root=$ROOT" | tee -a "$LOG"
 
 for i in $(seq 1 "$RUNS"); do
   TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   echo "--- run $i/$RUNS at $TS ---" | tee -a "$LOG"
   set +e
-  OUT=$(python3 scripts/l1_runner.py --job dry_protocol_check 2>&1)
+  OUT=$(python3 scripts/l1_runner.py --job auto_loop_once 2>&1)
   RC=$?
   set -e
   echo "exit_code=$RC" | tee -a "$LOG"

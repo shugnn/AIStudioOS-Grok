@@ -19,3 +19,4 @@ experiments/**/__pycache__/
 experiments/**/.pytest_cache/
 *.pyc
 .pytest_cache/
+docs/progress/.l1_runner.lock

@@ -1,0 +1,35 @@
+{
+  "experiment": "exp02b_cp_driven_loop",
+  "utc": "2026-10-24T16:26:51.124055+00:00",
+  "goal_id": "goal_0108e64eada6",
+  "steps_this_wake": 1,
+  "once": true,
+  "accepted": 1,
+  "rejected": 0,
+  "approved_left": 3,
+  "human_interventions": 0,
+  "budget": {
+    "total_usd": 1.0,
+    "spent_usd": 0.0,
+    "reserved_usd": 0.0,
+    "total_tokens": 0,
+    "spent_tokens": 0,
+    "hard_stop": false,
+    "last_updated": "2026-10-24T16:26:51.097580+00:00"
+  },
+  "llm_used": false,
+  "log": [
+    {
+      "task_id": "task_549c996a0c0e",
+      "kind": "word_count",
+      "status": "accepted",
+      "verify": {
+        "ok": true,
+        "expected": 5,
+        "got": 5
+      },
+      "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/artifact-task_549c996a0c0e.json",
+      "retry_action": null
+    }
+  ]
+}

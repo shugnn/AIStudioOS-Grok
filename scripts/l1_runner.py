@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""L1 Minimal Runner — local, $0 LLM, atomically file-locked.
+"""L1 Minimal Runner — local, $0 LLM, OS-held exclusive lock (fcntl).
 
 Jobs: heartbeat | dry_protocol_check
 
-P0 fixes (ChatGPT review on Grok #5, 2026-10-23):
-- Atomic lock via O_CREAT|O_EXCL (no exists-then-write race)
-- Never steal lock from a live owner PID; stale only when PID is dead
-- Owner token required for release (prevents old process dropping new lock)
+Lock model (founder + ChatGPT review):
+- Kernel holds the lock on an open fd (fcntl.LOCK_EX).
+- While the process is alive and fd is open, the lock is held.
+- On process exit / kill -9, the kernel closes fds → lock is released automatically.
+- No pid-in-file stale recovery path (avoids non-atomic unlink/recreate races).
+
+Also retains:
 - Any required job failure => overall FAILED and non-zero exit code
+- max_jobs default 1
 """
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
@@ -27,81 +32,58 @@ OUT_DIR = ROOT / "docs" / "progress"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _pid_alive(pid: int) -> bool:
-    if not pid or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
+class OSFileLock:
+    """Exclusive lock held by the OS on an open file descriptor.
 
-
-class FileLock:
-    """Exclusive lock using atomic create (O_CREAT|O_EXCL).
-
-    Stale recovery: only if lock file exists AND owner pid is not alive.
-    Never preempt a live owner based on TTL alone.
+    Uses fcntl.flock(LOCK_EX | LOCK_NB). The lock lives with the fd/process:
+    when the process dies, the kernel drops the lock — no manual zombie reclaim.
     """
 
     def __init__(self, path: Path):
         self.path = path
-        self.owner_token = uuid.uuid4().hex
         self.fd = None
+        self.owner_token = uuid.uuid4().hex
 
     def acquire(self) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
+        # Open for read/write; create if missing. Do NOT unlink competitors' files.
+        fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            return False
+        # Optional metadata for humans/debugging only — not used for mutual exclusion
+        meta = {
             "pid": os.getpid(),
             "owner_token": self.owner_token,
             "started": time.time(),
+            "lock": "fcntl.LOCK_EX",
         }
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
         try:
-            fd = os.open(str(self.path), flags, 0o644)
-            self.fd = fd
-            os.write(fd, json.dumps(payload).encode("utf-8"))
+            os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, (json.dumps(meta) + "\n").encode("utf-8"))
             os.fsync(fd)
-            return True
-        except FileExistsError:
-            try:
-                data = json.loads(self.path.read_text(encoding="utf-8"))
-            except Exception:
-                return False
-            pid = int(data.get("pid") or 0)
-            if _pid_alive(pid):
-                return False
-            try:
-                self.path.unlink(missing_ok=True)
-            except OSError:
-                return False
-            try:
-                fd = os.open(str(self.path), flags, 0o644)
-                self.fd = fd
-                os.write(fd, json.dumps(payload).encode("utf-8"))
-                os.fsync(fd)
-                return True
-            except FileExistsError:
-                return False
+        except OSError:
+            pass
+        self.fd = fd
+        return True
 
     def release(self) -> None:
+        if self.fd is None:
+            return
         try:
-            if not self.path.exists():
-                return
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            if data.get("owner_token") != self.owner_token:
-                return
-            if data.get("pid") != os.getpid():
-                return
-            if self.fd is not None:
-                try:
-                    os.close(self.fd)
-                except OSError:
-                    pass
-                self.fd = None
-            self.path.unlink(missing_ok=True)
-        except Exception:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+        except OSError:
             pass
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+        self.fd = None
+        # Do not unlink the lock file: other waiters may open the same path;
+        # mutual exclusion is the flock, not file existence.
 
 
 def run_heartbeat(token: str | None) -> dict:
@@ -166,11 +148,16 @@ def main() -> int:
         + "-"
         + uuid.uuid4().hex[:6]
     )
-    lock = FileLock(LOCK_PATH)
+    lock = OSFileLock(LOCK_PATH)
     if not lock.acquire():
         print(
             json.dumps(
-                {"status": "skipped", "reason": "lock_held", "run_id": run_id}
+                {
+                    "status": "skipped",
+                    "reason": "lock_held",
+                    "run_id": run_id,
+                    "lock": "fcntl",
+                }
             )
         )
         return 0
@@ -180,6 +167,7 @@ def main() -> int:
         "run_id": run_id,
         "utc": datetime.now(timezone.utc).isoformat(),
         "pid": os.getpid(),
+        "lock": "fcntl.LOCK_EX",
         "owner_token_prefix": lock.owner_token[:8],
         "jobs": [],
         "budget_usd": 0,
@@ -209,6 +197,7 @@ def main() -> int:
         report["verify"] = {
             "all_jobs_ok": overall_ok,
             "no_llm_spend": True,
+            "lock_model": "os_fcntl",
         }
         report["status"] = "ok" if overall_ok else "failed"
 
@@ -223,6 +212,7 @@ def main() -> int:
                     "run_id": run_id,
                     "artifact": str(out),
                     "jobs_ok": overall_ok,
+                    "lock": "fcntl",
                 },
                 indent=2,
             )

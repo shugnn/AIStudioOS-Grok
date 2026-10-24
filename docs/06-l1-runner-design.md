@@ -91,3 +91,16 @@ report:  optional git-friendly artifact (no auto-push required)
 | OS fcntl advisory lock | **Not used**; O_EXCL file create instead |
 | Scheduled cron evidence | **Manual / external cron only**; no Actions |
 
+
+
+## Lock model (updated 2026-10-24)
+
+**Mutual exclusion source: OS fcntl.flock(LOCK_EX) on an open fd.**
+
+- Process alive + fd open -> lock held by kernel
+- Process exit / kill -9 -> kernel closes fd -> lock released automatically
+- No pid-file stale reclaim (avoids non-atomic unlink/recreate double-owner race)
+- Lock file path is only a rendezvous name; existence of the file is not the lock
+- Metadata (pid, token) in the file is for debugging only
+
+Verified: concurrent second process -> lock_held; kill -9 -> next run acquires.

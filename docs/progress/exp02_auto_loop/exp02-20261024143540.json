@@ -1,0 +1,104 @@
+{
+  "experiment": "exp02_auto_loop",
+  "utc": "2026-10-24T14:35:40.874585+00:00",
+  "steps": 4,
+  "completed": 4,
+  "failed": 0,
+  "queued_remaining": 0,
+  "human_interventions": 0,
+  "budget_usd": 0.0,
+  "closed_loop": true,
+  "llm_used": false,
+  "log": [
+    {
+      "step": 1,
+      "utc": "2026-10-24T14:35:40.874543+00:00",
+      "task_id": "t1",
+      "kind": "word_count",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 5,
+        "got": 5
+      }
+    },
+    {
+      "step": 2,
+      "utc": "2026-10-24T14:35:40.874573+00:00",
+      "task_id": "t2",
+      "kind": "checksum",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 5050,
+        "got": 5050
+      }
+    },
+    {
+      "step": 3,
+      "utc": "2026-10-24T14:35:40.874579+00:00",
+      "task_id": "t3",
+      "kind": "word_count",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 3,
+        "got": 3
+      }
+    },
+    {
+      "step": 4,
+      "utc": "2026-10-24T14:35:40.874583+00:00",
+      "task_id": "t4",
+      "kind": "checksum",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 55,
+        "got": 55
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "kind": "word_count",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 5,
+        "got": 5
+      }
+    },
+    {
+      "id": "t2",
+      "kind": "checksum",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 5050,
+        "got": 5050
+      }
+    },
+    {
+      "id": "t3",
+      "kind": "word_count",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 3,
+        "got": 3
+      }
+    },
+    {
+      "id": "t4",
+      "kind": "checksum",
+      "status": "verified",
+      "verify": {
+        "ok": true,
+        "expected": 55,
+        "got": 55
+      }
+    }
+  ]
+}

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """L1 Minimal Runner — local, $0 LLM, OS-held exclusive lock (fcntl).
 
+PLATFORM: Linux/macOS (POSIX) only. Windows native Python cannot use fcntl;
+cross-platform lock is out of scope for L1 and needs a separate implementation.
+
 Jobs: heartbeat | dry_protocol_check
 
 Lock model (founder + ChatGPT review):
@@ -53,6 +56,13 @@ class OSFileLock:
         except BlockingIOError:
             os.close(fd)
             return False
+        except OSError as e:
+            os.close(fd)
+            print(
+                json.dumps({"error": "flock_failed", "detail": str(e)}),
+                file=sys.stderr,
+            )
+            raise
         # Optional metadata for humans/debugging only — not used for mutual exclusion
         meta = {
             "pid": os.getpid(),
@@ -65,8 +75,12 @@ class OSFileLock:
             os.lseek(fd, 0, os.SEEK_SET)
             os.write(fd, (json.dumps(meta) + "\n").encode("utf-8"))
             os.fsync(fd)
-        except OSError:
-            pass
+        except OSError as e:
+            # Lock is already held by kernel; metadata is audit-only.
+            print(
+                json.dumps({"warning": "lock_metadata_write_failed", "error": str(e)}),
+                file=sys.stderr,
+            )
         self.fd = fd
         return True
 
@@ -160,7 +174,8 @@ def main() -> int:
                 }
             )
         )
-        return 0
+        # Exit 2 = skipped (not executed). 0 = ok, 1 = failed job.
+        return 2
 
     report = {
         "type": "l1_runner",

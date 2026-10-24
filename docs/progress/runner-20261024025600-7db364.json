@@ -1,0 +1,24 @@
+{
+  "type": "l1_runner",
+  "run_id": "20261024025600-7db364",
+  "utc": "2026-10-24T02:56:00.697512+00:00",
+  "pid": 360,
+  "lock": "fcntl.LOCK_EX",
+  "owner_token_prefix": "e8f50d6f",
+  "jobs": [
+    {
+      "job": "dry_protocol_check",
+      "ok": true,
+      "rc": 0,
+      "missing": []
+    }
+  ],
+  "budget_usd": 0,
+  "human_interventions": 0,
+  "verify": {
+    "all_jobs_ok": true,
+    "no_llm_spend": true,
+    "lock_model": "os_fcntl"
+  },
+  "status": "ok"
+}

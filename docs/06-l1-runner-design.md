@@ -104,3 +104,12 @@ report:  optional git-friendly artifact (no auto-push required)
 - Metadata (pid, token) in the file is for debugging only
 
 Verified: concurrent second process -> lock_held; kill -9 -> next run acquires.
+
+
+## Ops constraints (fcntl lock)
+
+1. **Platform**: Linux/macOS only for L1. Windows needs a separate lock backend.
+2. **Never delete or replace** `docs/progress/.l1_runner.lock` while runners may be active (cleanup scripts, deploy). File is rendezvous only; deleting it does not drop an existing flock on an open fd and can confuse operators.
+3. **Exit codes**: `0` = executed ok; `1` = executed but job failed; `2` = skipped (`lock_held`, not executed).
+4. **NFS/shared FS**: not in acceptance scope.
+5. Automated regression: `python scripts/test_l1_runner_lock.py`

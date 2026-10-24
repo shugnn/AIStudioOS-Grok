@@ -1,0 +1,7 @@
+# AIStudioOS-Grok L1 — local crontab example (zero paid Actions)
+# Install: crontab -e  and paste (adjust REPO path)
+# SHELL=/bin/bash
+# REPO=/path/to/AIStudioOS-Grok
+# */15 * * * * cd $REPO && GH_TOKEN=... /usr/bin/python3 scripts/l1_runner.py --job dry_protocol_check >> docs/progress/cron.log 2>&1
+#
+# Evidence for P1: after >=3 scheduled firings, collect timestamps from cron.log + runner-*.json

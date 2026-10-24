@@ -1,0 +1,24 @@
+{
+  "type": "l1_runner",
+  "run_id": "20261024025601-78f692",
+  "utc": "2026-10-24T02:56:01.511971+00:00",
+  "pid": 379,
+  "lock": "fcntl.LOCK_EX",
+  "owner_token_prefix": "f14906ed",
+  "jobs": [
+    {
+      "job": "heartbeat",
+      "ok": false,
+      "rc": 2,
+      "error": "no GH_TOKEN"
+    }
+  ],
+  "budget_usd": 0,
+  "human_interventions": 0,
+  "verify": {
+    "all_jobs_ok": false,
+    "no_llm_spend": true,
+    "lock_model": "os_fcntl"
+  },
+  "status": "failed"
+}

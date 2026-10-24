@@ -340,6 +340,24 @@ class ControlPlane:
         """Return the latest checkpoint (caller can re-hydrate workers from it)."""
         return self.store.latest_checkpoint(goal_id)
 
+
+    def recover_stale_tasks(self, goal_id: str) -> list[Task]:
+        """Crash recovery: RUNNING without completion → APPROVED; VERIFYING with artifact kept.
+
+        Safe for script workers: work is deterministic and idempotent under same task id.
+        Does not invent results — leaves VERIFYING tasks for Verifier path to finish.
+        """
+        recovered = []
+        for task in self.list_tasks(goal_id):
+            if task.status == TaskStatus.RUNNING:
+                task.status = TaskStatus.APPROVED
+                task.updated_at = _now()
+                self.store.save_task(task)
+                self._checkpoint(goal_id, f"recover_running_{task.id}", {"task": task.to_dict()})
+                recovered.append(task)
+            # VERIFYING left as-is so next wake can re-verify from artifact_path
+        return recovered
+
     def list_tasks(self, goal_id: str, status: Optional[TaskStatus] = None) -> list[Task]:
         return self.store.list_tasks(goal_id=goal_id, status=status)
 

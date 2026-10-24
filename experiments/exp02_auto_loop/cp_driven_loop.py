@@ -90,7 +90,39 @@ def seed_if_empty(cp: ControlPlane, goal_id: str) -> None:
         cp.approve_task(t.id)
 
 
+def finish_verifying(cp: ControlPlane, goal_id: str) -> dict | None:
+    """Complete VERIFYING tasks that already have artifacts (post-crash)."""
+    for task in cp.list_tasks(goal_id, status=TaskStatus.VERIFYING):
+        kind = task.metadata.get("kind") or "word_count"
+        payload = task.metadata.get("payload") or {}
+        result = {}
+        if task.artifact_path and Path(task.artifact_path).exists():
+            try:
+                result = json.loads(Path(task.artifact_path).read_text()).get("result", {})
+                kind = json.loads(Path(task.artifact_path).read_text()).get("kind", kind)
+                payload = json.loads(Path(task.artifact_path).read_text()).get("payload", payload)
+            except Exception:
+                pass
+        if not result:
+            # cannot verify without artifact — return to APPROVED for re-run
+            task.status = TaskStatus.APPROVED
+            task.updated_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+            cp.store.save_task(task)
+            continue
+        v = verifier(kind, payload, result)
+        if v.get("ok"):
+            cp.accept_task(task.id, feedback=json.dumps(v), cost_usd=0.0, cost_tokens=0)
+            return {"task_id": task.id, "kind": kind, "status": "accepted", "verify": v, "recovered": True}
+        cp.reject_task(task.id, feedback=json.dumps(v))
+        return {"task_id": task.id, "kind": kind, "status": "rejected", "verify": v, "recovered": True}
+    return None
+
+
 def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
+    recovered = cp.recover_stale_tasks(goal_id)
+    fin = finish_verifying(cp, goal_id)
+    if fin is not None:
+        return fin
     approved = cp.list_tasks(goal_id, status=TaskStatus.APPROVED)
     if not approved:
         # try promote any PROPOSED with zero cost
@@ -184,6 +216,7 @@ def run(max_steps: int = 10, once: bool = False, inject_fail: bool = False) -> d
     cp = ControlPlane(store)
     goal_id = ensure_goal(cp)
     seed_if_empty(cp, goal_id)
+    cp.recover_stale_tasks(goal_id)
     if inject_fail:
         # only if not already present
         keys = {t.idempotency_key for t in cp.list_tasks(goal_id)}

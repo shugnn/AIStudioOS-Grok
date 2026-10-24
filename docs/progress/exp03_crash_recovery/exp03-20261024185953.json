@@ -1,0 +1,70 @@
+{
+  "experiment": "exp03_crash_recovery",
+  "utc": "2026-10-24T18:59:53.109995+00:00",
+  "ok": true,
+  "human_interventions": 0,
+  "budget_usd": 0,
+  "log": [
+    {
+      "phase": "crash_injected",
+      "task_id": "task_ec025736f8fc",
+      "status": "running",
+      "utc": "2026-10-24T18:59:46.763288+00:00"
+    },
+    {
+      "phase": "after_recovery_drain",
+      "report": {
+        "experiment": "exp02b_cp_driven_loop",
+        "utc": "2026-10-24T18:59:49.507004+00:00",
+        "goal_id": "goal_4e3db554f698",
+        "steps_this_wake": 4,
+        "once": false,
+        "accepted": 4,
+        "rejected": 0,
+        "approved_left": 0,
+        "human_interventions": 0,
+        "budget": {
+          "total_usd": 1.0,
+          "spent_usd": 0.0,
+          "reserved_usd": 0.0,
+          "total_tokens": 0,
+          "spent_tokens": 0,
+          "hard_stop": false,
+          "last_updated": "2026-10-24T18:59:48.733280+00:00"
+        },
+        "llm_used": false,
+        "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/exp02b-20261024185949.json"
+      }
+    },
+    {
+      "phase": "crash_in_verifying",
+      "task_id": "task_606ddabfca63",
+      "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/artifact-task_606ddabfca63.json"
+    },
+    {
+      "phase": "after_verifying_recovery",
+      "report": {
+        "experiment": "exp02b_cp_driven_loop",
+        "utc": "2026-10-24T18:59:52.904760+00:00",
+        "goal_id": "goal_4444621dfdff",
+        "steps_this_wake": 4,
+        "once": false,
+        "accepted": 4,
+        "rejected": 0,
+        "approved_left": 0,
+        "human_interventions": 0,
+        "budget": {
+          "total_usd": 1.0,
+          "spent_usd": 0.0,
+          "reserved_usd": 0.0,
+          "total_tokens": 0,
+          "spent_tokens": 0,
+          "hard_stop": false,
+          "last_updated": "2026-10-24T18:59:52.588084+00:00"
+        },
+        "llm_used": false,
+        "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/exp02b-20261024185952.json"
+      }
+    }
+  ]
+}

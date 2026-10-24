@@ -1,0 +1,67 @@
+{
+  "experiment": "exp02b_cp_driven_loop",
+  "utc": "2026-10-24T14:55:34.170156+00:00",
+  "goal_id": "goal_f58ca40e9876",
+  "steps_this_wake": 4,
+  "once": false,
+  "accepted": 4,
+  "rejected": 0,
+  "approved_left": 0,
+  "human_interventions": 0,
+  "budget": {
+    "total_usd": 1.0,
+    "spent_usd": 0.0,
+    "reserved_usd": 0.0,
+    "total_tokens": 0,
+    "spent_tokens": 0,
+    "hard_stop": false,
+    "last_updated": "2026-10-24T14:55:33.828511+00:00"
+  },
+  "llm_used": false,
+  "log": [
+    {
+      "task_id": "task_a4d0ce031793",
+      "kind": "word_count",
+      "status": "accepted",
+      "verify": {
+        "ok": true,
+        "expected": 5,
+        "got": 5
+      },
+      "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/artifact-task_a4d0ce031793.json"
+    },
+    {
+      "task_id": "task_ca40a7fa7b8f",
+      "kind": "checksum",
+      "status": "accepted",
+      "verify": {
+        "ok": true,
+        "expected": 1275,
+        "got": 1275
+      },
+      "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/artifact-task_ca40a7fa7b8f.json"
+    },
+    {
+      "task_id": "task_208701b8765a",
+      "kind": "word_count",
+      "status": "accepted",
+      "verify": {
+        "ok": true,
+        "expected": 4,
+        "got": 4
+      },
+      "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/artifact-task_208701b8765a.json"
+    },
+    {
+      "task_id": "task_72696c401407",
+      "kind": "checksum",
+      "status": "accepted",
+      "verify": {
+        "ok": true,
+        "expected": 210,
+        "got": 210
+      },
+      "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/artifact-task_72696c401407.json"
+    }
+  ]
+}

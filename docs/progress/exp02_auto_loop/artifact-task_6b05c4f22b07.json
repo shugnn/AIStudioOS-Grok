@@ -1,0 +1,9 @@
+{
+  "result": {
+    "word_count": 4
+  },
+  "kind": "word_count",
+  "payload": {
+    "text": "wake execute verify next"
+  }
+}

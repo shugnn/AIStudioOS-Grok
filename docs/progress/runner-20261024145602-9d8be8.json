@@ -1,0 +1,25 @@
+{
+  "type": "l1_runner",
+  "run_id": "20261024145602-9d8be8",
+  "utc": "2026-10-24T14:56:02.857509+00:00",
+  "pid": 1528,
+  "lock": "fcntl.LOCK_EX",
+  "owner_token_prefix": "23b5dad3",
+  "jobs": [
+    {
+      "job": "auto_loop_once",
+      "ok": true,
+      "rc": 0,
+      "stdout_tail": "{\n  \"experiment\": \"exp02b_cp_driven_loop\",\n  \"utc\": \"2026-10-24T14:56:03.079934+00:00\",\n  \"goal_id\": \"goal_83e135a311cc\",\n  \"steps_this_wake\": 0,\n  \"once\": true,\n  \"accepted\": 4,\n  \"rejected\": 0,\n  \"approved_left\": 0,\n  \"human_interventions\": 0,\n  \"budget\": {\n    \"total_usd\": 1.0,\n    \"spent_usd\": 0.0,\n    \"reserved_usd\": 0.0,\n    \"total_tokens\": 0,\n    \"spent_tokens\": 0,\n    \"hard_stop\": false,\n    \"last_updated\": \"2026-10-24T14:56:01.602042+00:00\"\n  },\n  \"llm_used\": false,\n  \"artifact\": \"/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/exp02b-20261024145603.json\"\n}\n",
+      "stderr_tail": ""
+    }
+  ],
+  "budget_usd": 0,
+  "human_interventions": 0,
+  "verify": {
+    "all_jobs_ok": true,
+    "no_llm_spend": true,
+    "lock_model": "os_fcntl"
+  },
+  "status": "ok"
+}

@@ -145,11 +145,31 @@ def run_dry_protocol_check() -> dict:
     }
 
 
+
+def run_auto_loop_once() -> dict:
+    import subprocess
+    script = ROOT / "experiments" / "exp02_auto_loop" / "cp_driven_loop.py"
+    r = subprocess.run(
+        [sys.executable, str(script), "--once"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return {
+        "job": "auto_loop_once",
+        "ok": r.returncode == 0,
+        "rc": r.returncode,
+        "stdout_tail": (r.stdout or "")[-800:],
+        "stderr_tail": (r.stderr or "")[-300:],
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--job",
-        choices=["heartbeat", "dry_protocol_check", "auto"],
+        choices=["heartbeat", "dry_protocol_check", "auto_loop_once", "auto"],
         default="auto",
     )
     ap.add_argument("--simulate-hang", type=int, default=0)
@@ -203,6 +223,8 @@ def main() -> int:
                 result = run_heartbeat(token)
             elif j == "dry_protocol_check":
                 result = run_dry_protocol_check()
+            elif j == "auto_loop_once":
+                result = run_auto_loop_once()
             else:
                 result = {"job": j, "ok": False, "rc": 1, "error": "unknown job"}
             report["jobs"].append(result)

@@ -1,0 +1,10 @@
+{
+  "result": {
+    "n": 50,
+    "sum_0_to_n": 1275
+  },
+  "kind": "checksum",
+  "payload": {
+    "n": 50
+  }
+}

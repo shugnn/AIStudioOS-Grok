@@ -1,0 +1,187 @@
+{
+  "goals": {
+    "goal_79c8c2ea2ddf": {
+      "id": "goal_79c8c2ea2ddf",
+      "title": "Exp-02b CP-driven auto loop",
+      "description": "Continuous script Manager→Worker→Verifier under Control Plane",
+      "acceptance_criteria": [
+        "all seeded tasks accepted",
+        "zero human mid-loop",
+        "$0 spend"
+      ],
+      "status": "active",
+      "created_at": "2026-10-24T14:55:04.321146+00:00",
+      "updated_at": "2026-10-24T14:55:04.321168+00:00",
+      "metadata": {}
+    }
+  },
+  "tasks": {
+    "task_0db6ea457dd1": {
+      "id": "task_0db6ea457dd1",
+      "goal_id": "goal_79c8c2ea2ddf",
+      "title": "word_count:exp02b-wc1",
+      "description": "{\"kind\": \"word_count\", \"payload\": {\"text\": \"control plane driven closed loop\"}}",
+      "status": "proposed",
+      "proposed_by": "script_manager",
+      "artifact_path": null,
+      "verifier_feedback": null,
+      "cost_tokens": 0,
+      "cost_usd": 0.0,
+      "block_reason": null,
+      "blocked_by_policy": null,
+      "unblock_approver": null,
+      "resume_status": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "reserved_usd": 0.0,
+      "idempotency_key": "exp02b-wc1",
+      "created_at": "2026-10-24T14:55:07.597259+00:00",
+      "updated_at": "2026-10-24T14:55:07.597275+00:00",
+      "metadata": {
+        "kind": "word_count",
+        "payload": {
+          "text": "control plane driven closed loop"
+        },
+        "estimated_cost_usd": 0.0
+      }
+    }
+  },
+  "budget": {
+    "total_usd": 1.0,
+    "spent_usd": 0.0,
+    "reserved_usd": 0.0,
+    "total_tokens": 0,
+    "spent_tokens": 0,
+    "hard_stop": false,
+    "last_updated": "2026-10-24T14:55:05.355849+00:00"
+  },
+  "policy": {
+    "allow_file_write": true,
+    "allow_shell": true,
+    "allow_network": false,
+    "allow_git_push": false,
+    "allow_delete": false,
+    "allow_external_publish": false,
+    "max_file_size_mb": 10.0,
+    "allowed_paths": [
+      "./workspace",
+      "./artifacts",
+      "experiments/",
+      "workspace"
+    ],
+    "allowed_shell_commands": [
+      "python",
+      "python3",
+      "pytest",
+      "ls",
+      "cat",
+      "echo",
+      "mkdir",
+      "touch",
+      "cp",
+      "mv",
+      "wc"
+    ],
+    "denied_commands": [
+      "rm -rf /",
+      "sudo",
+      "shutdown",
+      "mkfs",
+      ":(){"
+    ]
+  },
+  "checkpoints": {
+    "ckpt_e95b1f6ef647": {
+      "id": "ckpt_e95b1f6ef647",
+      "goal_id": "goal_79c8c2ea2ddf",
+      "label": "goal_created",
+      "state_snapshot": {
+        "goals": {
+          "goal_79c8c2ea2ddf": {
+            "id": "goal_79c8c2ea2ddf",
+            "title": "Exp-02b CP-driven auto loop",
+            "description": "Continuous script Manager→Worker→Verifier under Control Plane",
+            "acceptance_criteria": [
+              "all seeded tasks accepted",
+              "zero human mid-loop",
+              "$0 spend"
+            ],
+            "status": "active",
+            "created_at": "2026-10-24T14:55:04.321146+00:00",
+            "updated_at": "2026-10-24T14:55:04.321168+00:00",
+            "metadata": {}
+          }
+        },
+        "tasks": {},
+        "budget": {
+          "total_usd": 1.0,
+          "spent_usd": 0.0,
+          "reserved_usd": 0.0,
+          "total_tokens": 0,
+          "spent_tokens": 0,
+          "hard_stop": false,
+          "last_updated": "2026-10-24T14:55:05.355849+00:00"
+        },
+        "policy": {
+          "allow_file_write": true,
+          "allow_shell": true,
+          "allow_network": false,
+          "allow_git_push": false,
+          "allow_delete": false,
+          "allow_external_publish": false,
+          "max_file_size_mb": 10.0,
+          "allowed_paths": [
+            "./workspace",
+            "./artifacts",
+            "experiments/",
+            "workspace"
+          ],
+          "allowed_shell_commands": [
+            "python",
+            "python3",
+            "pytest",
+            "ls",
+            "cat",
+            "echo",
+            "mkdir",
+            "touch",
+            "cp",
+            "mv",
+            "wc"
+          ],
+          "denied_commands": [
+            "rm -rf /",
+            "sudo",
+            "shutdown",
+            "mkfs",
+            ":(){"
+          ]
+        },
+        "checkpoints": {},
+        "meta": {
+          "version": 1
+        },
+        "_extra": {
+          "goal": {
+            "id": "goal_79c8c2ea2ddf",
+            "title": "Exp-02b CP-driven auto loop",
+            "description": "Continuous script Manager→Worker→Verifier under Control Plane",
+            "acceptance_criteria": [
+              "all seeded tasks accepted",
+              "zero human mid-loop",
+              "$0 spend"
+            ],
+            "status": "active",
+            "created_at": "2026-10-24T14:55:04.321146+00:00",
+            "updated_at": "2026-10-24T14:55:04.321168+00:00",
+            "metadata": {}
+          }
+        }
+      },
+      "created_at": "2026-10-24T14:55:06.408297+00:00"
+    }
+  },
+  "meta": {
+    "version": 1
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "result": {
+    "word_count": 5
+  },
+  "kind": "word_count",
+  "payload": {
+    "text": "control plane driven closed loop"
+  }
+}

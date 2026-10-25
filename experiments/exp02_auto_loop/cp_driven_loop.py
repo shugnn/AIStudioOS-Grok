@@ -41,6 +41,8 @@ def worker(kind: str, payload: dict) -> dict:
     if kind == "fail_once":
         # Worker may "succeed" with wrong result; Verifier must catch it
         return {"word_count": -1, "injected": True}
+    if kind == "fail_always":
+        return {"word_count": -1, "injected": True, "always": True}
     return {"error": f"unknown_kind:{kind}"}
 
 
@@ -58,6 +60,10 @@ def verifier(kind: str, payload: dict, result: dict) -> dict:
         expected = len([w for w in payload.get("text", "x").split() if w])
         ok = result.get("word_count") == expected
         return {"ok": ok, "expected": expected, "got": result.get("word_count"), "injected": True}
+    if kind == "fail_always":
+        expected = len([w for w in payload.get("text", "x").split() if w])
+        ok = result.get("word_count") == expected
+        return {"ok": ok, "expected": expected, "got": result.get("word_count"), "always_fail": True}
     return {"ok": False, "error": "unknown_kind"}
 
 
@@ -123,6 +129,13 @@ def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
     fin = finish_verifying(cp, goal_id)
     if fin is not None:
         return fin
+    # Re-queue REJECTED tasks that still have retry budget (same task_id → CANCELLED path)
+    for t in cp.list_tasks(goal_id, status=TaskStatus.REJECTED):
+        if t.retry_count <= t.max_retries:
+            try:
+                cp.approve_task(t.id)
+            except ControlPlaneError:
+                pass
     approved = cp.list_tasks(goal_id, status=TaskStatus.APPROVED)
     if not approved:
         # try promote any PROPOSED with zero cost
@@ -161,10 +174,14 @@ def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
         cp.reject_task(task.id, feedback=json.dumps(v))
         status = "rejected"
         retry_action = None
-        # Limited auto re-propose for retryable failures (not permanent cancel)
         task2 = cp._require_task(task.id)
-        if task2.status == TaskStatus.REJECTED and task2.retry_count < task2.max_retries:
-            # Fix payload for fail_once → convert to honest word_count on retry
+        if task2.status == TaskStatus.CANCELLED:
+            retry_action = {"cancelled": True, "retry_count": task2.retry_count, "max_retries": task2.max_retries}
+        elif kind == "fail_always":
+            # same task will be re-approved next step until CANCELLED
+            retry_action = {"same_task_retry": True, "retry_count": task2.retry_count, "max_retries": task2.max_retries}
+        elif task2.status == TaskStatus.REJECTED and task2.retry_count < task2.max_retries:
+            # fail_once → convert to honest word_count on new task
             new_kind = "word_count" if kind == "fail_once" else kind
             new_payload = payload if kind != "fail_once" else {"text": payload.get("text", "retry ok")}
             key = f"{task.idempotency_key or task.id}-retry{task2.retry_count}"

@@ -1,0 +1,58 @@
+{
+  "experiment": "exp04_cancel_and_stress",
+  "utc": "2026-10-25T04:08:50.068639+00:00",
+  "cancel_path": {
+    "ok": true,
+    "final_status": "cancelled",
+    "retry_count": 3,
+    "max_retries": 2,
+    "steps": [
+      {
+        "i": 0,
+        "item_status": "rejected",
+        "task_status": "rejected",
+        "retry_count": 1,
+        "retry_action": {
+          "same_task_retry": true,
+          "retry_count": 1,
+          "max_retries": 2
+        }
+      },
+      {
+        "i": 1,
+        "item_status": "rejected",
+        "task_status": "rejected",
+        "retry_count": 2,
+        "retry_action": {
+          "same_task_retry": true,
+          "retry_count": 2,
+          "max_retries": 2
+        }
+      },
+      {
+        "i": 2,
+        "item_status": "rejected",
+        "task_status": "cancelled",
+        "retry_count": 3,
+        "retry_action": {
+          "cancelled": true,
+          "retry_count": 3,
+          "max_retries": 2
+        }
+      }
+    ]
+  },
+  "long_queue": {
+    "ok": true,
+    "n": 50,
+    "accepted": 50,
+    "rejected": 0,
+    "steps_this_wake": 50,
+    "artifact": "/home/workdir/artifacts/AIStudioOS-Grok/docs/progress/exp02_auto_loop/exp02b-20261025040849.json"
+  },
+  "ok": true,
+  "note": "FileStore checkpoint slim+prune to avoid OOM",
+  "human_interventions": 0,
+  "budget_usd": 0,
+  "llm_used": false
+}

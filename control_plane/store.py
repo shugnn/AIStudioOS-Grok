@@ -132,9 +132,16 @@ class FileStore:
         self._write(data)
 
     # ---- Checkpoint ----
-    def save_checkpoint(self, ckpt: Checkpoint) -> None:
+    def save_checkpoint(self, ckpt: Checkpoint, keep_last: int = 30) -> None:
         data = self._read()
         data["checkpoints"][ckpt.id] = ckpt.to_dict()
+        # Cap growth: keep only the newest keep_last checkpoints globally
+        items = sorted(
+            data["checkpoints"].items(),
+            key=lambda kv: kv[1].get("created_at", ""),
+        )
+        if len(items) > keep_last:
+            data["checkpoints"] = dict(items[-keep_last:])
         self._write(data)
 
     def get_checkpoint(self, ckpt_id: str) -> Optional[Checkpoint]:

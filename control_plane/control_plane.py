@@ -377,9 +377,16 @@ class ControlPlane:
         return task
 
     def _checkpoint(self, goal_id: str, label: str, extra: dict) -> None:
-        snapshot = self.store.snapshot()
-        snapshot["_extra"] = extra
-        ckpt = Checkpoint.create(goal_id, label, snapshot)
+        # Slim snapshot: do NOT embed prior checkpoints (avoids O(n^2) state growth)
+        snap = self.store.snapshot()
+        slim = {
+            "goals": snap.get("goals", {}),
+            "tasks": snap.get("tasks", {}),
+            "budget": snap.get("budget"),
+            "policy": snap.get("policy"),
+            "_extra": extra,
+        }
+        ckpt = Checkpoint.create(goal_id, label, slim)
         self.store.save_checkpoint(ckpt)
 
 

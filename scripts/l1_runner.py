@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""L1 Minimal Runner — local, $0 LLM, OS-held exclusive lock (fcntl).
+"""L1 Minimal Runner — local, $0 LLM, OS-held exclusive lock (cross-platform).
 
-PLATFORM: Linux/macOS (POSIX) only. Windows native Python cannot use fcntl;
-cross-platform lock is out of scope for L1 and needs a separate implementation.
+PLATFORM:
+- POSIX (Linux/macOS): fcntl.flock(LOCK_EX | LOCK_NB)
+- Windows: msvcrt.locking on a fixed region of the lock file
 
-Jobs: heartbeat | dry_protocol_check
-
-Lock model (founder + ChatGPT review):
-- Kernel holds the lock on an open fd (fcntl.LOCK_EX).
+Lock model:
+- Kernel / CRT holds the lock on an open fd.
 - While the process is alive and fd is open, the lock is held.
-- On process exit / kill -9, the kernel closes fds → lock is released automatically.
+- On process exit / kill -9, the OS closes fds → lock is released automatically.
 - No pid-in-file stale recovery path (avoids non-atomic unlink/recreate races).
+
+Jobs: heartbeat | dry_protocol_check | auto_loop_once | auto
 
 Also retains:
 - Any required job failure => overall FAILED and non-zero exit code
 - max_jobs default 1
+- Exit 2 = skipped (lock_held)
 """
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import sys
@@ -34,49 +35,94 @@ LOCK_PATH = ROOT / "docs" / "progress" / ".l1_runner.lock"
 OUT_DIR = ROOT / "docs" / "progress"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+IS_WINDOWS = sys.platform.startswith("win")
+if IS_WINDOWS:
+    import msvcrt
+    LOCK_BACKEND = "msvcrt"
+else:
+    import fcntl
+    LOCK_BACKEND = "fcntl"
+
+# Fixed region size for msvcrt.locking (bytes). Must be > 0.
+_LOCK_REGION = 1
+
 
 class OSFileLock:
-    """Exclusive lock held by the OS on an open file descriptor.
+    """Exclusive lock held by the OS/CRT on an open file descriptor.
 
-    Uses fcntl.flock(LOCK_EX | LOCK_NB). The lock lives with the fd/process:
-    when the process dies, the kernel drops the lock — no manual zombie reclaim.
+    POSIX: fcntl.flock(LOCK_EX | LOCK_NB)
+    Windows: msvcrt.locking(LK_NBLCK) on a 1-byte region
+
+    The lock lives with the fd/process: when the process dies, the OS drops
+    the lock — no manual zombie reclaim.
     """
 
     def __init__(self, path: Path):
         self.path = path
         self.fd = None
         self.owner_token = uuid.uuid4().hex
+        self.backend = LOCK_BACKEND
 
     def acquire(self) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Open for read/write; create if missing. Do NOT unlink competitors' files.
         fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT, 0o644)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            os.close(fd)
-            return False
-        except OSError as e:
-            os.close(fd)
-            print(
-                json.dumps({"error": "flock_failed", "detail": str(e)}),
-                file=sys.stderr,
-            )
+            if IS_WINDOWS:
+                # Ensure file has at least _LOCK_REGION bytes so locking works.
+                try:
+                    size = os.fstat(fd).st_size
+                    if size < _LOCK_REGION:
+                        os.write(fd, b"\0" * (_LOCK_REGION - size))
+                        os.lseek(fd, 0, os.SEEK_SET)
+                except OSError:
+                    pass
+                os.lseek(fd, 0, os.SEEK_SET)
+                try:
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, _LOCK_REGION)
+                except OSError:
+                    os.close(fd)
+                    return False
+            else:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    os.close(fd)
+                    return False
+                except OSError as e:
+                    os.close(fd)
+                    print(
+                        json.dumps({"error": "flock_failed", "detail": str(e)}),
+                        file=sys.stderr,
+                    )
+                    raise
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
             raise
+
         # Optional metadata for humans/debugging only — not used for mutual exclusion
         meta = {
             "pid": os.getpid(),
             "owner_token": self.owner_token,
             "started": time.time(),
-            "lock": "fcntl.LOCK_EX",
+            "lock": f"{self.backend}.LOCK_EX",
+            "platform": sys.platform,
         }
         try:
-            os.ftruncate(fd, 0)
-            os.lseek(fd, 0, os.SEEK_SET)
-            os.write(fd, (json.dumps(meta) + "\n").encode("utf-8"))
+            # On Windows the lock region is byte 0; write metadata after it.
+            if IS_WINDOWS:
+                os.lseek(fd, _LOCK_REGION, os.SEEK_SET)
+                payload = (json.dumps(meta) + "\n").encode("utf-8")
+                os.write(fd, payload)
+            else:
+                os.ftruncate(fd, 0)
+                os.lseek(fd, 0, os.SEEK_SET)
+                os.write(fd, (json.dumps(meta) + "\n").encode("utf-8"))
             os.fsync(fd)
         except OSError as e:
-            # Lock is already held by kernel; metadata is audit-only.
             print(
                 json.dumps({"warning": "lock_metadata_write_failed", "error": str(e)}),
                 file=sys.stderr,
@@ -88,16 +134,25 @@ class OSFileLock:
         if self.fd is None:
             return
         try:
-            fcntl.flock(self.fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        try:
-            os.close(self.fd)
-        except OSError:
-            pass
-        self.fd = None
+            if IS_WINDOWS:
+                try:
+                    os.lseek(self.fd, 0, os.SEEK_SET)
+                    msvcrt.locking(self.fd, msvcrt.LK_UNLCK, _LOCK_REGION)
+                except OSError:
+                    pass
+            else:
+                try:
+                    fcntl.flock(self.fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+        finally:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
         # Do not unlink the lock file: other waiters may open the same path;
-        # mutual exclusion is the flock, not file existence.
+        # mutual exclusion is the OS lock, not file existence.
 
 
 def run_heartbeat(token: str | None) -> dict:
@@ -145,7 +200,6 @@ def run_dry_protocol_check() -> dict:
     }
 
 
-
 def run_auto_loop_once() -> dict:
     import subprocess
     script = ROOT / "experiments" / "exp02_auto_loop" / "cp_driven_loop.py"
@@ -190,7 +244,8 @@ def main() -> int:
                     "status": "skipped",
                     "reason": "lock_held",
                     "run_id": run_id,
-                    "lock": "fcntl",
+                    "lock": lock.backend,
+                    "platform": sys.platform,
                 }
             )
         )
@@ -202,7 +257,9 @@ def main() -> int:
         "run_id": run_id,
         "utc": datetime.now(timezone.utc).isoformat(),
         "pid": os.getpid(),
-        "lock": "fcntl.LOCK_EX",
+        "lock": f"{lock.backend}.LOCK_EX",
+        "lock_backend": lock.backend,
+        "platform": sys.platform,
         "owner_token_prefix": lock.owner_token[:8],
         "jobs": [],
         "budget_usd": 0,
@@ -234,7 +291,7 @@ def main() -> int:
         report["verify"] = {
             "all_jobs_ok": overall_ok,
             "no_llm_spend": True,
-            "lock_model": "os_fcntl",
+            "lock_model": f"os_{lock.backend}",
         }
         report["status"] = "ok" if overall_ok else "failed"
 
@@ -249,7 +306,8 @@ def main() -> int:
                     "run_id": run_id,
                     "artifact": str(out),
                     "jobs_ok": overall_ok,
-                    "lock": "fcntl",
+                    "lock": lock.backend,
+                    "platform": sys.platform,
                 },
                 indent=2,
             )

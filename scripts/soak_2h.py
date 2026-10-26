@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Local soak runner (Windows-friendly, no fcntl required for --direct mode).
+"""Local soak runner (Windows-friendly).
+
+--direct (default): no OS lock needed.
+--via-l1: uses L1 runner with cross-platform lock (fcntl on POSIX, msvcrt on Windows).
 
 Examples:
   py -3 scripts/soak_2h.py --cycles 3 --interval 5
@@ -69,7 +72,7 @@ def seed_tasks(n: int = 30) -> None:
 
 
 def run_once_direct() -> tuple[int, str]:
-    """One CP task without L1/fcntl (Windows-safe)."""
+    """One CP task without L1 lock (always Windows-safe)."""
     r = subprocess.run(
         [sys.executable, str(ROOT / "experiments/exp02_auto_loop/cp_driven_loop.py"), "--once"],
         cwd=str(ROOT),
@@ -100,7 +103,11 @@ def main() -> int:
     ap.add_argument("--cycles", type=int, default=120)
     ap.add_argument("--interval", type=int, default=60, help="seconds between cycles")
     ap.add_argument("--seed", type=int, default=30)
-    ap.add_argument("--via-l1", action="store_true", help="use L1 runner (needs fcntl; Linux/macOS)")
+    ap.add_argument(
+        "--via-l1",
+        action="store_true",
+        help="use L1 runner (cross-platform lock: fcntl POSIX / msvcrt Windows)",
+    )
     ap.add_argument("--no-reset-seed", action="store_true")
     args = ap.parse_args()
 

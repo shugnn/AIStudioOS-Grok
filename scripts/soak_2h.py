@@ -9,10 +9,7 @@ Metrics (FOUNDER 2026-10-28):
   Reports cycles_total, cycles_exit0, cycles_with_work, cycles_idle, tasks_done_unique.
   idle_policy: continue | stop | reseed
 
-Examples:
-  py -3 scripts/soak_2h.py --cycles 3 --interval 5
-  py -3 scripts/soak_2h.py --cycles 120 --interval 60 --via-l1 --idle-policy stop
-  py -3 scripts/soak_2h.py --cycles 120 --interval 60 --via-l1 --seed 120 --idle-policy reseed
+with_work detection reads L1 runner-*.json artifact (stdout alone lacks steps_this_wake).
 """
 from __future__ import annotations
 
@@ -47,20 +44,22 @@ def git_sha(short: bool = False) -> str:
         return "unknown"
 
 
-def seed_tasks(n: int = 30, prefix: str = "soak2h") -> int:
+def seed_tasks(n: int = 30, prefix: str | None = None) -> int:
     sys.path.insert(0, str(ROOT))
     from control_plane.control_plane import ControlPlane
     from control_plane.store import FileStore
     from experiments.exp02_auto_loop.cp_driven_loop import STATE, ensure_goal
 
+    # Always unique keys so prior ACCEPTED soak2h-* cannot starve the queue.
+    batch = prefix or f"soak-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     store = FileStore(STATE)
     cp = ControlPlane(store)
     gid = ensure_goal(cp)
     created = 0
     for i in range(n):
         kind = "word_count" if i % 2 == 0 else "checksum"
-        payload = {"text": f"soak task {i}"} if kind == "word_count" else {"n": i + 3}
-        key = f"{prefix}-{i}-{int(time.time())}" if prefix != "soak2h" else f"{prefix}-{i}"
+        payload = {"text": f"soak task {batch} {i}"} if kind == "word_count" else {"n": i + 3}
+        key = f"{batch}-{i}"
         t = cp.propose_task(
             gid,
             title=f"{kind}:{key}",
@@ -109,7 +108,6 @@ def _extract_json_objects(text: str) -> list[dict[str, Any]]:
     objs: list[dict[str, Any]] = []
     if not text:
         return objs
-    # Prefer whole-line JSON
     for line in text.splitlines():
         s = line.strip()
         if s.startswith("{") and s.endswith("}"):
@@ -119,54 +117,105 @@ def _extract_json_objects(text: str) -> list[dict[str, Any]]:
                     objs.append(o)
             except json.JSONDecodeError:
                 pass
-    # Fallback: nested blobs in stdout_tail strings
-    for m in re.finditer(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text):
-        try:
-            o = json.loads(m.group(0))
+    # Multi-line pretty JSON (direct mode prints indented object)
+    try:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            o = json.loads(text[start : end + 1])
             if isinstance(o, dict):
                 objs.append(o)
-        except json.JSONDecodeError:
-            continue
+    except json.JSONDecodeError:
+        pass
     return objs
 
 
-def classify_cycle(rc: int, out: str) -> dict[str, Any]:
-    """Classify one cycle: exit ok vs business work.
+def _cp_fields_from_mapping(o: dict[str, Any]) -> dict[str, Any] | None:
+    if "steps_this_wake" not in o and "experiment" not in o:
+        return None
+    steps = 0
+    try:
+        steps = int(o.get("steps_this_wake") or 0)
+    except (TypeError, ValueError):
+        steps = 0
+    accepted = None
+    if "accepted" in o:
+        try:
+            accepted = int(o.get("accepted") or 0)
+        except (TypeError, ValueError):
+            accepted = None
+    return {"steps": steps, "accepted": accepted, "parsed": True}
 
-    with_work if steps_this_wake > 0, or accepted increased, or jobs show progress.
-    """
+
+def _load_cp_from_l1_artifact(artifact_path: str | None) -> dict[str, Any] | None:
+    if not artifact_path:
+        return None
+    p = Path(artifact_path)
+    if not p.is_file():
+        # Windows path may appear with unicode escapes in text; try as-is
+        p = Path(artifact_path.replace("\\", "\\"))
+    if not p.is_file():
+        return None
+    try:
+        report = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    for job in report.get("jobs") or []:
+        tail = job.get("stdout_tail") or ""
+        if not isinstance(tail, str):
+            continue
+        for o in _extract_json_objects(tail):
+            got = _cp_fields_from_mapping(o)
+            if got:
+                return got
+        # stdout_tail may be pretty-printed CP JSON only
+        got = None
+        try:
+            start = tail.find("{")
+            end = tail.rfind("}")
+            if start >= 0 and end > start:
+                got = _cp_fields_from_mapping(json.loads(tail[start : end + 1]))
+        except json.JSONDecodeError:
+            got = None
+        if got:
+            return got
+    return None
+
+
+def classify_cycle(rc: int, out: str) -> dict[str, Any]:
+    """Classify one cycle: process exit vs business work."""
     steps = 0
     accepted = None
     found_cp = False
+    artifact = None
+
     for o in _extract_json_objects(out):
-        if "steps_this_wake" in o:
+        if "artifact" in o and o.get("artifact"):
+            artifact = str(o["artifact"])
+        got = _cp_fields_from_mapping(o)
+        if got:
             found_cp = True
-            try:
-                steps = int(o.get("steps_this_wake") or 0)
-            except (TypeError, ValueError):
-                steps = 0
-            if "accepted" in o:
-                try:
-                    accepted = int(o.get("accepted") or 0)
-                except (TypeError, ValueError):
-                    accepted = None
+            steps = got["steps"]
+            accepted = got["accepted"]
             break
-        # L1 wrapper may embed CP JSON in stdout_tail
-        tail = o.get("stdout_tail") or o.get("jobs", [{}])[0].get("stdout_tail") if o.get("jobs") else None
-        if isinstance(tail, str) and "steps_this_wake" in tail:
-            for inner in _extract_json_objects(tail):
-                if "steps_this_wake" in inner:
-                    found_cp = True
-                    try:
-                        steps = int(inner.get("steps_this_wake") or 0)
-                    except (TypeError, ValueError):
-                        steps = 0
-                    if "accepted" in inner:
-                        try:
-                            accepted = int(inner.get("accepted") or 0)
-                        except (TypeError, ValueError):
-                            accepted = None
-                    break
+
+    if not found_cp and artifact:
+        loaded = _load_cp_from_l1_artifact(artifact)
+        if loaded:
+            found_cp = True
+            steps = loaded["steps"]
+            accepted = loaded["accepted"]
+
+    # Fallback: newest runner-*.json if L1 printed minimal status only
+    if not found_cp:
+        runners = sorted((ROOT / "docs" / "progress").glob("runner-*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+        if runners:
+            loaded = _load_cp_from_l1_artifact(str(runners[0]))
+            if loaded:
+                found_cp = True
+                steps = loaded["steps"]
+                accepted = loaded["accepted"]
+                artifact = str(runners[0])
 
     with_work = steps > 0
     idle = (rc == 0) and (not with_work)
@@ -177,6 +226,7 @@ def classify_cycle(rc: int, out: str) -> dict[str, Any]:
         "with_work": with_work,
         "idle": idle,
         "cp_parsed": found_cp,
+        "artifact": artifact,
     }
 
 
@@ -269,7 +319,6 @@ def main() -> int:
         if rc == 0:
             cycles_exit0 += 1
 
-        # accepted_cum growth estimates unique work when steps parse failed
         acc = info.get("accepted_cum")
         if acc is not None and acc > last_accepted:
             delta = acc - last_accepted
@@ -299,13 +348,15 @@ def main() -> int:
             "with_work": info["with_work"],
             "idle": info["idle"],
             "cp_parsed": info["cp_parsed"],
+            "artifact": info.get("artifact"),
             "sha_full": sha_full,
         }
         log(
             f"{ts} cycle={i} exit={rc} with_work={info['with_work']} "
-            f"idle={info['idle']} steps={info['steps_this_wake']}"
+            f"idle={info['idle']} steps={info['steps_this_wake']} "
+            f"cp_parsed={info['cp_parsed']}"
         )
-        tail = out.strip()[-500:] if out else ""
+        tail = out.strip()[-400:] if out else ""
         if tail:
             log(tail)
         with open(summary_path, "a", encoding="utf-8") as f:
@@ -318,7 +369,7 @@ def main() -> int:
                 break
             if args.idle_policy == "reseed":
                 try:
-                    n = seed_tasks(args.reseed_batch, prefix=f"soak-reseed-{i}")
+                    n = seed_tasks(args.reseed_batch)
                     log(f"idle_policy=reseed added {n} tasks")
                     consecutive_idle = 0
                 except Exception as e:
@@ -366,7 +417,6 @@ def main() -> int:
     print(f"Summary: {summary_path}")
     print(f"Metrics: {metrics_path}")
 
-    # Exit 0 only if every ran cycle exited 0; still not a business PASS claim.
     return 0 if cycles_exit0 == ran and ran > 0 else 1
 
 

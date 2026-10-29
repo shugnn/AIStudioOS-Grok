@@ -20,3 +20,8 @@ experiments/**/.pytest_cache/
 *.pyc
 .pytest_cache/
 docs/progress/.l1_runner.lock
+# Runtime Control Plane state (repo-local after 010d379; do not commit live DB)
+docs/progress/exp02_auto_loop/state/cp_state.json
+docs/progress/exp02_auto_loop/state/cp_state.bak
+docs/progress/exp02_auto_loop/state/goal_id.txt
+docs/progress/exp02_auto_loop/artifact-*.json

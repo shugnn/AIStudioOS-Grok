@@ -19,6 +19,7 @@ from experiments.exp02_auto_loop.cp_driven_loop import (
     ensure_goal,
     run,
     process_one,
+    wipe_exp_state,
 )
 
 EVIDENCE = ROOT / "docs" / "progress" / "exp04_cancel_stress"
@@ -26,11 +27,7 @@ EVIDENCE.mkdir(parents=True, exist_ok=True)
 
 
 def reset_state():
-    for p in [STATE, STATE.with_suffix(".bak"), Path("/tmp/aistudio_exp02b/goal_id.txt")]:
-        if p.exists():
-            p.unlink()
-    for p in OUT.glob("artifact-*.json"):
-        p.unlink()
+    wipe_exp_state()
 
 
 def test_cancel_path() -> dict:
@@ -38,9 +35,6 @@ def test_cancel_path() -> dict:
     store = FileStore(STATE)
     cp = ControlPlane(store)
     goal_id = ensure_goal(cp)
-    # single always-fail task with max_retries=2 → 3 rejects then CANCELLED
-    # reject increments: 1,2,3 and on 3rd when retry_count > max_retries → CANCELLED
-    # max_retries=2 means after retry_count becomes 3, cancel. So 3 reject cycles.
     t = cp.propose_task(
         goal_id,
         title="fail_always:cancel-test",
@@ -59,13 +53,15 @@ def test_cancel_path() -> dict:
         if item is None:
             break
         task = cp._require_task(t.id)
-        steps.append({
-            "i": i,
-            "item_status": item.get("status"),
-            "task_status": task.status.value,
-            "retry_count": task.retry_count,
-            "retry_action": item.get("retry_action"),
-        })
+        steps.append(
+            {
+                "i": i,
+                "item_status": item.get("status"),
+                "task_status": task.status.value,
+                "retry_count": task.retry_count,
+                "retry_action": item.get("retry_action"),
+            }
+        )
         if task.status == TaskStatus.CANCELLED:
             break
     final = cp._require_task(t.id)
@@ -123,6 +119,7 @@ def main() -> int:
         "human_interventions": 0,
         "budget_usd": 0,
         "llm_used": False,
+        "state_path": str(STATE),
     }
     path = EVIDENCE / f"exp04-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.json"
     path.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -132,9 +129,19 @@ def main() -> int:
         f"- long_queue ok={s['ok']} accepted={s['accepted']}/{s['n']}\n"
         f"- evidence: `{path.name}`\n"
     )
-    print(json.dumps({"ok": report["ok"], "cancel": c["ok"], "stress": s["ok"],
-                      "final_status": c["final_status"], "accepted": s["accepted"],
-                      "artifact": str(path)}, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": report["ok"],
+                "cancel": c["ok"],
+                "stress": s["ok"],
+                "final_status": c["final_status"],
+                "accepted": s["accepted"],
+                "artifact": str(path),
+            },
+            indent=2,
+        )
+    )
     return 0 if report["ok"] else 1
 
 

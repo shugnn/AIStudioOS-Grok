@@ -10,6 +10,9 @@ Wire:
   Loop until no APPROVED/PROPOSED work or max_steps
 
 Can be invoked once per L1 wake: --once
+
+State (2026-10-29): repo-local under docs/progress/exp02_auto_loop/state/
+(not /tmp) so Windows founder host and Linux share the same layout.
 """
 from __future__ import annotations
 
@@ -28,7 +31,10 @@ from control_plane.store import FileStore
 
 OUT = ROOT / "docs" / "progress" / "exp02_auto_loop"
 OUT.mkdir(parents=True, exist_ok=True)
-STATE = Path("/tmp/aistudio_exp02b/cp_state.json")
+STATE_DIR = OUT / "state"
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+STATE = STATE_DIR / "cp_state.json"
+GOAL_META = STATE_DIR / "goal_id.txt"
 
 
 def worker(kind: str, payload: dict) -> dict:
@@ -39,7 +45,6 @@ def worker(kind: str, payload: dict) -> dict:
         n = int(payload.get("n", 0))
         return {"n": n, "sum_0_to_n": n * (n + 1) // 2}
     if kind == "fail_once":
-        # Worker may "succeed" with wrong result; Verifier must catch it
         return {"word_count": -1, "injected": True}
     if kind == "fail_always":
         return {"word_count": -1, "injected": True, "always": True}
@@ -77,8 +82,8 @@ def seed_if_empty(cp: ControlPlane, goal_id: str) -> None:
         ("word_count", {"text": "wake execute verify next"}, "exp02b-wc2"),
         ("checksum", {"n": 20}, "exp02b-cs2"),
     ]
-    # optional long queue via env EXP02_STRESS=1
     import os
+
     if os.environ.get("EXP02_STRESS") == "1":
         for i in range(6):
             specs.append(("checksum", {"n": 5 + i}, f"exp02b-stress-{i}"))
@@ -97,22 +102,21 @@ def seed_if_empty(cp: ControlPlane, goal_id: str) -> None:
 
 
 def finish_verifying(cp: ControlPlane, goal_id: str) -> dict | None:
-    """Complete VERIFYING tasks that already have artifacts (post-crash)."""
     for task in cp.list_tasks(goal_id, status=TaskStatus.VERIFYING):
         kind = task.metadata.get("kind") or "word_count"
         payload = task.metadata.get("payload") or {}
         result = {}
         if task.artifact_path and Path(task.artifact_path).exists():
             try:
-                result = json.loads(Path(task.artifact_path).read_text()).get("result", {})
-                kind = json.loads(Path(task.artifact_path).read_text()).get("kind", kind)
-                payload = json.loads(Path(task.artifact_path).read_text()).get("payload", payload)
+                blob = json.loads(Path(task.artifact_path).read_text())
+                result = blob.get("result", {})
+                kind = blob.get("kind", kind)
+                payload = blob.get("payload", payload)
             except Exception:
                 pass
         if not result:
-            # cannot verify without artifact — return to APPROVED for re-run
             task.status = TaskStatus.APPROVED
-            task.updated_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+            task.updated_at = datetime.now(timezone.utc).isoformat()
             cp.store.save_task(task)
             continue
         v = verifier(kind, payload, result)
@@ -125,11 +129,10 @@ def finish_verifying(cp: ControlPlane, goal_id: str) -> dict | None:
 
 
 def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
-    recovered = cp.recover_stale_tasks(goal_id)
+    cp.recover_stale_tasks(goal_id)
     fin = finish_verifying(cp, goal_id)
     if fin is not None:
         return fin
-    # Re-queue REJECTED tasks that still have retry budget (same task_id → CANCELLED path)
     for t in cp.list_tasks(goal_id, status=TaskStatus.REJECTED):
         if t.retry_count <= t.max_retries:
             try:
@@ -138,7 +141,6 @@ def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
                 pass
     approved = cp.list_tasks(goal_id, status=TaskStatus.APPROVED)
     if not approved:
-        # try promote any PROPOSED with zero cost
         for t in cp.list_tasks(goal_id, status=TaskStatus.PROPOSED):
             try:
                 cp.approve_task(t.id)
@@ -178,10 +180,12 @@ def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
         if task2.status == TaskStatus.CANCELLED:
             retry_action = {"cancelled": True, "retry_count": task2.retry_count, "max_retries": task2.max_retries}
         elif kind == "fail_always":
-            # same task will be re-approved next step until CANCELLED
-            retry_action = {"same_task_retry": True, "retry_count": task2.retry_count, "max_retries": task2.max_retries}
+            retry_action = {
+                "same_task_retry": True,
+                "retry_count": task2.retry_count,
+                "max_retries": task2.max_retries,
+            }
         elif task2.status == TaskStatus.REJECTED and task2.retry_count < task2.max_retries:
-            # fail_once → convert to honest word_count on new task
             new_kind = "word_count" if kind == "fail_once" else kind
             new_payload = payload if kind != "fail_once" else {"text": payload.get("text", "retry ok")}
             key = f"{task.idempotency_key or task.id}-retry{task2.retry_count}"
@@ -212,10 +216,8 @@ def process_one(cp: ControlPlane, goal_id: str) -> dict | None:
 
 
 def ensure_goal(cp: ControlPlane) -> str:
-    # reuse goal id from state metadata file if present
-    meta_path = Path("/tmp/aistudio_exp02b/goal_id.txt")
-    if meta_path.exists():
-        gid = meta_path.read_text().strip()
+    if GOAL_META.exists():
+        gid = GOAL_META.read_text(encoding="utf-8").strip()
         if cp.get_goal(gid):
             return gid
     g = cp.create_goal(
@@ -224,8 +226,16 @@ def ensure_goal(cp: ControlPlane) -> str:
         acceptance_criteria=["all seeded tasks accepted", "zero human mid-loop", "$0 spend"],
         budget_usd=1.0,
     )
-    meta_path.write_text(g.id)
+    GOAL_META.write_text(g.id, encoding="utf-8")
     return g.id
+
+
+def wipe_exp_state() -> None:
+    for p in [STATE, STATE.with_suffix(".bak"), GOAL_META]:
+        if p.exists():
+            p.unlink()
+    for p in OUT.glob("artifact-*.json"):
+        p.unlink()
 
 
 def run(max_steps: int = 10, once: bool = False, inject_fail: bool = False) -> dict:
@@ -235,16 +245,19 @@ def run(max_steps: int = 10, once: bool = False, inject_fail: bool = False) -> d
     seed_if_empty(cp, goal_id)
     cp.recover_stale_tasks(goal_id)
     if inject_fail:
-        # only if not already present
         keys = {t.idempotency_key for t in cp.list_tasks(goal_id)}
-        if 'exp02b-fail1' not in keys:
-            ft = cp.propose_task(goal_id, title='fail_once:exp02b-fail1',
-                description=json.dumps({'kind':'fail_once','payload':{'text':'should fail first'}}),
-                proposed_by='script_manager', estimated_cost_usd=0.0,
-                idempotency_key='exp02b-fail1', kind='fail_once',
-                payload={'text':'should fail first'})
+        if "exp02b-fail1" not in keys:
+            ft = cp.propose_task(
+                goal_id,
+                title="fail_once:exp02b-fail1",
+                description=json.dumps({"kind": "fail_once", "payload": {"text": "should fail first"}}),
+                proposed_by="script_manager",
+                estimated_cost_usd=0.0,
+                idempotency_key="exp02b-fail1",
+                kind="fail_once",
+                payload={"text": "should fail first"},
+            )
             cp.approve_task(ft.id)
-
 
     log = []
     steps = 0
@@ -270,6 +283,7 @@ def run(max_steps: int = 10, once: bool = False, inject_fail: bool = False) -> d
         "human_interventions": 0,
         "budget": budget,
         "llm_used": False,
+        "state_path": str(STATE),
         "log": log,
     }
     path = OUT / f"exp02b-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.json"
@@ -283,17 +297,16 @@ def main() -> int:
     ap.add_argument("--once", action="store_true", help="process at most one task (L1 wake)")
     ap.add_argument("--max-steps", type=int, default=10)
     ap.add_argument("--reset", action="store_true", help="wipe exp state and reseed")
-    ap.add_argument("--inject-fail", action="store_true", help="seed a fail_once task for verifier isolation test")
+    ap.add_argument(
+        "--inject-fail",
+        action="store_true",
+        help="seed a fail_once task for verifier isolation test",
+    )
     args = ap.parse_args()
     if args.reset:
-        for p in [STATE, STATE.with_suffix(".bak"), Path("/tmp/aistudio_exp02b/goal_id.txt")]:
-            if p.exists():
-                p.unlink()
-        for p in OUT.glob("artifact-*.json"):
-            p.unlink()
+        wipe_exp_state()
     r = run(max_steps=args.max_steps, once=args.once, inject_fail=args.inject_fail)
     print(json.dumps({k: r[k] for k in r if k != "log"}, indent=2))
-    # inject-fail path expects >=1 reject then recovery accepts
     if args.inject_fail:
         return 0 if r["accepted"] >= 4 else 1
     if r["rejected"] > 0:

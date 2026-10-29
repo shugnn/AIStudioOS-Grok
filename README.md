@@ -2,54 +2,65 @@
 
 **Independent track of AI Studio OS**  
 Lead: Grok  
-Parallel track: AIStudioOS-ChatGPT (led by ChatGPT)
+Parallel track: [AIStudioOS-ChatGPT](https://github.com/shugnn/AIStudioOS-ChatGPT)
 
 ## Mission
 
-建立一个以人类创始人为最终决策者，以 AI Agent 为主要生产力，能够自主组织、自主执行、自主验证、自主迭代，并可长期持续运行的智能工作室操作系统。
+以人类创始人为最终决策者，AI Agent 在权限与预算约束下自主组织、执行、验证、迭代；长期持续运行是目标，**须证据验收，禁止口头宣称**。
 
 ## Dual-Track Principles
 
-- Independent technology choices and architecture
-- Separate repositories and experiment data
-- Same high-level goal
-- Unified evaluation metrics for later objective comparison
-- Possibility of integrating proven components later
+- Independent tech choices; separate repos
+- Same high-level goal; comparable metrics
+- Important decisions via GitHub Issue/PR
+- Zero new paid spend by default; local host first
 
 **GitHub**: https://github.com/shugnn/AIStudioOS-Grok
 
-## Current Status (2026-10-22)
+## Current Status (2026-10-29)
 
-**Phase 1: Thin Control Plane + Minimal Experiment**
+**P0 isolated loop (FOUNDER-20261024-AUTOLOOP)** — engineering evidence on host; **production 7×24 NOT ACCEPTED**.
 
-- [x] Technical Investigation Report v0.1
-- [x] Dual-track alignment & unified metrics
-- [x] Minimal Experiment Protocol v1 (locked)
-- [x] Thin Control Plane prototype (Goal / Task / Budget / Permission / Checkpoint)
-- [x] Unit tests for Control Plane (6/6 passed)
-- [ ] Run Exp-01 (Tiny Word-Count CLI) closed loop
-- [ ] Record metrics & recovery test
+| Area | Status |
+|------|--------|
+| Control Plane | Goal/Task/Budget/Permission/Checkpoint |
+| L1 Runner | fcntl + **msvcrt** lock; schtasks ≥3 PASS |
+| Soak metrics | `cycles_with_work` / idle required (`scripts/soak_2h.py`) |
+| CP state path | `docs/progress/exp02_auto_loop/state/` (not `/tmp`) |
+| Evidence layout | `docs/progress/EVIDENCE_PACKAGE.md` |
+| Final matrix | [Issue #9](https://github.com/shugnn/AIStudioOS-Grok/issues/9) |
+| 24h soak | **NOT STARTED** |
+
+Historical 2h wall-clock: process exit 120/120, **~34 effective** work cycles (idle rest). Do not cite as business 120.
 
 ## Quick Start
 
 ```bash
-# Run Control Plane unit tests
+# Control Plane unit tests
 PYTHONPATH=. python -m pytest tests/test_control_plane.py -v
 
-# Inspect Control Plane status (after a goal is created)
-PYTHONPATH=. python -m control_plane.cli status
+# One CP cycle
+PYTHONPATH=. python experiments/exp02_auto_loop/cp_driven_loop.py --reset --once
+
+# Short via-L1 soak with honest metrics (Windows: py -3)
+PYTHONPATH=. python scripts/soak_2h.py --cycles 10 --interval 2 --via-l1 --idle-policy stop
+
+# Evidence hashes
+PYTHONPATH=. python scripts/evidence_sha256sums.py docs/progress/soak_2h
 ```
 
 ## Key Documents
 
 | Doc | Description |
 |-----|-------------|
-| `docs/01-technical-investigation-report.md` | Evidence-based evaluation of 7 candidate technologies |
-| `docs/03-dual-track-and-evaluation-metrics.md` | Parallel R&D rules + unified metrics |
-| `docs/04-minimal-experiment-protocol-v1.md` | Binding protocol for Phase 1 experiment |
-| `experiments/exp01-tiny-cli/` | First concrete experiment target |
+| `docs/progress/EVIDENCE_PACKAGE.md` | Evidence dirs, metrics, binding strength |
+| `docs/progress/soak_metrics_policy.md` | Effective vs idle cycles |
+| `docs/06-l1-runner-design.md` | L1 lock / jobs |
+| `docs/05-cross-team-communication-protocol.md` | Cross-track protocol |
+| `docs/j-exp01-cross-track-ack.md` | Proposed minimal joint experiment (design only) |
+| Issue #9 | P0 acceptance matrix & host evidence |
 
-## Architecture (Phase 1)
+## Architecture (thin)
 
 ```
 Human Founder
@@ -64,6 +75,8 @@ Control Plane  (control_plane/)
     ├── Manager   (proposes only)
     ├── Worker    (executes approved work)
     └── Verifier  (independent accept/reject)
+    │
+L1 Runner (scripts/l1_runner.py) — OS lock, scheduled wake
 ```
 
 Manager never decides acceptance. Budget & permissions are enforced in code, not only by prompts.

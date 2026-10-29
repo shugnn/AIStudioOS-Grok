@@ -25,3 +25,8 @@ docs/progress/exp02_auto_loop/state/cp_state.json
 docs/progress/exp02_auto_loop/state/cp_state.bak
 docs/progress/exp02_auto_loop/state/goal_id.txt
 docs/progress/exp02_auto_loop/artifact-*.json
+# Legacy paths (pre-portable state)
+docs/progress/exp02_auto_loop/cp_state.json
+docs/progress/exp02_auto_loop/cp_state.bak
+docs/progress/exp02_auto_loop/cp_state.snapshot.json
+docs/progress/exp02_auto_loop/goal_id.txt

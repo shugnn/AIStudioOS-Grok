@@ -4,10 +4,11 @@
 --direct (default): no OS lock needed.
 --via-l1: uses L1 runner with cross-platform lock (fcntl on POSIX, msvcrt on Windows).
 
-Metrics (FOUNDER 2026-10-28):
+Metrics (FOUNDER 2026-10-28 / 2026-10-31):
   Never treat exit=0 alone as business success.
   Reports cycles_total, cycles_exit0, cycles_with_work, cycles_idle, tasks_done_unique.
   idle_policy: continue | stop | reseed
+  metrics.json is written in finally + periodic checkpoint so mid-run death still leaves a file.
 
 with_work detection reads L1 runner-*.json artifact (stdout alone lacks steps_this_wake).
 """
@@ -15,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import time
@@ -50,7 +50,6 @@ def seed_tasks(n: int = 30, prefix: str | None = None) -> int:
     from control_plane.store import FileStore
     from experiments.exp02_auto_loop.cp_driven_loop import STATE, ensure_goal
 
-    # Always unique keys so prior ACCEPTED soak2h-* cannot starve the queue.
     batch = prefix or f"soak-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     store = FileStore(STATE)
     cp = ControlPlane(store)
@@ -117,7 +116,6 @@ def _extract_json_objects(text: str) -> list[dict[str, Any]]:
                     objs.append(o)
             except json.JSONDecodeError:
                 pass
-    # Multi-line pretty JSON (direct mode prints indented object)
     try:
         start = text.find("{")
         end = text.rfind("}")
@@ -152,9 +150,6 @@ def _load_cp_from_l1_artifact(artifact_path: str | None) -> dict[str, Any] | Non
         return None
     p = Path(artifact_path)
     if not p.is_file():
-        # Windows path may appear with unicode escapes in text; try as-is
-        p = Path(artifact_path.replace("\\", "\\"))
-    if not p.is_file():
         return None
     try:
         report = json.loads(p.read_text(encoding="utf-8"))
@@ -168,22 +163,19 @@ def _load_cp_from_l1_artifact(artifact_path: str | None) -> dict[str, Any] | Non
             got = _cp_fields_from_mapping(o)
             if got:
                 return got
-        # stdout_tail may be pretty-printed CP JSON only
-        got = None
         try:
             start = tail.find("{")
             end = tail.rfind("}")
             if start >= 0 and end > start:
                 got = _cp_fields_from_mapping(json.loads(tail[start : end + 1]))
+                if got:
+                    return got
         except json.JSONDecodeError:
-            got = None
-        if got:
-            return got
+            pass
     return None
 
 
 def classify_cycle(rc: int, out: str) -> dict[str, Any]:
-    """Classify one cycle: process exit vs business work."""
     steps = 0
     accepted = None
     found_cp = False
@@ -206,9 +198,12 @@ def classify_cycle(rc: int, out: str) -> dict[str, Any]:
             steps = loaded["steps"]
             accepted = loaded["accepted"]
 
-    # Fallback: newest runner-*.json if L1 printed minimal status only
     if not found_cp:
-        runners = sorted((ROOT / "docs" / "progress").glob("runner-*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+        runners = sorted(
+            (ROOT / "docs" / "progress").glob("runner-*.json"),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True,
+        )
         if runners:
             loaded = _load_cp_from_l1_artifact(str(runners[0]))
             if loaded:
@@ -228,6 +223,59 @@ def classify_cycle(rc: int, out: str) -> dict[str, Any]:
         "cp_parsed": found_cp,
         "artifact": artifact,
     }
+
+
+def write_metrics(
+    path: Path,
+    *,
+    sha_short: str,
+    sha_full: str,
+    via_l1: bool,
+    idle_policy: str,
+    cycles_planned: int,
+    cycles_ran: int,
+    cycles_exit0: int,
+    cycles_with_work: int,
+    cycles_idle: int,
+    tasks_done_unique_est: int,
+    stopped_early: str | None,
+    log_path: Path,
+    summary_path: Path,
+    final: bool,
+    error: str | None = None,
+) -> dict[str, Any]:
+    metrics: dict[str, Any] = {
+        "utc_end": utc(),
+        "sha_short": sha_short,
+        "sha_full": sha_full,
+        "via_l1": via_l1,
+        "idle_policy": idle_policy,
+        "cycles_planned": cycles_planned,
+        "cycles_ran": cycles_ran,
+        "cycles_exit0": cycles_exit0,
+        "cycles_with_work": cycles_with_work,
+        "cycles_idle": cycles_idle,
+        "tasks_done_unique_est": tasks_done_unique_est,
+        "stopped_early": stopped_early,
+        "final": final,
+        "note": (
+            "cycles_exit0 is process success only; "
+            "business progress is cycles_with_work / tasks_done_unique_est. "
+            "Do not claim business soak PASS from exit0 alone."
+        ),
+        "evidence_binding": "medium_plus",
+        "paths": {
+            "log": str(log_path),
+            "summary_jsonl": str(summary_path),
+            "metrics_json": str(path),
+        },
+    }
+    if error:
+        metrics["error"] = error
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return metrics
 
 
 def main() -> int:
@@ -254,6 +302,12 @@ def main() -> int:
         help="consecutive idle cycles before stop/reseed action",
     )
     ap.add_argument("--reseed-batch", type=int, default=30)
+    ap.add_argument(
+        "--metrics-every",
+        type=int,
+        default=10,
+        help="checkpoint metrics.json every N cycles (0=only finally)",
+    )
     args = ap.parse_args()
 
     seed_n = args.seed if args.seed is not None else max(args.cycles, 30)
@@ -270,154 +324,176 @@ def main() -> int:
             f.write(line)
         print(msg, flush=True)
 
-    log(
-        f"=== soak start {utc()} sha={sha_short} sha_full={sha_full} "
-        f"cycles={args.cycles} interval={args.interval} via_l1={args.via_l1} "
-        f"seed={seed_n} idle_policy={args.idle_policy} ==="
-    )
-
-    if not args.no_reset_seed:
-        try:
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(ROOT / "experiments/exp02_auto_loop/cp_driven_loop.py"),
-                    "--reset",
-                    "--max-steps",
-                    "0",
-                ],
-                cwd=str(ROOT),
-                capture_output=True,
-                text=True,
-                timeout=60,
-                env={**__import__("os").environ, "PYTHONPATH": str(ROOT)},
-            )
-        except Exception as e:
-            log(f"reset warn: {e}")
-        try:
-            n = seed_tasks(seed_n)
-            log(f"seeded {n}/{seed_n} tasks")
-        except Exception as e:
-            log(f"seed error: {e}")
-            return 1
-
-    runner = run_once_l1 if args.via_l1 else run_once_direct
     cycles_exit0 = 0
     cycles_with_work = 0
     cycles_idle = 0
     consecutive_idle = 0
     last_accepted = 0
     tasks_done_unique_est = 0
-    stopped_early = None
+    stopped_early: str | None = None
     ran = 0
+    fatal_error: str | None = None
+    exit_code = 1
 
-    for i in range(1, args.cycles + 1):
-        ts = utc()
-        rc, out = runner()
-        ran = i
-        info = classify_cycle(rc, out)
-        if rc == 0:
-            cycles_exit0 += 1
-
-        acc = info.get("accepted_cum")
-        if acc is not None and acc > last_accepted:
-            delta = acc - last_accepted
-            tasks_done_unique_est += delta
-            if not info["with_work"]:
-                info["with_work"] = True
-                info["idle"] = False
-            last_accepted = acc
-        elif info["with_work"]:
-            tasks_done_unique_est += max(1, info["steps_this_wake"])
-
-        if info["with_work"]:
-            cycles_with_work += 1
-            consecutive_idle = 0
-        elif info["idle"]:
-            cycles_idle += 1
-            consecutive_idle += 1
-        else:
-            consecutive_idle = 0
-
-        row = {
-            "utc": ts,
-            "cycle": i,
-            "exit": rc,
-            "steps_this_wake": info["steps_this_wake"],
-            "accepted_cum": info.get("accepted_cum"),
-            "with_work": info["with_work"],
-            "idle": info["idle"],
-            "cp_parsed": info["cp_parsed"],
-            "artifact": info.get("artifact"),
-            "sha_full": sha_full,
-        }
-        log(
-            f"{ts} cycle={i} exit={rc} with_work={info['with_work']} "
-            f"idle={info['idle']} steps={info['steps_this_wake']} "
-            f"cp_parsed={info['cp_parsed']}"
+    def dump(final: bool) -> dict[str, Any]:
+        return write_metrics(
+            metrics_path,
+            sha_short=sha_short,
+            sha_full=sha_full,
+            via_l1=args.via_l1,
+            idle_policy=args.idle_policy,
+            cycles_planned=args.cycles,
+            cycles_ran=ran,
+            cycles_exit0=cycles_exit0,
+            cycles_with_work=cycles_with_work,
+            cycles_idle=cycles_idle,
+            tasks_done_unique_est=tasks_done_unique_est,
+            stopped_early=stopped_early,
+            log_path=log_path,
+            summary_path=summary_path,
+            final=final,
+            error=fatal_error,
         )
-        tail = out.strip()[-400:] if out else ""
-        if tail:
-            log(tail)
-        with open(summary_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-        if consecutive_idle >= args.idle_stop_after and args.idle_policy != "continue":
-            if args.idle_policy == "stop":
-                stopped_early = f"idle_stop_after_{args.idle_stop_after}"
-                log(f"idle_policy=stop triggered at cycle={i}")
-                break
-            if args.idle_policy == "reseed":
-                try:
-                    n = seed_tasks(args.reseed_batch)
-                    log(f"idle_policy=reseed added {n} tasks")
-                    consecutive_idle = 0
-                except Exception as e:
-                    log(f"reseed error: {e}")
-                    stopped_early = "reseed_failed"
+    try:
+        log(
+            f"=== soak start {utc()} sha={sha_short} sha_full={sha_full} "
+            f"cycles={args.cycles} interval={args.interval} via_l1={args.via_l1} "
+            f"seed={seed_n} idle_policy={args.idle_policy} ==="
+        )
+
+        if not args.no_reset_seed:
+            try:
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "experiments/exp02_auto_loop/cp_driven_loop.py"),
+                        "--reset",
+                        "--max-steps",
+                        "0",
+                    ],
+                    cwd=str(ROOT),
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    env={**__import__("os").environ, "PYTHONPATH": str(ROOT)},
+                )
+            except Exception as e:
+                log(f"reset warn: {e}")
+            try:
+                n = seed_tasks(seed_n)
+                log(f"seeded {n}/{seed_n} tasks")
+            except Exception as e:
+                log(f"seed error: {e}")
+                fatal_error = f"seed_error:{e}"
+                return 1
+
+        # initial checkpoint so file exists even if first cycle hangs
+        dump(final=False)
+
+        runner = run_once_l1 if args.via_l1 else run_once_direct
+
+        for i in range(1, args.cycles + 1):
+            ts = utc()
+            rc, out = runner()
+            ran = i
+            info = classify_cycle(rc, out)
+            if rc == 0:
+                cycles_exit0 += 1
+
+            acc = info.get("accepted_cum")
+            if acc is not None and acc > last_accepted:
+                delta = acc - last_accepted
+                tasks_done_unique_est += delta
+                if not info["with_work"]:
+                    info["with_work"] = True
+                    info["idle"] = False
+                last_accepted = acc
+            elif info["with_work"]:
+                tasks_done_unique_est += max(1, info["steps_this_wake"])
+
+            if info["with_work"]:
+                cycles_with_work += 1
+                consecutive_idle = 0
+            elif info["idle"]:
+                cycles_idle += 1
+                consecutive_idle += 1
+            else:
+                consecutive_idle = 0
+
+            row = {
+                "utc": ts,
+                "cycle": i,
+                "exit": rc,
+                "steps_this_wake": info["steps_this_wake"],
+                "accepted_cum": info.get("accepted_cum"),
+                "with_work": info["with_work"],
+                "idle": info["idle"],
+                "cp_parsed": info["cp_parsed"],
+                "artifact": info.get("artifact"),
+                "sha_full": sha_full,
+            }
+            log(
+                f"{ts} cycle={i} exit={rc} with_work={info['with_work']} "
+                f"idle={info['idle']} steps={info['steps_this_wake']} "
+                f"cp_parsed={info['cp_parsed']}"
+            )
+            tail = out.strip()[-400:] if out else ""
+            if tail:
+                log(tail)
+            with open(summary_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+            if args.metrics_every > 0 and (i % args.metrics_every == 0):
+                dump(final=False)
+
+            if consecutive_idle >= args.idle_stop_after and args.idle_policy != "continue":
+                if args.idle_policy == "stop":
+                    stopped_early = f"idle_stop_after_{args.idle_stop_after}"
+                    log(f"idle_policy=stop triggered at cycle={i}")
                     break
+                if args.idle_policy == "reseed":
+                    try:
+                        n = seed_tasks(args.reseed_batch)
+                        log(f"idle_policy=reseed added {n} tasks")
+                        consecutive_idle = 0
+                    except Exception as e:
+                        log(f"reseed error: {e}")
+                        stopped_early = "reseed_failed"
+                        fatal_error = f"reseed_error:{e}"
+                        break
 
-        if i < args.cycles and stopped_early is None:
-            time.sleep(args.interval)
+            if i < args.cycles and stopped_early is None:
+                time.sleep(args.interval)
 
-    metrics = {
-        "utc_end": utc(),
-        "sha_short": sha_short,
-        "sha_full": sha_full,
-        "via_l1": args.via_l1,
-        "idle_policy": args.idle_policy,
-        "cycles_planned": args.cycles,
-        "cycles_ran": ran,
-        "cycles_exit0": cycles_exit0,
-        "cycles_with_work": cycles_with_work,
-        "cycles_idle": cycles_idle,
-        "tasks_done_unique_est": tasks_done_unique_est,
-        "stopped_early": stopped_early,
-        "note": (
-            "cycles_exit0 is process success only; "
-            "business progress is cycles_with_work / tasks_done_unique_est. "
-            "Do not claim business soak PASS from exit0 alone."
-        ),
-        "evidence_binding": "medium_plus",
-        "paths": {
-            "log": str(log_path),
-            "summary_jsonl": str(summary_path),
-            "metrics_json": str(metrics_path),
-        },
-    }
-    metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+        exit_code = 0 if cycles_exit0 == ran and ran > 0 else 1
+        return exit_code
 
-    log(
-        f"=== soak end {utc()} exit0={cycles_exit0}/{ran} "
-        f"with_work={cycles_with_work} idle={cycles_idle} "
-        f"tasks_est={tasks_done_unique_est} stopped_early={stopped_early} ==="
-    )
-    print(json.dumps(metrics, indent=2))
-    print(f"Log: {log_path}")
-    print(f"Summary: {summary_path}")
-    print(f"Metrics: {metrics_path}")
-
-    return 0 if cycles_exit0 == ran and ran > 0 else 1
+    except KeyboardInterrupt:
+        stopped_early = stopped_early or "keyboard_interrupt"
+        fatal_error = "keyboard_interrupt"
+        log(f"interrupted at cycle={ran}")
+        return 130
+    except Exception as e:
+        stopped_early = stopped_early or "exception"
+        fatal_error = f"{type(e).__name__}:{e}"
+        log(f"fatal: {fatal_error}")
+        return 1
+    finally:
+        metrics = dump(final=True)
+        try:
+            log(
+                f"=== soak end {utc()} exit0={cycles_exit0}/{ran} "
+                f"with_work={cycles_with_work} idle={cycles_idle} "
+                f"tasks_est={tasks_done_unique_est} stopped_early={stopped_early} "
+                f"final_metrics=1 ==="
+            )
+            print(json.dumps(metrics, indent=2))
+            print(f"Log: {log_path}")
+            print(f"Summary: {summary_path}")
+            print(f"Metrics: {metrics_path}")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

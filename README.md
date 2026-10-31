@@ -17,48 +17,50 @@ Parallel track: [AIStudioOS-ChatGPT](https://github.com/shugnn/AIStudioOS-ChatGP
 
 **GitHub**: https://github.com/shugnn/AIStudioOS-Grok
 
-## Current Status (2026-10-29)
+## Current Status (2026-10-31)
 
-**P0 isolated loop (FOUNDER-20261024-AUTOLOOP)** — engineering evidence on host; **production 7×24 NOT ACCEPTED**.
+**P0 isolated loop** — host evidence in-repo; **production 7×24 NOT ACCEPTED**.
 
 | Area | Status |
 |------|--------|
 | Control Plane | Goal/Task/Budget/Permission/Checkpoint |
-| L1 Runner | fcntl + **msvcrt** lock; schtasks ≥3 PASS |
-| Soak metrics | `cycles_with_work` / idle required (`scripts/soak_2h.py`) |
-| CP state path | `docs/progress/exp02_auto_loop/state/` (not `/tmp`) |
-| Evidence layout | `docs/progress/EVIDENCE_PACKAGE.md` |
-| Final matrix | [Issue #9](https://github.com/shugnn/AIStudioOS-Grok/issues/9) |
-| 24h soak | **NOT STARTED** |
+| L1 Runner | fcntl + msvcrt; schtasks ≥3; **emergency stop** (exit 3) |
+| Soak metrics | with_work/idle; finally + checkpoint; **`--max-wall-seconds`** |
+| 24h observation | **PARTIAL** 1330/1440; with_work 1264 — see `docs/progress/soak_2h/metrics.json` |
+| Evidence | `EVIDENCE_PACKAGE.md` · `DUAL_TRACK_MATRIX.md` · Issue #9 |
 
-Historical 2h wall-clock: process exit 120/120, **~34 effective** work cycles (idle rest). Do not cite as business 120.
+Do not cite historical 2h `ok=120/120` as business 120 (idle majority).
 
 ## Quick Start
 
 ```bash
-# Control Plane unit tests
-PYTHONPATH=. python -m pytest tests/test_control_plane.py -v
+# Fast health check (Windows: py -3)
+PYTHONPATH=. python scripts/health_check.py
 
-# One CP cycle
-PYTHONPATH=. python experiments/exp02_auto_loop/cp_driven_loop.py --reset --once
+# Unit tests
+PYTHONPATH=. python -m pytest tests/ -q
 
-# Short via-L1 soak with honest metrics (Windows: py -3)
+# Short honest soak
 PYTHONPATH=. python scripts/soak_2h.py --cycles 10 --interval 2 --via-l1 --idle-policy stop
 
-# Evidence hashes
-PYTHONPATH=. python scripts/evidence_sha256sums.py docs/progress/soak_2h
+# Bounded ~24h wall (example; needs founder host time)
+# PYTHONPATH=. python scripts/soak_2h.py --cycles 2000 --interval 60 --via-l1 --seed 300 \
+#   --idle-policy reseed --max-wall-seconds 86400
+
+# Emergency stop
+# echo stop > docs/progress/EMERGENCY_STOP
 ```
 
 ## Key Documents
 
 | Doc | Description |
 |-----|-------------|
-| `docs/progress/EVIDENCE_PACKAGE.md` | Evidence dirs, metrics, binding strength |
-| `docs/progress/soak_metrics_policy.md` | Effective vs idle cycles |
-| `docs/06-l1-runner-design.md` | L1 lock / jobs |
-| `docs/05-cross-team-communication-protocol.md` | Cross-track protocol |
-| `docs/j-exp01-cross-track-ack.md` | Proposed minimal joint experiment (design only) |
-| Issue #9 | P0 acceptance matrix & host evidence |
+| `docs/progress/P0_STATUS.md` | One-page P0 snapshot |
+| `docs/progress/DUAL_TRACK_MATRIX.md` | Grok vs ChatGPT gates |
+| `docs/progress/EVIDENCE_PACKAGE.md` | Evidence layout |
+| `docs/progress/soak_metrics_policy.md` | Effective vs idle |
+| `docs/progress/EMERGENCY_STOP.md` | Kill switch procedure |
+| Issue #9 | P0 acceptance & evidence |
 
 ## Architecture (thin)
 
@@ -76,7 +78,7 @@ Control Plane  (control_plane/)
     ├── Worker    (executes approved work)
     └── Verifier  (independent accept/reject)
     │
-L1 Runner (scripts/l1_runner.py) — OS lock, scheduled wake
+L1 Runner (scripts/l1_runner.py) — OS lock, scheduled wake, emergency stop
 ```
 
 Manager never decides acceptance. Budget & permissions are enforced in code, not only by prompts.

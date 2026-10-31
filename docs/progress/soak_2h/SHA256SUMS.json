@@ -1,0 +1,18 @@
+{
+  "utc": "2026-10-31T11:58:17Z",
+  "git_head_note": "evidence pin for FOUNDER-20261029-SOAK-24H PARTIAL",
+  "count": 2,
+  "files": [
+    {
+      "path": "docs/progress/soak_2h/metrics.json",
+      "sha256": "1f1e0217fa8558fdcd4d70d7cb813b034c3534baecebf9bdea6a45123b2a57e3",
+      "bytes": 827
+    },
+    {
+      "path": "docs/progress/soak_2h/summary.jsonl",
+      "sha256": "f1e664f1ecaa557a07a89609b52d58d91aeb37d1e2e835b3d16feedfdeaf4401",
+      "bytes": 429301
+    }
+  ],
+  "note": "PARTIAL 1330/1440; not full window; not production 7x24"
+}

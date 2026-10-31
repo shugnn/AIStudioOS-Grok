@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 """Local soak runner (Windows-friendly).
 
---direct (default): no OS lock needed.
---via-l1: uses L1 runner with cross-platform lock (fcntl on POSIX, msvcrt on Windows).
-
-Metrics (FOUNDER 2026-10-28 / 2026-10-31):
-  Never treat exit=0 alone as business success.
-  Reports cycles_total, cycles_exit0, cycles_with_work, cycles_idle, tasks_done_unique.
-  idle_policy: continue | stop | reseed
-  metrics.json is written in finally + periodic checkpoint so mid-run death still leaves a file.
-
-with_work detection reads L1 runner-*.json artifact (stdout alone lacks steps_this_wake).
+Respects docs/progress/EMERGENCY_STOP between cycles (same kill switch as L1).
+metrics.json written in finally + periodic checkpoint.
 """
 from __future__ import annotations
 
@@ -24,6 +16,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from control_plane.emergency_stop import is_stopped, reason as stop_reason
+
 OUT = ROOT / "docs" / "progress" / "soak_2h"
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -45,7 +40,6 @@ def git_sha(short: bool = False) -> str:
 
 
 def seed_tasks(n: int = 30, prefix: str | None = None) -> int:
-    sys.path.insert(0, str(ROOT))
     from control_plane.control_plane import ControlPlane
     from control_plane.store import FileStore
     from experiments.exp02_auto_loop.cp_driven_loop import STATE, ensure_goal
@@ -86,8 +80,7 @@ def run_once_direct() -> tuple[int, str]:
         timeout=120,
         env={**dict(__import__("os").environ), "PYTHONPATH": str(ROOT)},
     )
-    out = (r.stdout or "") + (r.stderr or "")
-    return r.returncode, out
+    return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
 def run_once_l1() -> tuple[int, str]:
@@ -99,8 +92,7 @@ def run_once_l1() -> tuple[int, str]:
         timeout=120,
         env={**dict(__import__("os").environ), "PYTHONPATH": str(ROOT)},
     )
-    out = (r.stdout or "") + (r.stderr or "")
-    return r.returncode, out
+    return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
 def _extract_json_objects(text: str) -> list[dict[str, Any]]:
@@ -131,7 +123,6 @@ def _extract_json_objects(text: str) -> list[dict[str, Any]]:
 def _cp_fields_from_mapping(o: dict[str, Any]) -> dict[str, Any] | None:
     if "steps_this_wake" not in o and "experiment" not in o:
         return None
-    steps = 0
     try:
         steps = int(o.get("steps_this_wake") or 0)
     except (TypeError, ValueError):
@@ -180,9 +171,8 @@ def classify_cycle(rc: int, out: str) -> dict[str, Any]:
     accepted = None
     found_cp = False
     artifact = None
-
     for o in _extract_json_objects(out):
-        if "artifact" in o and o.get("artifact"):
+        if o.get("artifact"):
             artifact = str(o["artifact"])
         got = _cp_fields_from_mapping(o)
         if got:
@@ -190,14 +180,12 @@ def classify_cycle(rc: int, out: str) -> dict[str, Any]:
             steps = got["steps"]
             accepted = got["accepted"]
             break
-
     if not found_cp and artifact:
         loaded = _load_cp_from_l1_artifact(artifact)
         if loaded:
             found_cp = True
             steps = loaded["steps"]
             accepted = loaded["accepted"]
-
     if not found_cp:
         runners = sorted(
             (ROOT / "docs" / "progress").glob("runner-*.json"),
@@ -211,7 +199,6 @@ def classify_cycle(rc: int, out: str) -> dict[str, Any]:
                 steps = loaded["steps"]
                 accepted = loaded["accepted"]
                 artifact = str(runners[0])
-
     with_work = steps > 0
     idle = (rc == 0) and (not with_work)
     return {
@@ -281,37 +268,17 @@ def write_metrics(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cycles", type=int, default=120)
-    ap.add_argument("--interval", type=int, default=60, help="seconds between cycles")
-    ap.add_argument("--seed", type=int, default=None, help="tasks to seed (default=max(cycles, 30))")
-    ap.add_argument(
-        "--via-l1",
-        action="store_true",
-        help="use L1 runner (cross-platform lock: fcntl POSIX / msvcrt Windows)",
-    )
+    ap.add_argument("--interval", type=int, default=60)
+    ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--via-l1", action="store_true")
     ap.add_argument("--no-reset-seed", action="store_true")
-    ap.add_argument(
-        "--idle-policy",
-        choices=["continue", "stop", "reseed"],
-        default="stop",
-        help="continue=old behavior; stop=end after consecutive idles; reseed=add more tasks",
-    )
-    ap.add_argument(
-        "--idle-stop-after",
-        type=int,
-        default=3,
-        help="consecutive idle cycles before stop/reseed action",
-    )
+    ap.add_argument("--idle-policy", choices=["continue", "stop", "reseed"], default="stop")
+    ap.add_argument("--idle-stop-after", type=int, default=3)
     ap.add_argument("--reseed-batch", type=int, default=30)
-    ap.add_argument(
-        "--metrics-every",
-        type=int,
-        default=10,
-        help="checkpoint metrics.json every N cycles (0=only finally)",
-    )
+    ap.add_argument("--metrics-every", type=int, default=10)
     args = ap.parse_args()
 
     seed_n = args.seed if args.seed is not None else max(args.cycles, 30)
-
     log_path = OUT / "soak.log"
     summary_path = OUT / "summary.jsonl"
     metrics_path = OUT / "metrics.json"
@@ -333,7 +300,6 @@ def main() -> int:
     stopped_early: str | None = None
     ran = 0
     fatal_error: str | None = None
-    exit_code = 1
 
     def dump(final: bool) -> dict[str, Any]:
         return write_metrics(
@@ -362,6 +328,12 @@ def main() -> int:
             f"seed={seed_n} idle_policy={args.idle_policy} ==="
         )
 
+        if is_stopped():
+            stopped_early = "emergency_stop_before_start"
+            fatal_error = stop_reason() or "EMERGENCY_STOP present"
+            log(f"emergency_stop before start: {fatal_error}")
+            return 3
+
         if not args.no_reset_seed:
             try:
                 subprocess.run(
@@ -388,18 +360,44 @@ def main() -> int:
                 fatal_error = f"seed_error:{e}"
                 return 1
 
-        # initial checkpoint so file exists even if first cycle hangs
         dump(final=False)
-
         runner = run_once_l1 if args.via_l1 else run_once_direct
 
         for i in range(1, args.cycles + 1):
+            if is_stopped():
+                stopped_early = "emergency_stop"
+                fatal_error = stop_reason() or "EMERGENCY_STOP present"
+                log(f"emergency_stop at cycle boundary before={i}: {fatal_error}")
+                break
+
             ts = utc()
             rc, out = runner()
             ran = i
             info = classify_cycle(rc, out)
             if rc == 0:
                 cycles_exit0 += 1
+            elif rc == 3:
+                # L1 already saw stop
+                stopped_early = "emergency_stop_l1"
+                fatal_error = "l1_exit_3"
+                log(f"{ts} cycle={i} L1 emergency_stop")
+                with open(summary_path, "a", encoding="utf-8") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "utc": ts,
+                                "cycle": i,
+                                "exit": rc,
+                                "with_work": False,
+                                "idle": False,
+                                "emergency_stop": True,
+                                "sha_full": sha_full,
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+                break
 
             acc = info.get("accepted_cum")
             if acc is not None and acc > last_accepted:
@@ -466,8 +464,9 @@ def main() -> int:
             if i < args.cycles and stopped_early is None:
                 time.sleep(args.interval)
 
-        exit_code = 0 if cycles_exit0 == ran and ran > 0 else 1
-        return exit_code
+        if stopped_early and str(stopped_early).startswith("emergency"):
+            return 3
+        return 0 if cycles_exit0 == ran and ran > 0 else 1
 
     except KeyboardInterrupt:
         stopped_early = stopped_early or "keyboard_interrupt"

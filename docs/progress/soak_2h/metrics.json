@@ -1,0 +1,24 @@
+{
+  "utc_end": "2026-10-31T08:18:31Z",
+  "sha_short": "e3e8846",
+  "sha_full": "e3e884615fc8118c882ad1ade4da250adb418846",
+  "via_l1": true,
+  "idle_policy": "reseed",
+  "cycles_planned": 1440,
+  "cycles_ran": 1330,
+  "cycles_exit0": 1330,
+  "cycles_with_work": 1264,
+  "cycles_idle": 66,
+  "tasks_done_unique_est": 1264,
+  "stopped_early": "rebuilt_from_summary_no_final_metrics",
+  "final": true,
+  "rebuilt_from_summary": true,
+  "segment_first_utc": "2026-10-29T14:10:56Z",
+  "segment_last_utc": "2026-10-30T18:20:35Z",
+  "note": "Rebuilt from summary.jsonl on main for FOUNDER-20261029-SOAK-24H PARTIAL. Do not claim full 1440 or production 7x24.",
+  "evidence_binding": "medium_plus",
+  "paths": {
+    "summary_jsonl": "docs/progress/soak_2h/summary.jsonl",
+    "metrics_json": "docs/progress/soak_2h/metrics.json"
+  }
+}

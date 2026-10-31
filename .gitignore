@@ -20,6 +20,7 @@ experiments/**/.pytest_cache/
 *.pyc
 .pytest_cache/
 docs/progress/.l1_runner.lock
+docs/progress/EMERGENCY_STOP
 # Runtime Control Plane state (repo-local after 010d379; do not commit live DB)
 docs/progress/exp02_auto_loop/state/cp_state.json
 docs/progress/exp02_auto_loop/state/cp_state.bak

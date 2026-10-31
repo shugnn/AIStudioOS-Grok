@@ -5,18 +5,11 @@ PLATFORM:
 - POSIX (Linux/macOS): fcntl.flock(LOCK_EX | LOCK_NB)
 - Windows: msvcrt.locking on a fixed region of the lock file
 
-Lock model:
-- Kernel / CRT holds the lock on an open fd.
-- While the process is alive and fd is open, the lock is held.
-- On process exit / kill -9, the OS closes fds → lock is released automatically.
-- No pid-in-file stale recovery path (avoids non-atomic unlink/recreate races).
-
-Jobs: heartbeat | dry_protocol_check | auto_loop_once | auto
-
-Also retains:
-- Any required job failure => overall FAILED and non-zero exit code
-- max_jobs default 1
-- Exit 2 = skipped (lock_held)
+Exit codes:
+- 0 ok
+- 1 failed job
+- 2 skipped (lock_held)
+- 3 emergency stop (docs/progress/EMERGENCY_STOP present)
 """
 from __future__ import annotations
 
@@ -31,6 +24,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from control_plane.emergency_stop import is_stopped, reason, status as stop_status
+
 LOCK_PATH = ROOT / "docs" / "progress" / ".l1_runner.lock"
 OUT_DIR = ROOT / "docs" / "progress"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -38,25 +33,17 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 IS_WINDOWS = sys.platform.startswith("win")
 if IS_WINDOWS:
     import msvcrt
+
     LOCK_BACKEND = "msvcrt"
 else:
     import fcntl
+
     LOCK_BACKEND = "fcntl"
 
-# Fixed region size for msvcrt.locking (bytes). Must be > 0.
 _LOCK_REGION = 1
 
 
 class OSFileLock:
-    """Exclusive lock held by the OS/CRT on an open file descriptor.
-
-    POSIX: fcntl.flock(LOCK_EX | LOCK_NB)
-    Windows: msvcrt.locking(LK_NBLCK) on a 1-byte region
-
-    The lock lives with the fd/process: when the process dies, the OS drops
-    the lock — no manual zombie reclaim.
-    """
-
     def __init__(self, path: Path):
         self.path = path
         self.fd = None
@@ -65,11 +52,9 @@ class OSFileLock:
 
     def acquire(self) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        # Open for read/write; create if missing. Do NOT unlink competitors' files.
         fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT, 0o644)
         try:
             if IS_WINDOWS:
-                # Ensure file has at least _LOCK_REGION bytes so locking works.
                 try:
                     size = os.fstat(fd).st_size
                     if size < _LOCK_REGION:
@@ -91,10 +76,7 @@ class OSFileLock:
                     return False
                 except OSError as e:
                     os.close(fd)
-                    print(
-                        json.dumps({"error": "flock_failed", "detail": str(e)}),
-                        file=sys.stderr,
-                    )
+                    print(json.dumps({"error": "flock_failed", "detail": str(e)}), file=sys.stderr)
                     raise
         except Exception:
             try:
@@ -103,7 +85,6 @@ class OSFileLock:
                 pass
             raise
 
-        # Optional metadata for humans/debugging only — not used for mutual exclusion
         meta = {
             "pid": os.getpid(),
             "owner_token": self.owner_token,
@@ -112,21 +93,16 @@ class OSFileLock:
             "platform": sys.platform,
         }
         try:
-            # On Windows the lock region is byte 0; write metadata after it.
             if IS_WINDOWS:
                 os.lseek(fd, _LOCK_REGION, os.SEEK_SET)
-                payload = (json.dumps(meta) + "\n").encode("utf-8")
-                os.write(fd, payload)
+                os.write(fd, (json.dumps(meta) + "\n").encode("utf-8"))
             else:
                 os.ftruncate(fd, 0)
                 os.lseek(fd, 0, os.SEEK_SET)
                 os.write(fd, (json.dumps(meta) + "\n").encode("utf-8"))
             os.fsync(fd)
         except OSError as e:
-            print(
-                json.dumps({"warning": "lock_metadata_write_failed", "error": str(e)}),
-                file=sys.stderr,
-            )
+            print(json.dumps({"warning": "lock_metadata_write_failed", "error": str(e)}), file=sys.stderr)
         self.fd = fd
         return True
 
@@ -151,20 +127,13 @@ class OSFileLock:
             except OSError:
                 pass
             self.fd = None
-        # Do not unlink the lock file: other waiters may open the same path;
-        # mutual exclusion is the OS lock, not file existence.
 
 
 def run_heartbeat(token: str | None) -> dict:
     import subprocess
 
     if not token:
-        return {
-            "job": "heartbeat",
-            "ok": False,
-            "rc": 2,
-            "error": "no GH_TOKEN",
-        }
+        return {"job": "heartbeat", "ok": False, "rc": 2, "error": "no GH_TOKEN"}
     env = os.environ.copy()
     env["GH_TOKEN"] = token
     r = subprocess.run(
@@ -202,6 +171,7 @@ def run_dry_protocol_check() -> dict:
 
 def run_auto_loop_once() -> dict:
     import subprocess
+
     script = ROOT / "experiments" / "exp02_auto_loop" / "cp_driven_loop.py"
     r = subprocess.run(
         [sys.executable, str(script), "--once"],
@@ -230,12 +200,22 @@ def main() -> int:
     ap.add_argument("--max-jobs", type=int, default=1)
     args = ap.parse_args()
 
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
+
+    if is_stopped():
+        print(
+            json.dumps(
+                {
+                    "status": "emergency_stop",
+                    "run_id": run_id,
+                    "reason": reason() or "EMERGENCY_STOP file present",
+                    **stop_status(),
+                }
+            )
+        )
+        return 3
+
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    run_id = (
-        datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        + "-"
-        + uuid.uuid4().hex[:6]
-    )
     lock = OSFileLock(LOCK_PATH)
     if not lock.acquire():
         print(
@@ -249,7 +229,6 @@ def main() -> int:
                 }
             )
         )
-        # Exit 2 = skipped (not executed). 0 = ok, 1 = failed job.
         return 2
 
     report = {
@@ -269,6 +248,14 @@ def main() -> int:
     try:
         if args.simulate_hang > 0:
             time.sleep(args.simulate_hang)
+
+        if is_stopped():
+            report["status"] = "emergency_stop"
+            report["verify"] = {"all_jobs_ok": False, "emergency_stop": True}
+            out = OUT_DIR / f"runner-{run_id}.json"
+            out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+            print(json.dumps({"status": "emergency_stop", "run_id": run_id, **stop_status()}, indent=2))
+            return 3
 
         if args.job == "auto":
             jobs = ["dry_protocol_check"][: max(1, args.max_jobs)]

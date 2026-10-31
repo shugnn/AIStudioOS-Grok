@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Local soak runner (Windows-friendly).
 
-Respects docs/progress/EMERGENCY_STOP between cycles (same kill switch as L1).
-metrics.json written in finally + periodic checkpoint.
+Respects EMERGENCY_STOP; metrics in finally + checkpoint.
+--max-wall-seconds: stop when monotonic wall exceeds limit (honest 24h bound).
 """
 from __future__ import annotations
 
@@ -230,6 +230,8 @@ def write_metrics(
     summary_path: Path,
     final: bool,
     error: str | None = None,
+    wall_elapsed_s: float | None = None,
+    max_wall_seconds: int | None = None,
 ) -> dict[str, Any]:
     metrics: dict[str, Any] = {
         "utc_end": utc(),
@@ -245,9 +247,12 @@ def write_metrics(
         "tasks_done_unique_est": tasks_done_unique_est,
         "stopped_early": stopped_early,
         "final": final,
+        "wall_elapsed_s": wall_elapsed_s,
+        "max_wall_seconds": max_wall_seconds,
         "note": (
             "cycles_exit0 is process success only; "
             "business progress is cycles_with_work / tasks_done_unique_est. "
+            "Wall clock is wall_elapsed_s (monotonic), not cycle_count*interval. "
             "Do not claim business soak PASS from exit0 alone."
         ),
         "evidence_binding": "medium_plus",
@@ -276,6 +281,12 @@ def main() -> int:
     ap.add_argument("--idle-stop-after", type=int, default=3)
     ap.add_argument("--reseed-batch", type=int, default=30)
     ap.add_argument("--metrics-every", type=int, default=10)
+    ap.add_argument(
+        "--max-wall-seconds",
+        type=int,
+        default=0,
+        help="hard stop after this many monotonic seconds (0=disabled). e.g. 86400 for 24h",
+    )
     args = ap.parse_args()
 
     seed_n = args.seed if args.seed is not None else max(args.cycles, 30)
@@ -284,6 +295,7 @@ def main() -> int:
     metrics_path = OUT / "metrics.json"
     sha_short = git_sha(short=True)
     sha_full = git_sha(short=False)
+    t0 = time.monotonic()
 
     def log(msg: str) -> None:
         line = msg if msg.endswith("\n") else msg + "\n"
@@ -300,6 +312,9 @@ def main() -> int:
     stopped_early: str | None = None
     ran = 0
     fatal_error: str | None = None
+
+    def wall() -> float:
+        return time.monotonic() - t0
 
     def dump(final: bool) -> dict[str, Any]:
         return write_metrics(
@@ -319,13 +334,16 @@ def main() -> int:
             summary_path=summary_path,
             final=final,
             error=fatal_error,
+            wall_elapsed_s=round(wall(), 3),
+            max_wall_seconds=args.max_wall_seconds or None,
         )
 
     try:
         log(
             f"=== soak start {utc()} sha={sha_short} sha_full={sha_full} "
             f"cycles={args.cycles} interval={args.interval} via_l1={args.via_l1} "
-            f"seed={seed_n} idle_policy={args.idle_policy} ==="
+            f"seed={seed_n} idle_policy={args.idle_policy} "
+            f"max_wall_seconds={args.max_wall_seconds} ==="
         )
 
         if is_stopped():
@@ -364,6 +382,11 @@ def main() -> int:
         runner = run_once_l1 if args.via_l1 else run_once_direct
 
         for i in range(1, args.cycles + 1):
+            if args.max_wall_seconds > 0 and wall() >= args.max_wall_seconds:
+                stopped_early = "max_wall_seconds"
+                log(f"max_wall_seconds reached before cycle={i} wall={wall():.1f}s")
+                break
+
             if is_stopped():
                 stopped_early = "emergency_stop"
                 fatal_error = stop_reason() or "EMERGENCY_STOP present"
@@ -377,7 +400,6 @@ def main() -> int:
             if rc == 0:
                 cycles_exit0 += 1
             elif rc == 3:
-                # L1 already saw stop
                 stopped_early = "emergency_stop_l1"
                 fatal_error = "l1_exit_3"
                 log(f"{ts} cycle={i} L1 emergency_stop")
@@ -430,11 +452,12 @@ def main() -> int:
                 "cp_parsed": info["cp_parsed"],
                 "artifact": info.get("artifact"),
                 "sha_full": sha_full,
+                "wall_s": round(wall(), 3),
             }
             log(
                 f"{ts} cycle={i} exit={rc} with_work={info['with_work']} "
                 f"idle={info['idle']} steps={info['steps_this_wake']} "
-                f"cp_parsed={info['cp_parsed']}"
+                f"cp_parsed={info['cp_parsed']} wall_s={row['wall_s']}"
             )
             tail = out.strip()[-400:] if out else ""
             if tail:
@@ -462,7 +485,16 @@ def main() -> int:
                         break
 
             if i < args.cycles and stopped_early is None:
-                time.sleep(args.interval)
+                # sleep only remaining wall budget if limited
+                sleep_for = args.interval
+                if args.max_wall_seconds > 0:
+                    remain = args.max_wall_seconds - wall()
+                    if remain <= 0:
+                        stopped_early = "max_wall_seconds"
+                        log(f"max_wall_seconds during interval before next cycle wall={wall():.1f}s")
+                        break
+                    sleep_for = min(sleep_for, remain)
+                time.sleep(sleep_for)
 
         if stopped_early and str(stopped_early).startswith("emergency"):
             return 3
@@ -485,7 +517,7 @@ def main() -> int:
                 f"=== soak end {utc()} exit0={cycles_exit0}/{ran} "
                 f"with_work={cycles_with_work} idle={cycles_idle} "
                 f"tasks_est={tasks_done_unique_est} stopped_early={stopped_early} "
-                f"final_metrics=1 ==="
+                f"wall_s={wall():.1f} final_metrics=1 ==="
             )
             print(json.dumps(metrics, indent=2))
             print(f"Log: {log_path}")

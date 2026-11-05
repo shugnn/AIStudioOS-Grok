@@ -30,13 +30,19 @@ def utc() -> str:
 
 def signal_mtime(runner_glob: bool, summary: Path) -> tuple[float, str]:
     if runner_glob:
-        runners = sorted(PROGRESS.glob("runner-*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        runners = sorted(
+            PROGRESS.glob("runner-*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
         if not runners:
             return 0.0, "no_runner"
         return runners[0].stat().st_mtime, str(runners[0])
     if not summary.is_file():
         return 0.0, "no_summary"
     return summary.stat().st_mtime, str(summary)
+
+
+def emit(obj: dict) -> None:
+    print(json.dumps(obj, ensure_ascii=False), flush=True)
 
 
 def main() -> int:
@@ -53,15 +59,15 @@ def main() -> int:
     PROGRESS.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
     last_level = "green"
-    print(json.dumps({"event": "monitor_start", "utc": utc(), "runner_glob": args.runner_glob}, flush=True))
+    emit({"event": "monitor_start", "utc": utc(), "runner_glob": args.runner_glob})
 
     while True:
         if args.max_runtime > 0 and (time.monotonic() - t0) >= args.max_runtime:
-            print(json.dumps({"event": "max_runtime", "utc": utc()}, flush=True))
+            emit({"event": "max_runtime", "utc": utc()})
             return 0
 
         if PAUSE.is_file():
-            print(json.dumps({"event": "paused", "utc": utc()}, flush=True))
+            emit({"event": "paused", "utc": utc()})
             time.sleep(args.interval)
             continue
 
@@ -88,12 +94,13 @@ def main() -> int:
                 row["coverage_gap"] = True
                 with open(GAP_LOG, "a", encoding="utf-8") as f:
                     f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            print(json.dumps({"event": "level", **row}, flush=True))
+            emit({"event": "level", **row})
             last_level = level
 
         if level == "red" and not args.never_red:
-            ALERT.write_text(json.dumps({"supervision_failure": True, **row}, indent=2), encoding="utf-8")
-            print(json.dumps({"event": "red_exit", "utc": utc()}, flush=True))
+            payload = {"supervision_failure": True, **row}
+            ALERT.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            emit({"event": "red_exit", "utc": utc()})
             return 2
 
         time.sleep(args.interval)

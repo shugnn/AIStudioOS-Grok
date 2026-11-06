@@ -2,21 +2,25 @@
 
 ## Closed
 
-| ID | Result |
-|----|--------|
-| D1 Windows 24h | **PASS** wall 86400 |
-| Ubuntu U1–U3,U5,U6 | approved; used |
-| R3 injection | **PASS** |
-| Ubuntu-24H | **PASS** wall 86400.001 @ aaf8d24 |
-| L2-4 | **INCOMPLETE** |
+| ID | 中文 | Result |
+|----|------|--------|
+| D1 | Windows 约24小时墙钟浸泡 | **PASS** |
+| Ubuntu-24H | Ubuntu 约24小时墙钟浸泡 | **PASS** |
+| R3 | 监督掉线注入（30秒黄 / 6分钟红） | **PASS** |
+| L2-4 | Windows 计划任务一日值守 | **INCOMPLETE** |
+| L2-2 | 约72小时加长浸泡 | **取消**（与24h同类重叠，创始人 2026-11-07 否决） |
+
+## Active next（非重叠）
+
+| 中文 | 脚本 | 目的 |
+|------|------|------|
+| 中途强杀再拉起 | `scripts/run_recovery_drill.py` | 恢复能力，不是比谁跑得久 |
+| 急停文件演练 | `scripts/run_emergency_stop_drill.py` | 急停开/关是否按设计生效 |
 
 ## Open
 
-| ID | Default if silent |
-|----|-------------------|
-| D2 J-Exp-01 | Design only |
-| D3 tag `p0-isolated-v1` | No tag |
-| L2-2 72h soak | Not started |
-| L2-3 kill recovery | Not done |
-| L2-5/6 boot/power | Denied |
-| HF Interactive console duty | Only after host stable + explicit APPROVE |
+| 中文 | 默认 |
+|------|------|
+| 跨轨小实验 J-Exp-01 | 仅设计 |
+| 打版本标签 | 不自动打 |
+| 开机任务 / 改电源 | 默认拒绝 |

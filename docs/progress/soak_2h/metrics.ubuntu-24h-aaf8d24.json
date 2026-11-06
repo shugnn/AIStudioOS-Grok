@@ -1,0 +1,26 @@
+{
+  "utc_end": "2026-11-06T11:43:05Z",
+  "sha_short": "aaf8d24",
+  "sha_full": "aaf8d24dcec4fabca423810a3a1af957095a23ad",
+  "via_l1": true,
+  "idle_policy": "reseed",
+  "cycles_planned": 2000,
+  "cycles_ran": 1233,
+  "cycles_exit0": 1233,
+  "cycles_with_work": 1185,
+  "cycles_idle": 48,
+  "tasks_done_unique_est": 1185,
+  "stopped_early": "max_wall_seconds",
+  "final": true,
+  "wall_elapsed_s": 86400.001,
+  "max_wall_seconds": 86400,
+  "note": "cycles_exit0 is process success only; business progress is cycles_with_work / tasks_done_unique_est. Wall clock is wall_elapsed_s (monotonic), not cycle_count*interval. Do not claim business soak PASS from exit0 alone.",
+  "evidence_binding": "medium_plus",
+  "host": "Laisg-Ubuntu",
+  "experiment": "UBUNTU-24H",
+  "paths": {
+    "log": "/home/shugnn/work/AIStudioOS-Grok/docs/progress/soak_2h/soak.log",
+    "summary_jsonl": "/home/shugnn/work/AIStudioOS-Grok/docs/progress/soak_2h/summary.jsonl",
+    "metrics_json": "/home/shugnn/work/AIStudioOS-Grok/docs/progress/soak_2h/metrics.json"
+  }
+}

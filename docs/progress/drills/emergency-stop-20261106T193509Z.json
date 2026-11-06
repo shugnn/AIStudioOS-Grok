@@ -1,0 +1,24 @@
+{
+  "test": "emergency_stop_drill",
+  "t0_utc": "2026-11-06T19:35:09Z",
+  "steps": [
+    {
+      "phase": "baseline_dry",
+      "rc": 0,
+      "ok": true
+    },
+    {
+      "phase": "armed_expect_exit_3",
+      "rc": 3,
+      "ok": true,
+      "stdout_tail": "{\"status\": \"emergency_stop\", \"run_id\": \"20261106193509-e509c1\", \"reason\": \"drill\", \"emergency_stop\": true, \"path\": \"/home/shugnn/work/AIStudioOS-Grok/docs/progress/EMERGENCY_STOP\"}\n"
+    },
+    {
+      "phase": "cleared",
+      "rc": 0,
+      "ok": true
+    }
+  ],
+  "finished_utc": "2026-11-06T19:35:09Z",
+  "verdict": "PASS"
+}

@@ -1,0 +1,17 @@
+# Role backends — pluggable. No vendor locked as the product itself.
+# Values: null | script | llm
+# llm adapters live under control_plane/providers/ (stubs OK)
+
+manager: script
+worker: script
+verifier: script
+
+# Future:
+# manager: llm
+# worker: llm
+# llm_provider: openai_compatible   # or xai | local | anthropic | ...
+# llm_endpoint: ""
+# llm_model: ""
+
+network_default: deny
+# founder may allow free-source ingest in experiment config, not global open

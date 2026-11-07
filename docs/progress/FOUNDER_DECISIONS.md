@@ -1,26 +1,22 @@
 # Founder decisions
 
-## Closed
+## 2026-11-07 角色变更
 
-| ID | 中文 | Result |
-|----|------|--------|
-| D1 | Windows 约24小时墙钟浸泡 | **PASS** |
-| Ubuntu-24H | Ubuntu 约24小时墙钟浸泡 | **PASS** |
-| R3 | 监督掉线注入（30秒黄 / 6分钟红） | **PASS** |
-| L2-4 | Windows 计划任务一日值守 | **INCOMPLETE** |
-| L2-2 | 约72小时加长浸泡 | **取消**（与24h同类重叠，创始人 2026-11-07 否决） |
+- 观察/评审/产品级验收 → **观察轨（DS）**  
+- **停止** Grok↔ChatGPT 交叉评审与互贴审查评论  
+- 里程碑材料：各轨 P0 Issue 自报；DS 出 ACCEPTED/CONDITIONAL/REJECTED/UNVERIFIED  
+- 诚实位置：L1 完成；L2（拆活+Worker 实现）未开始  
+- 详见 `FOUNDER_ROLE_CHANGE_2026-11-07.md`  
 
-## Active next（非重叠）
+## 产品定位（同日）
 
-| 中文 | 脚本 | 目的 |
-|------|------|------|
-| 中途强杀再拉起 | `scripts/run_recovery_drill.py` | 恢复能力，不是比谁跑得久 |
-| 急停文件演练 | `scripts/run_emergency_stop_drill.py` | 急停开/关是否按设计生效 |
+见 `PRODUCT_CONSTITUTION.md`、`PRODUCT_POSITIONING_DECISION_2026-11-07.md`  
 
-## Open
+## 工程已关闭项（摘）
 
-| 中文 | 默认 |
-|------|------|
-| 跨轨小实验 J-Exp-01 | 仅设计 |
-| 打版本标签 | 不自动打 |
-| 开机任务 / 改电源 | 默认拒绝 |
+| 项 | 结果 |
+|----|------|
+| Windows/Ubuntu 约24h墙钟观察 | 有证据；产品级以 DS 为准 |
+| R3 监督注入 / 急停 / 强杀恢复 | 有本机证据 |
+| 手写 Exp-05 live | scaffold，不计 L2 |
+| 交叉评审职责 | **已撤销** |

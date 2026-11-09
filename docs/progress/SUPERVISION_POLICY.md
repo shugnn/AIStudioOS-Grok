@@ -12,7 +12,7 @@
 | Watch period | Check every **60–180 s** in a dedicated monitor process *or* document schtasks interval |
 | **Yellow** | Signal gap **13 s – 5 min**: log `coverage_gap`, **do not** FAIL the business run |
 | **Red** | Signal gap **> 5 min**: stop DUT if still owned by this monitor, seal metrics, attribute **supervision failure** (unless pre-declared tighter policy with proof) |
-| On yellow | Continue; append gap record with UTC + monotonic delta |
+| On yellow | Continue; append one `scripts/coverage_gap_log.py` record (`timestamp`, `gap_seconds`, `band=yellow`, `source`, monotonic `mono_seconds`). Yellow is not a business FAIL |
 | On red | Stop + seal; report under R7 as supervision failure |
 | Who decides business vs supervision | **Business:** task ACCEPTED/exit metrics, with_work counts. **Supervision:** missing/late progress signals, monitor crash, wrong watch target. **Host:** reboot, OOM, shell crash, power |
 
@@ -70,12 +70,14 @@ Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster)
 | `scripts/stall_watchdog.py` | Progress age check; `--runner-glob` for L1 |
 | `scripts/soak_2h.py` | DUT metrics; `max_wall_seconds`; finally metrics |
 | `scripts/l2_2_score.py` | Offline 72h bundle scorer. Does not start a clock and does not register Interactive tasks |
+| `scripts/coverage_gap_log.py` | Append-only gap line: `timestamp`, `gap_seconds`, `band` (`ok` / `yellow` / `red`), `source`. Does not complete a soak |
+| `scripts/supervision_monitor.py` | Calls the logger. `--live-dut` is required before the source is `soak_summary_live` or `runner_glob_live` |
+| `docs/progress/l2_2/R2_CHECKLIST.md` | Blank R2 note. Points at the logger. Does not start the clock |
 | `docs/progress/EMERGENCY_STOP` | Human red stop |
-| Yellow gap logger | **TODO** thin `coverage_gap` append helper before next long run |
 
 ## L2-2 scaffold
 
-`docs/progress/l2_2/` defines the 72h duty as monotonic wall 259200s on the existing soak path. The clock is **NOT STARTED**. A missing R3 receipt stays supervision-unverified. Interactive console scheduled tasks stay out of scope (founder major gate, not requested here). The yellow-gap logger above is still **TODO** and is required before a real long run, not instead of it.
+`docs/progress/l2_2/` defines the 72h duty as monotonic wall 259200s on the existing soak path. The clock is **NOT STARTED**. A missing R3 receipt stays supervision-unverified. Interactive console scheduled tasks stay out of scope (founder major gate, not requested here). The gap logger is `scripts/coverage_gap_log.py`. A gap line has `clock_effect: none` and does not replace the start decision in `docs/progress/l2_2/R2_CHECKLIST.md`.
 
 ## D1 historical note
 

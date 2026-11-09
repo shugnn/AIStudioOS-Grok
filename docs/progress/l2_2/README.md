@@ -32,6 +32,8 @@ The committed Ubuntu-24H file `docs/progress/soak_2h/metrics.json` is wall **864
 | `tests/fixtures/l2_2/` | Synthetic captures dated **2026-02-01**. Not host evidence. Not the November incident |
 | `tests/test_l2_2_score.py` | Short wall, exit0-only, full wall still refused, Interactive registration refused, forged PASS rejected |
 | `docs/progress/l2_2/scaffold/report.json` | Score of the not-started fixture. Label `scaffold` |
+| `scripts/coverage_gap_log.py` | Append-only yellow/red/ok gap line. Does not start the clock |
+| `docs/progress/l2_2/R2_CHECKLIST.md` | Blank R2 note that points at the logger |
 
 Reproduce:
 
@@ -55,7 +57,7 @@ The clock stays **NOT STARTED** until a founder or worker explicitly decides to 
 
 1. Leave L2-4 on PR #11. Do not re-capture 2026-11-03..06 in order to start L2-2.
 2. Do not register Interactive console tasks.
-3. Write the R2 note before any process starts: watch target, yellow 13s–5min, red >5min. The yellow-gap logger in `SUPERVISION_POLICY.md` is still **TODO**.
+3. Fill `docs/progress/l2_2/R2_CHECKLIST.md` before any process starts. The logger is `scripts/coverage_gap_log.py` (`band`: ok below 13s, yellow 13s–5min, red above 5min). Use `--live-dut` only for the live watch file. The checklist is not a start decision, and a gap line does not complete the soak.
 4. Only after that explicit start decision, on a host already allowed to run the local soak (the same free `soak_2h.py` path used for the 24h wall, not a new scheduled task):
 
 ```bash

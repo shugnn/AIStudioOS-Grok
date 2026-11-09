@@ -1,0 +1,41 @@
+# R2 checklist — fill before any future L2-2 start
+
+This file is the note an operator copies **before** a soak start. The copy in git is unfilled.
+
+L2-2 clock: **NOT STARTED**. Production 7×24: **NOT ACCEPTED**. `can_start_clock`, `can_accept_l2_2`, and `can_close_l2_2` stay false. Writing or committing this checklist does not start `--max-wall-seconds 259200`.
+
+Interactive console scheduled tasks stay a founder major gate. Do not register them.
+
+## Declare
+
+| Item | This template | Operator fills before a real start |
+|------|----------------|-------------------------------------|
+| Start decision | **Not given** | Who decided, and the UTC time. Until that line exists, do not launch soak |
+| DUT | none running for L2-2 | `scripts/soak_2h.py --via-l1` only after the decision |
+| Watch file | do not use the committed ended `summary.jsonl` as if it were live | The summary file created by **this** process, or `runner-*.json` only when the DUT is L1 and no soak is running |
+| Logger | `scripts/coverage_gap_log.py` | Same helper. One JSON object per line |
+| Log path | none committed | Operator path. The monitor writes `docs/progress/coverage_gaps.jsonl` only while that process is actually running |
+| Source | `soak_summary_path` unless `--live-dut` is set on the live file | `soak_summary_live` or `runner_glob_live` only with `--live-dut`. That flag is a claim, not proof |
+| Yellow | 13s through 300s inclusive | Append a record. `coverage_gap` true. **Not** a business FAIL |
+| Red | `gap_seconds` > 300, or the signal file is missing | Append a record. Supervision failure. Stop and seal if this monitor owns the DUT |
+| Ok | `gap_seconds` < 13 | Appended only when a yellow or red gap recovers. Not soak completeness |
+| Record | `timestamp`, `gap_seconds`, `band`, `source` | Also `mono_seconds` while the monitor is running, `implies_soak_complete: false`, `clock_effect: none` |
+
+## Sample (not a host gap)
+
+```bash
+PYTHONPATH=. python scripts/coverage_gap_log.py \
+  --gap-seconds 30 --source operator_sample \
+  --timestamp 2026-02-01T00:00:30Z --out /tmp/coverage-gap-sample.jsonl
+```
+
+`operator_sample` is a scratch classification. It is not the Ubuntu-24H summary and not a 72h run.
+
+## Still required before `--max-wall-seconds 259200`
+
+1. An explicit start decision. This checklist is not that decision.
+2. The watch file must be the live DUT. Do not point the logger at an ended experiment.
+3. Pass `--live-dut` to `scripts/supervision_monitor.py` only for that live file.
+4. Do not register Interactive console tasks.
+5. After a real run, score with `scripts/l2_2_score.py` and expect **INCOMPLETE**.
+6. An R3 receipt is still required before any supervision-verified tag. The observation track accepts or rejects.

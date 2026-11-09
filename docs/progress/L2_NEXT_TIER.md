@@ -24,6 +24,7 @@ This table is the **duty-cycle** L2. It is not the 2026-11-07 product L2 (task s
 - 72h means monotonic `wall_elapsed_s` ≥ **259200** with `max_wall_seconds` 259200, driven by existing `scripts/soak_2h.py --via-l1`. `cycles × interval` is not the wall. `cycles_exit0` is not business progress.
 - Scaffold fixtures: `tests/fixtures/l2_2/` (synthetic **2026-02-01**). Not the 2026-11-03..06 incident and not Ubuntu-24H.
 - The scorer does not register scheduled tasks and does not start a clock.
+- `scripts/coverage_gap_log.py` appends ok/yellow/red gap lines. `docs/progress/l2_2/R2_CHECKLIST.md` is the blank R2 note. Neither one starts the 72h clock.
 
 **Still required before any real clock**
 

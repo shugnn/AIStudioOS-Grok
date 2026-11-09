@@ -22,9 +22,12 @@
     "forbidden": ["ended_experiment", "stale_summary"]
   },
   "coverage_gap": {
+    "logger": "scripts/coverage_gap_log.py",
+    "ok_seconds": "< 13",
     "yellow_seconds": "13 inclusive through 300 inclusive",
     "red_seconds": "> 300",
-    "yellow_is_business_fail": false
+    "yellow_is_business_fail": false,
+    "implies_soak_complete": false
   },
   "l2_4_crosslink": {
     "status": "INCOMPLETE",

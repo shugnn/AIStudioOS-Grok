@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import coverage_gap_log as gaplog
+
 SCHEMA_CAPTURE = "aistudioos-grok.l2-2.capture.v1"
 SCHEMA_REPORT = "aistudioos-grok.l2-2.report.v1"
 WALL_REQUIRED_SECONDS = 259200  # 72 * 3600, monotonic
@@ -51,8 +53,8 @@ HOST_STOPS = {
     "emergency_stop_l1",
     "emergency_stop_before_start",
 }
-YELLOW_MIN_SECONDS = 13
-RED_MIN_SECONDS = 300  # gap > 5 min is red; 300s exactly stays yellow
+YELLOW_MIN_SECONDS = gaplog.YELLOW_MIN_SECONDS
+RED_MIN_SECONDS = gaplog.RED_MIN_SECONDS  # gap > 5 min is red; 300s exactly stays yellow
 
 PERMANENT_BLOCKERS = (
     "tool_does_not_accept_l2_2",
@@ -66,7 +68,7 @@ NEXT_STEPS = (
     "Leave the 2026-11-03..06 L2-4 reconstruction on PR #11. Do not re-capture that window to start L2-2.",
     "Do not register, create, or enable Interactive console scheduled tasks. That is a founder major gate and is not approved by this scaffold.",
     "Keep the 72h clock NOT STARTED until a founder or worker explicitly decides to start the existing non-Interactive local soak.",
-    "Before that start, write the R2 note: watch the live soak summary.jsonl while soak_2h.py is the DUT (runner-*.json only when the DUT is L1 with no soak); yellow gap 13s-5min logs coverage_gap and is not a business FAIL; red gap >5min stops and seals as supervision failure.",
+    "Before that start, fill docs/progress/l2_2/R2_CHECKLIST.md. Watch the live soak summary.jsonl while soak_2h.py is the DUT (runner-*.json only when the DUT is L1 with no soak). scripts/coverage_gap_log.py appends timestamp, gap_seconds, band (ok below 13s, yellow 13s through 5min, red above 5min), and source. Yellow is not a business FAIL. A gap line does not start the clock or complete the soak.",
     "Only after that explicit start decision, on a host already allowed to run the local soak: PYTHONPATH=. python scripts/soak_2h.py --cycles 5000 --interval 60 --via-l1 --seed 300 --idle-policy reseed --max-wall-seconds 259200",
     "Cycles must be large enough that max-wall stops the process. cycles x interval is not the wall. cycles_exit0 is not business progress. A 86400s wall is not this 72h gate.",
     "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
@@ -287,9 +289,7 @@ def _validate_supervision(supervision: dict[str, Any], *, started: bool) -> None
     for index, gap in enumerate(gaps):
         if not isinstance(gap, dict):
             raise CaptureError(f"coverage_gaps[{index}] must be an object")
-        if not _is_number(gap.get("seconds")) or gap["seconds"] < 0:
-            raise CaptureError(f"coverage_gaps[{index}].seconds must be a non-negative number")
-        parse_utc(gap.get("utc"), field=f"coverage_gaps[{index}].utc")
+        _normalized_gap(gap, index)
 
 
 def _validate_runner(runner: dict[str, Any]) -> None:
@@ -320,7 +320,8 @@ def _reject_scaffold_incident_dates(doc: dict[str, Any]) -> None:
     for index, row in enumerate(doc["summary_rows"]):
         stamps.append((f"summary_rows[{index}].utc", parse_utc(row["utc"], field="summary")))
     for index, gap in enumerate(doc["supervision"]["coverage_gaps"]):
-        stamps.append((f"coverage_gaps[{index}].utc", parse_utc(gap["utc"], field="gap")))
+        _seconds, stamp = _normalized_gap(gap, index)
+        stamps.append((f"coverage_gaps[{index}]", stamp))
     for field, stamp in stamps:
         if _in_incident_window(stamp):
             raise CaptureError(
@@ -348,11 +349,46 @@ def _forged_claim(doc: dict[str, Any]) -> bool:
 
 
 def _classify_gap(seconds: float) -> str:
-    if seconds > RED_MIN_SECONDS:
-        return "red"
-    if seconds >= YELLOW_MIN_SECONDS:
-        return "yellow"
-    return "below_yellow"
+    return gaplog.classify_band(seconds, yellow_min=YELLOW_MIN_SECONDS, red_min=RED_MIN_SECONDS)
+
+
+def _normalized_gap(gap: dict[str, Any], index: int) -> tuple[float, datetime]:
+    """Accept logger fields (gap_seconds, timestamp, band) or seconds/utc."""
+    has_seconds = "seconds" in gap and gap["seconds"] is not None
+    has_gap = "gap_seconds" in gap and gap["gap_seconds"] is not None
+    if has_seconds and not _is_number(gap["seconds"]):
+        raise CaptureError(f"coverage_gaps[{index}].seconds must be a number")
+    if has_gap and not _is_number(gap["gap_seconds"]):
+        raise CaptureError(f"coverage_gaps[{index}].gap_seconds must be a number")
+    if has_seconds and has_gap and float(gap["seconds"]) != float(gap["gap_seconds"]):
+        raise CaptureError(f"coverage_gaps[{index}] seconds and gap_seconds disagree")
+    if not has_seconds and not has_gap:
+        raise CaptureError(f"coverage_gaps[{index}] needs seconds or gap_seconds")
+    seconds = float(gap["seconds"] if has_seconds else gap["gap_seconds"])
+    if seconds < 0:
+        raise CaptureError(f"coverage_gaps[{index}] gap must be >= 0")
+    has_utc = "utc" in gap and gap["utc"] is not None
+    has_timestamp = "timestamp" in gap and gap["timestamp"] is not None
+    if not has_utc and not has_timestamp:
+        raise CaptureError(f"coverage_gaps[{index}] needs utc or timestamp")
+    stamp = parse_utc(
+        gap["utc"] if has_utc else gap["timestamp"],
+        field=f"coverage_gaps[{index}].timestamp",
+    )
+    if has_utc and has_timestamp:
+        other = parse_utc(gap["timestamp"], field=f"coverage_gaps[{index}].timestamp")
+        if other != stamp:
+            raise CaptureError(f"coverage_gaps[{index}] utc and timestamp disagree")
+    band = gap.get("band")
+    if band is not None:
+        if band not in gaplog.BANDS:
+            raise CaptureError(f"coverage_gaps[{index}].band must be ok, yellow, or red")
+        expected = _classify_gap(seconds)
+        if band != expected:
+            raise CaptureError(
+                f"coverage_gaps[{index}].band {band} does not match the gap ({expected})"
+            )
+    return seconds, stamp
 
 
 def _reconcile(metrics: dict[str, Any] | None, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -415,16 +451,17 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     gaps = []
     red_gaps = 0
     yellow_gaps = 0
-    for gap in supervision["coverage_gaps"]:
-        kind = _classify_gap(float(gap["seconds"]))
+    for index, gap in enumerate(supervision["coverage_gaps"]):
+        seconds, stamp = _normalized_gap(gap, index)
+        kind = _classify_gap(seconds)
         if kind == "red":
             red_gaps += 1
         elif kind == "yellow":
             yellow_gaps += 1
         gaps.append(
             {
-                "utc": utc_z(parse_utc(gap["utc"], field="coverage_gaps.utc")),
-                "seconds": gap["seconds"],
+                "utc": utc_z(stamp),
+                "seconds": seconds,
                 "class": kind,
             }
         )

@@ -459,7 +459,7 @@ def test_committed_scaffold_report_matches_the_scorer():
 
 
 def test_gap_boundary_helpers():
-    assert l2._classify_gap(12.9) == "below_yellow"
+    assert l2._classify_gap(12.9) == "ok"
     assert l2._classify_gap(13) == "yellow"
     assert l2._classify_gap(300) == "yellow"
     assert l2._classify_gap(300.1) == "red"

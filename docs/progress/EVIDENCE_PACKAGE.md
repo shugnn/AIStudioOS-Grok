@@ -50,6 +50,8 @@ Clock **NOT STARTED**. Gate **NOT ACCEPTED**. No Interactive scheduled task is r
 | `scaffold/report.json` | Score of the not-started fixture. Not host evidence |
 | `scripts/l2_2_score.py` | Offline scorer. Exit 0 is an honest report, not a PASS |
 | `tests/fixtures/l2_2/` | Synthetic **2026-02-01** captures |
+| `scripts/coverage_gap_log.py` | Runtime gap lines only. A line is not soak completeness |
+| `docs/progress/l2_2/R2_CHECKLIST.md` | Blank pre-start note. Clock stays **NOT STARTED** |
 
 `cycles_exit0` and the Ubuntu-24H wall (86400.001s) do not accept this gate. L2-4 host files, when present, stay on PR #11 and are a different gate.
 

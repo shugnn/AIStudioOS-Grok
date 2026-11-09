@@ -1,0 +1,14 @@
+{
+  "task_id": "DS-T1-20261108",
+  "dispatched_utc": "2026-11-09T12:55:00Z",
+  "inbox": "task_inbox/DS-T1-20261108/",
+  "worker": "control_plane.providers + scripts/worker_run_task.py",
+  "jobs": [
+    {"job_id": "J1", "title": "generate_or_verify_orders_csv", "status": "PENDING"},
+    {"job_id": "J2", "title": "monthly_summary", "status": "PENDING"},
+    {"job_id": "J3", "title": "anomaly_list", "status": "PENDING"},
+    {"job_id": "J4", "title": "evidence_pack_manifest", "status": "PENDING"}
+  ],
+  "network": false,
+  "paid": false
+}

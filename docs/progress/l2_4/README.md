@@ -4,7 +4,7 @@ Duty-cycle gate from `L2_NEXT_TIER.md`. This is **not** the 2026-11-07 product L
 
 Production 7×24: **NOT ACCEPTED**. L2-4: **INCOMPLETE**.
 
-The 2026-11-04 incident is still prose: Interactive `python.exe` on a 10/15 minute logon task had a strong **time** association with Windows Terminal Application Error 1000, the host was force-rebooted, and the tasks were left `Ready` with an empty `NextRunTime`. Causation was not process-tree proven. No host event export from that day is in this repo. Nothing below invents those logs.
+The 2026-11-04 incident narrative (Interactive `python.exe`, a Windows Terminal time association, tasks left Ready with an empty `NextRunTime`) is unchanged. A read-only host export for 2026-11-03T00:00:00Z → 2026-11-06T00:00:00Z is now in `docs/progress/l2_4/host/` from `LAPTOP-Q14O4JJT`. It does not close the gate: WT Application Error 1000 count is 0, and Task Scheduler Operational history was disabled.
 
 ## Done in repo (scaffold-verified)
 
@@ -14,7 +14,8 @@ The 2026-11-04 incident is still prose: Interactive `python.exe` on a 10/15 minu
 | `docs/progress/l2_4/SCHEMA.json` | Capture/report ids, strength rule, reboot event ids |
 | `tests/fixtures/l2_4/` | Synthetic captures dated **2026-01-01**. Not host evidence. |
 | `tests/test_l2_4_correlate.py` | Strength bands, residue, pythonw, history-vs-runner, forged-PASS rejection |
-| `scripts/l2_4_capture_host.ps1` | Read-only Windows collector. **Not executed** in this environment. |
+| `scripts/l2_4_capture_host.ps1` | Read-only Windows collector. PS 5.1 uses `.ToArray()` inside the `[ordered]` capture literal. |
+| `docs/progress/l2_4/host/` | Real `host_capture` from `LAPTOP-Q14O4JJT`. Label on the report: `host_capture_unverified`. Still **INCOMPLETE**. |
 
 Reproduce the scaffold (any OS with Python 3):
 
@@ -28,7 +29,7 @@ Exit 0 means the report is an honest INCOMPLETE document. It does **not** mean L
 
 ## Still founder-gated
 
-Smallest next host action: on the Windows machine, export the real window and score it. Do **not** register or start `AIStudioOS-Grok-L1` / `AIStudioOS-Grok-Watchdog`.
+The 2026-11-03..06 export is in-repo and stays unverified. Smallest next decision: whether to **enable** `Microsoft-Windows-TaskScheduler/Operational` and run the capture script again (read-only). Do **not** register or start `AIStudioOS-Grok-L1` / `AIStudioOS-Grok-Watchdog`. Do not treat 133 runner files as scheduler wakes.
 
 ```powershell
 cd <repo>

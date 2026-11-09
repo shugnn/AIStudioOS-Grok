@@ -15,7 +15,7 @@
 
 - Ubuntu-24H: wall 86400.001 · final true · with_work 1185/1233
 - R3 before long run
-- L2-4 incomplete (console/WT). 2026-11-09 correlator is scaffold-only; host event export still absent
+- L2-4 incomplete (console/WT). 2026-11-09 host capture is unverified: WT 1000 count 0; scheduler operational log disabled
 
 ## ChatGPT (last Grok scan 2026-11-07)
 

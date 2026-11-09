@@ -1,6 +1,7 @@
 """L2-4 correlation helper. Fixtures are synthetic. They are not host reboot logs."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -319,3 +320,71 @@ def test_capture_script_is_read_only_and_names_the_schema():
         "schtasks",
     ):
         assert token not in code
+    # PS 5.1 Set-StrictMode rejects @($genericList) inside an [ordered] literal.
+    for line in (
+        "task_runs       = $taskRuns.ToArray()",
+        "runner_artifacts = $runnerArtifacts.ToArray()",
+        "wt_errors       = $wtErrors.ToArray()",
+        "reboots         = $reboots.ToArray()",
+        "reboot_query_errors = $rebootErrors.ToArray()",
+        "by_faulting_application  = $histogram.ToArray()",
+    ):
+        assert line in text
+    for wrapped in (
+        "@($taskRuns)",
+        "@($runnerArtifacts)",
+        "@($wtErrors)",
+        "@($reboots)",
+        "@($rebootErrors)",
+        "@($histogram)",
+    ):
+        assert wrapped not in text
+
+
+def test_committed_host_capture_stays_incomplete():
+    """LAPTOP-Q14O4JJT export. Bytes of capture/report stay the host files."""
+    host = ROOT / "docs" / "progress" / "l2_4" / "host"
+    capture_bytes = (host / "capture.json").read_bytes()
+    report_bytes = (host / "report.json").read_bytes()
+    assert hashlib.sha256(capture_bytes).hexdigest() == (
+        "31e23fa88d2ee75d312480f4fcd7dabc1357651f549255f8f86de2bad75ee760"
+    )
+    assert hashlib.sha256(report_bytes).hexdigest() == (
+        "b9fd93e25ac94922dd423065883f43a01024b7def9cfcec2585d3729f0e0081d"
+    )
+    capture = json.loads(capture_bytes)
+    report = json.loads(report_bytes)
+    assert capture["host"] == "LAPTOP-Q14O4JJT"
+    assert capture["since_utc"] == "2026-11-03T00:00:00Z"
+    assert capture["until_utc"] == "2026-11-06T00:00:00Z"
+    assert capture["evidence_class"] == "host_capture"
+    assert capture["synthetic"] is False
+    assert capture["collector_mode"] == "read_only"
+    assert capture["wt_errors"] == []
+    assert capture["task_runs"] == []
+    assert capture["task_history"]["available"] is False
+    assert len(capture["reboots"]) == 6
+    assert len(capture["runner_artifacts"]) == 133
+    assert capture["application_error_1000"]["total_in_window"] == 1
+    assert capture["application_error_1000"]["by_faulting_application"] == [
+        {"name": "Explorer.EXE", "count": 1}
+    ]
+    assert report["l2_4_status"] == "INCOMPLETE"
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert report["causation"] == "not_proven"
+    assert report["verified"] is False
+    assert report["label"] == "host_capture_unverified"
+    assert report["correlation"]["basis"] == "runner_artifacts_only"
+    assert report["correlation"]["strength"] == "no_events"
+    assert report["reboot_residue"]["detected"] is False
+    assert report["wake_count"] == 133
+    assert report["wake_bar_20_met"] is True
+    assert report["gates"]["can_close_l2_4"] is False
+    assert report["gates"]["blockers"] == [
+        "tool_does_not_close_gate",
+        "time_correlation_is_not_causation",
+        "founder_reapproval_required_before_new_interactive_duty",
+        "process_tree_unavailable",
+        "scheduler_history_not_in_capture",
+    ]
+    assert l2.validate_report(report) == []

@@ -1,7 +1,7 @@
-# Host capture slot
+# Host capture — LAPTOP-Q14O4JJT
 
-Empty until the founder runs `scripts/l2_4_capture_host.ps1` on the Windows machine.
+Read-only export for 2026-11-03T00:00:00Z → 2026-11-06T00:00:00Z.
 
-Do not copy `tests/fixtures/l2_4/` here. Those files are synthetic and are not the 2026-11-04 reboot or Windows Terminal log.
+`capture.json` and `report.json` are the host files. `SHA256SUMS.json` is regenerated in-repo so paths use this checkout's separators. Report label: `host_capture_unverified`. L2-4: **INCOMPLETE**. Production 7×24: **NOT ACCEPTED**.
 
-When a real capture exists, commit `capture.json`, `report.json`, and `SHA256SUMS.json` from this directory together.
+`Microsoft-Windows-TaskScheduler/Operational` was disabled on this run (`task_runs=0`). Do not enable it from this tree, and do not copy `tests/fixtures/l2_4/` here.

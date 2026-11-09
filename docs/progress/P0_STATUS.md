@@ -35,25 +35,27 @@
 
 | ID | Notes |
 |----|-------|
-| L2-4 | **INCOMPLETE** (WT correlation + reboot). In-repo prep 2026-11-09 is **scaffold-verified** only: `scripts/l2_4_correlate.py`, `SCHEMA.json`, synthetic fixtures, read-only `scripts/l2_4_capture_host.ps1` (not executed). No host WT/reboot export. Not a duty-cycle PASS. See `docs/progress/l2_4/README.md`. |
+| L2-4 | **INCOMPLETE**. Host capture from `LAPTOP-Q14O4JJT` is in `docs/progress/l2_4/host/` (`host_capture_unverified`). Window 2026-11-03 → 2026-11-06. WT Application Error 1000 count **0** (1× Explorer.EXE only). `task_runs=0` because Task Scheduler Operational is disabled. Not a duty-cycle PASS. |
 | L2-2 72h | not started |
 | L2-5/6 | default deny |
 | J-Exp-01 | design only until ACK |
 | summary.jsonl full push | large; host Token/SSH |
 
-## L2-4 prep (2026-11-09)
+## L2-4 host capture (2026-11-09, LAPTOP-Q14O4JJT)
 
-Scaffold only. The 2026-11-04 Windows Terminal / force-reboot narrative is unchanged and is **not** backed by an event-log file in this repo.
+Files: `docs/progress/l2_4/host/capture.json`, `report.json`, `SHA256SUMS.json`. Label **host_capture_unverified**. Gate **INCOMPLETE**. Production 7×24 **NOT ACCEPTED**.
 
-| Piece | Class |
+| Field | Value |
 |-------|--------|
-| Correlator + unit tests | scaffold-verified (synthetic 2026-01-01 fixtures) |
-| Host capture script | written, **not run** (needs the founder Windows host) |
-| Host `capture.json` / reboot log | **absent** |
+| Window | 2026-11-03T00:00:00Z → 2026-11-06T00:00:00Z |
+| Collector | `scripts/l2_4_capture_host.ps1` (`read_only`); host `git_sha` `3402e9b` |
+| WT errors | **0**. Application Error 1000 in window: 1× `Explorer.EXE` only |
+| Reboots | 6 events in file (1074, 6005, 6006, 12). `reboot_residue.detected=false`. Tasks were not registered |
+| Scheduler | `task_runs=0`. Operational log **disabled** (`task_history.available=false`) → `scheduler_history_not_in_capture` |
+| Wakes | `wake_count=133` from `runner-*.json` only. `wake_bar_20_met=true`. `correlation.basis=runner_artifacts_only`, `strength=no_events` |
+| Report gates | `can_close_l2_4=false`, `verified=false`, `causation=not_proven` |
 
-Reproduce: `PYTHONPATH=. python -m pytest tests/test_l2_4_correlate.py -q`
-
-Production 7×24 remains **NOT ACCEPTED**. Product L2 (task split / worker, founder 2026-11-07) remains **not started**. This row is the older duty-cycle gate only.
+Do not enable the Task Scheduler Operational log or re-add Interactive console tasks from this change. Next founder decision is whether to enable that history and re-capture (read-only). Scaffold fixtures under `tests/fixtures/l2_4/` stay synthetic. Product L2 (task split / worker) remains **not started**.
 
 ## Stop
 

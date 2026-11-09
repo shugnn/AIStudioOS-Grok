@@ -42,18 +42,18 @@ OS scheduler: keep `Get-ScheduledTaskInfo` + ≥3 runner JSON timestamps in Issu
 
 ## L2-4 WT correlation + reboot
 
-Gate stays **INCOMPLETE**. Do not file synthetic fixtures as the 2026-11-04 host incident.
+Gate stays **INCOMPLETE**. Synthetic fixtures are not the host incident. The host bundle below is a real read-only export and is still **host_capture_unverified**.
 
 | Path | Role |
 |------|------|
 | `docs/progress/l2_4/SCHEMA.json` | Capture/report ids and the strength rule |
 | `docs/progress/l2_4/README.md` | Founder checklist. Done vs still host-gated |
 | `tests/fixtures/l2_4/scaffold_*.json` | Synthetic. `evidence_class=scaffold`, `synthetic=true` |
-| `docs/progress/l2_4/host/capture.json` | **Absent** until the founder runs the capture script |
-| `docs/progress/l2_4/host/report.json` | Correlator output for that capture. Status remains `INCOMPLETE` |
-| `docs/progress/l2_4/host/SHA256SUMS.json` | `scripts/evidence_sha256sums.py` after a real capture |
+| `docs/progress/l2_4/host/capture.json` | **Present.** `LAPTOP-Q14O4JJT`, 2026-11-03T00:00:00Z → 2026-11-06T00:00:00Z, `read_only` |
+| `docs/progress/l2_4/host/report.json` | Same run. `INCOMPLETE`, `causation=not_proven`, `can_close_l2_4=false` |
+| `docs/progress/l2_4/host/SHA256SUMS.json` | Hashes for that directory |
 
-A host report is medium evidence only after the JSON files and hashes are on the branch. It is not a duty-cycle PASS and not production acceptance. `can_close_l2_4` is always false in this scorer.
+Host facts: WT Application Error 1000 count 0 (1× Explorer.EXE in the 1000 histogram). `task_runs=0` because `Microsoft-Windows-TaskScheduler/Operational` is disabled. `wake_count=133` is runner-file only (`correlation.basis=runner_artifacts_only`). Not a duty-cycle PASS and not production acceptance.
 
 ## Commands
 

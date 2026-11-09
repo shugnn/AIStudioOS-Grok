@@ -1,0 +1,63 @@
+{
+  "schema": "aistudioos-grok.l2-4.capture.v1",
+  "evidence_class": "scaffold",
+  "synthetic": true,
+  "note": "Synthetic shape of a strong time overlap plus Ready/empty NextRunTime plus a reboot event. Dates are 2026-01-01. This is not the 2026-11-04 host log.",
+  "captured_utc": "2026-01-01T03:00:00Z",
+  "host": "scaffold",
+  "git_sha": "scaffold",
+  "window_seconds": 600,
+  "supervision_watch_target": "soak_summary",
+  "process_tree": {
+    "available": false,
+    "links": [],
+    "reason": "not_collected"
+  },
+  "tasks": [
+    {
+      "task_name": "AIStudioOS-Grok-L1",
+      "state": "Ready",
+      "last_run_time": "2026-01-01T00:40:00Z",
+      "next_run_time": null,
+      "last_task_result": 0,
+      "logon_type": "Interactive",
+      "actions": [
+        {
+          "execute": "C:\\Python\\python.exe",
+          "arguments": "scripts\\l1_runner.py --job auto_loop_once"
+        }
+      ]
+    }
+  ],
+  "task_runs": [
+    {"utc": "2026-01-01T00:00:00Z", "task_name": "AIStudioOS-Grok-L1", "event_id": 200},
+    {"utc": "2026-01-01T00:10:00Z", "task_name": "AIStudioOS-Grok-L1", "event_id": 200},
+    {"utc": "2026-01-01T00:20:00Z", "task_name": "AIStudioOS-Grok-L1", "event_id": 200},
+    {"utc": "2026-01-01T00:30:00Z", "task_name": "AIStudioOS-Grok-L1", "event_id": 200},
+    {"utc": "2026-01-01T00:40:00Z", "task_name": "AIStudioOS-Grok-L1", "event_id": 200}
+  ],
+  "runner_artifacts": [
+    {"name": "runner-scaffold-0.json", "utc": "2026-01-01T00:00:00Z"},
+    {"name": "runner-scaffold-1.json", "utc": "2026-01-01T00:10:00Z"},
+    {"name": "runner-scaffold-2.json", "utc": "2026-01-01T00:20:00Z"},
+    {"name": "runner-scaffold-3.json", "utc": "2026-01-01T00:30:00Z"},
+    {"name": "runner-scaffold-4.json", "utc": "2026-01-01T00:40:00Z"}
+  ],
+  "wt_errors": [
+    {"utc": "2026-01-01T00:00:45Z", "event_id": 1000, "provider": "Application Error", "faulting_application": "WindowsTerminal.exe", "record_id": 1},
+    {"utc": "2026-01-01T00:10:45Z", "event_id": 1000, "provider": "Application Error", "faulting_application": "WindowsTerminal.exe", "record_id": 2},
+    {"utc": "2026-01-01T00:20:45Z", "event_id": 1000, "provider": "Application Error", "faulting_application": "WindowsTerminal.exe", "record_id": 3},
+    {"utc": "2026-01-01T00:30:45Z", "event_id": 1000, "provider": "Application Error", "faulting_application": "WindowsTerminal.exe", "record_id": 4},
+    {"utc": "2026-01-01T00:40:45Z", "event_id": 1000, "provider": "Application Error", "faulting_application": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal\\WindowsTerminal.exe", "record_id": 5}
+  ],
+  "reboots": [
+    {"utc": "2026-01-01T02:00:00Z", "event_id": 41, "kind": "kernel_power", "detail": "synthetic"}
+  ],
+  "application_error_1000": {
+    "total_in_window": 5,
+    "truncated": false,
+    "by_faulting_application": [
+      {"name": "WindowsTerminal.exe", "count": 5}
+    ]
+  }
+}

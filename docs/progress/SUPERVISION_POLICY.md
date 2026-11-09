@@ -61,7 +61,7 @@ L2-4 closed as **INCOMPLETE**: supervision misconfiguration (wrong target) + hos
 
 ## R8 — Host health
 
-Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster). **No new high-frequency Interactive console long-run** without explicit founder approve after host status register.
+Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster). **No new high-frequency Interactive console long-run** without explicit founder approve after host status register. Read-only export + offline scoring: `scripts/l2_4_capture_host.ps1` and `scripts/l2_4_correlate.py`. That tooling does not re-open the duty.
 
 ## Mapping to code (current)
 
@@ -70,7 +70,7 @@ Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster)
 | `scripts/stall_watchdog.py` | Progress age check; `--runner-glob` for L1 |
 | `scripts/soak_2h.py` | DUT metrics; `max_wall_seconds`; finally metrics |
 | `docs/progress/EMERGENCY_STOP` | Human red stop |
-| Yellow gap logger | **TODO** thin `coverage_gap` append helper before next long run |
+| Yellow gap logger | `scripts/supervision_monitor.py` appends `docs/progress/coverage_gaps.jsonl` (`coverage_gap: true` on yellow) |
 
 ## D1 historical note
 

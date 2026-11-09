@@ -15,7 +15,7 @@
 
 - Ubuntu-24H: wall 86400.001 · final true · with_work 1185/1233
 - R3 before long run
-- L2-4 incomplete (console/WT)
+- L2-4 incomplete (console/WT). Operational log enabled; 2026-11-03..06 task_runs=0 (no backfill); WT 1000 count 0
 
 ## ChatGPT (last Grok scan 2026-11-07)
 

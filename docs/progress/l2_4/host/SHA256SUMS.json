@@ -1,0 +1,27 @@
+{
+  "utc": "2026-11-09T16:41:58.725773+00:00",
+  "git_head": "90085ac7c0ef878e706aa09b4be0fbb01b168701",
+  "count": 4,
+  "files": [
+    {
+      "path": "docs/progress/l2_4/host/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "docs/progress/l2_4/host/README.md",
+      "sha256": "afe4324c2b179dad3982b930209c5f9225d89cf59ecc1c593ce3aae4ac5fa37d",
+      "bytes": 657
+    },
+    {
+      "path": "docs/progress/l2_4/host/capture.json",
+      "sha256": "e5754bc53b412dd87156943a6f2cb9b29d61d47c63586d11fc2cdfbc387996bc",
+      "bytes": 17571
+    },
+    {
+      "path": "docs/progress/l2_4/host/report.json",
+      "sha256": "2cf000698f72af7b1135da6842f9474628f594dde47adb5141b86e3b9dc277a4",
+      "bytes": 2940
+    }
+  ]
+}

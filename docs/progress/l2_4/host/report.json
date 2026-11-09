@@ -1,0 +1,96 @@
+{
+  "schema": "aistudioos-grok.l2-4.report.v1",
+  "evidence_class": "host_capture",
+  "label": "host_capture_unverified",
+  "verified": false,
+  "l2_4_status": "INCOMPLETE",
+  "production_7x24": "NOT_ACCEPTED",
+  "business_fail": false,
+  "causation": "not_proven",
+  "attribution": [
+    "host"
+  ],
+  "triage": {
+    "business": false,
+    "host": true,
+    "supervision": false
+  },
+  "correlation": {
+    "basis": "task_runs",
+    "strength": "no_events",
+    "wt_vs_task_runs": {
+      "method": "nearest_anchor_abs_delta",
+      "window_seconds": 600.0,
+      "error_count": 0,
+      "anchor_count": 0,
+      "matched_within_window": 0,
+      "match_ratio": null,
+      "median_abs_delta_seconds": null,
+      "strength": "no_events",
+      "pairs": []
+    },
+    "wt_vs_runner_artifacts": {
+      "method": "nearest_anchor_abs_delta",
+      "window_seconds": 600.0,
+      "error_count": 0,
+      "anchor_count": 133,
+      "matched_within_window": 0,
+      "match_ratio": null,
+      "median_abs_delta_seconds": null,
+      "strength": "no_events",
+      "pairs": []
+    },
+    "strength_rule": "strong: >=3 WT errors, match_ratio>=0.7, median abs delta<=window; moderate: match_ratio>=0.4 with >=1 match; weak: any match below that; none: anchors exist but no match; no_events / no_anchor otherwise. Primary basis is scheduler task_runs when present. Strength is temporal only."
+  },
+  "reboot_residue": {
+    "detected": false,
+    "aligned_with_reboot_event": false,
+    "tasks": [],
+    "reboot_event_count": 6
+  },
+  "console_policy": {
+    "pythonw_forbidden": true,
+    "violations": [],
+    "interactive_task_names": [],
+    "console_interpreters": []
+  },
+  "process_tree": {
+    "available": false,
+    "link_count": 0,
+    "status": "unavailable"
+  },
+  "wake_count": 0,
+  "wake_bar_20_met": false,
+  "application_error_1000": {
+    "total_in_window": 1,
+    "truncated": false,
+    "query_available": true,
+    "query_error": null,
+    "by_faulting_application": [
+      {
+        "name": "Explorer.EXE",
+        "count": 1
+      }
+    ]
+  },
+  "gates": {
+    "can_close_l2_4": false,
+    "close_policy": "This tool never closes L2-4. A later founder-approved host run can be reviewed by the observation track. Production 7x24 stays NOT ACCEPTED.",
+    "blockers": [
+      "tool_does_not_close_gate",
+      "time_correlation_is_not_causation",
+      "founder_reapproval_required_before_new_interactive_duty",
+      "process_tree_unavailable",
+      "no_duty_anchors",
+      "fewer_than_20_duty_wakes"
+    ]
+  },
+  "source": {
+    "synthetic": false,
+    "note": "Read-only host capture. Not an L2-4 PASS. Not a production 7x24 claim.",
+    "host": "LAPTOP-Q14O4JJT",
+    "git_sha": "3402e9b16d842d8d4e557c0a9c62557f45403c0b",
+    "captured_utc": "2026-11-09T16:40:46Z",
+    "collector": "scripts/l2_4_capture_host.ps1"
+  }
+}

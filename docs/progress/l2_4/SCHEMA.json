@@ -1,0 +1,33 @@
+{
+  "capture_schema": "aistudioos-grok.l2-4.capture.v1",
+  "report_schema": "aistudioos-grok.l2-4.report.v1",
+  "window_seconds_default": 600,
+  "evidence_class": ["scaffold", "host_capture"],
+  "l2_4_status_emitted": "INCOMPLETE",
+  "production_7x24": "NOT_ACCEPTED",
+  "causation": "not_proven",
+  "verified_emitted": false,
+  "wt_event_id": 1000,
+  "wt_applications": ["WindowsTerminal.exe", "wt.exe"],
+  "reboot_event_ids": [12, 41, 1074, 6005, 6006, 6008],
+  "strength": {
+    "strong": "error_count>=3 AND match_ratio>=0.7 AND median_abs_delta_seconds<=window",
+    "moderate": "matched>=1 AND match_ratio>=0.4 AND not strong",
+    "weak": "matched>=1 AND not moderate or strong",
+    "none": "anchors exist and no WT error falls inside the window",
+    "no_events": "wt_errors is empty",
+    "no_anchor": "WT errors exist and the chosen anchor list is empty"
+  },
+  "primary_basis_order": [
+    "task_runs (Task Scheduler event 200) when that list was actually readable",
+    "tasks[].run_times_utc when history is absent",
+    "runner_artifacts only if no scheduler anchors exist"
+  ],
+  "notes": [
+    "Time overlap is not causation. process_tree links do not flip causation to proven.",
+    "Scaffold fixtures are synthetic. They are not the 2026-11-04 host log.",
+    "Exit 0 from scripts/l2_4_correlate.py means an honest INCOMPLETE report, not a gate PASS.",
+    "pythonw.exe is a console-policy violation. Founder requires a console window.",
+    "Ready + empty next_run_time is reboot/schedule residue, not a successful duty cycle."
+  ]
+}

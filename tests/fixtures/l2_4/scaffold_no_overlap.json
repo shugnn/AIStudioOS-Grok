@@ -1,0 +1,33 @@
+{
+  "schema": "aistudioos-grok.l2-4.capture.v1",
+  "evidence_class": "scaffold",
+  "synthetic": true,
+  "note": "Synthetic. WT errors are hours away from the only scheduler start. Not a host log.",
+  "captured_utc": "2026-01-02T00:00:00Z",
+  "host": "scaffold",
+  "git_sha": "scaffold",
+  "window_seconds": 600,
+  "process_tree": {"available": false, "links": [], "reason": "not_collected"},
+  "tasks": [
+    {
+      "task_name": "AIStudioOS-Grok-L1",
+      "state": "Ready",
+      "last_run_time": "2026-01-01T00:00:00Z",
+      "next_run_time": "2026-01-01T00:10:00Z",
+      "last_task_result": 0,
+      "logon_type": "Interactive",
+      "actions": [
+        {"execute": "C:\\Python\\python.exe", "arguments": "scripts\\l1_runner.py --job auto_loop_once"}
+      ]
+    }
+  ],
+  "task_runs": [
+    {"utc": "2026-01-01T00:00:00Z", "task_name": "AIStudioOS-Grok-L1", "event_id": 200}
+  ],
+  "wt_errors": [
+    {"utc": "2026-01-01T06:00:00Z", "event_id": 1000, "faulting_application": "WindowsTerminal.exe"},
+    {"utc": "2026-01-01T07:00:00Z", "event_id": 1000, "faulting_application": "wt.exe"},
+    {"utc": "2026-01-01T08:00:00Z", "event_id": 1000, "faulting_application": "WindowsTerminal.exe"}
+  ],
+  "reboots": []
+}

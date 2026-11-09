@@ -1,0 +1,23 @@
+{
+  "task_id": "DS-T1-20261108",
+  "generated_at_utc": "2026-11-09T15:54:24Z",
+  "component_version": "ds-t1-worker-1",
+  "input": {
+    "path": "task_inbox/DS-T1-20261108/data/orders.csv",
+    "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe"
+  },
+  "outputs": [
+    {
+      "path": "task_inbox/DS-T1-20261108/deliverables/summary.json",
+      "sha256": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2"
+    },
+    {
+      "path": "task_inbox/DS-T1-20261108/deliverables/anomalies.json",
+      "sha256": "a5d368e0f7c5970f38b5fd2c093e8b6448bf7ff00996521275bd23624a3606c1"
+    },
+    {
+      "path": "task_inbox/DS-T1-20261108/deliverables/report.md",
+      "sha256": "2e337adc347783fa5ad31513065e43c3b011fcee940bc49df430bfaa5b1ebf1f"
+    }
+  ]
+}

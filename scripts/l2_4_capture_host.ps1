@@ -172,7 +172,8 @@ function Get-WinEventsSafe($Filter, [string]$Label) {
         $result.events = $events
     } catch {
         $msg = "$_"
-        if ($msg -match "No events were found") {
+        # EN + zh-CN empty-result messages from Get-WinEvent
+        if ($msg -match "No events were found|找不到任何与指定的选择条件匹配的事件") {
             $result.events = @()
         } else {
             $result.available = $false

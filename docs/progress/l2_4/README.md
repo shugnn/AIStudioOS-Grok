@@ -4,7 +4,7 @@ Duty-cycle gate from `L2_NEXT_TIER.md`. This is **not** the 2026-11-07 product L
 
 Production 7×24: **NOT ACCEPTED**. L2-4: **INCOMPLETE**.
 
-The 2026-11-04 incident narrative (Interactive `python.exe`, a Windows Terminal time association, tasks left Ready with an empty `NextRunTime`) is unchanged. A read-only host export for 2026-11-03T00:00:00Z → 2026-11-06T00:00:00Z is now in `docs/progress/l2_4/host/` from `LAPTOP-Q14O4JJT`. It does not close the gate: WT Application Error 1000 count is 0, and Task Scheduler Operational history was disabled.
+The 2026-11-04 incident narrative (Interactive `python.exe`, a Windows Terminal time association, tasks left Ready with an empty `NextRunTime`) is unchanged. The current host export in `docs/progress/l2_4/host/` is the second read-only capture from `LAPTOP-Q14O4JJT` after `Microsoft-Windows-TaskScheduler/Operational` was enabled. The 2026-11-03..06 window still has zero scheduler starts for the watched task names. WT Application Error 1000 count is 0. L2-4 stays **INCOMPLETE**.
 
 ## Done in repo (scaffold-verified)
 
@@ -29,7 +29,7 @@ Exit 0 means the report is an honest INCOMPLETE document. It does **not** mean L
 
 ## Still founder-gated
 
-The 2026-11-03..06 export is in-repo and stays unverified. Smallest next decision: whether to **enable** `Microsoft-Windows-TaskScheduler/Operational` and run the capture script again (read-only). Do **not** register or start `AIStudioOS-Grok-L1` / `AIStudioOS-Grok-Watchdog`. Do not treat 133 runner files as scheduler wakes.
+The second export is in-repo and stays unverified. History is readable and empty for that window; enabling the log did not backfill it. Next options: a forward-looking soak with history already on (separate founder gate), or accept that 11/04 Windows Terminal / reboot causation cannot be reconstructed from scheduler history. Do **not** register or start `AIStudioOS-Grok-L1` / `AIStudioOS-Grok-Watchdog`. Do not treat runner files as scheduler wakes (`wake_count=0` on `task_runs`).
 
 ```powershell
 cd <repo>

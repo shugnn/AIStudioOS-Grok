@@ -35,7 +35,7 @@
 
 | ID | Notes |
 |----|-------|
-| L2-4 | **INCOMPLETE**. Host capture from `LAPTOP-Q14O4JJT` is in `docs/progress/l2_4/host/` (`host_capture_unverified`). Window 2026-11-03 → 2026-11-06. WT Application Error 1000 count **0** (1× Explorer.EXE only). `task_runs=0` because Task Scheduler Operational is disabled. Not a duty-cycle PASS. |
+| L2-4 | **INCOMPLETE**. Second host capture from `LAPTOP-Q14O4JJT` (`host_capture_unverified`). Operational log is **enabled**; 2026-11-03..06 still has **zero** scheduler starts for the watched task names (`task_runs=0`, history readable, not backfilled). WT Application Error 1000 count **0**. Not a duty-cycle PASS. |
 | L2-2 72h | not started |
 | L2-5/6 | default deny |
 | J-Exp-01 | design only until ACK |
@@ -51,11 +51,11 @@ Files: `docs/progress/l2_4/host/capture.json`, `report.json`, `SHA256SUMS.json`.
 | Collector | `scripts/l2_4_capture_host.ps1` (`read_only`); host `git_sha` `3402e9b` |
 | WT errors | **0**. Application Error 1000 in window: 1× `Explorer.EXE` only |
 | Reboots | 6 events in file (1074, 6005, 6006, 12). `reboot_residue.detected=false`. Tasks were not registered |
-| Scheduler | `task_runs=0`. Operational log **disabled** (`task_history.available=false`) → `scheduler_history_not_in_capture` |
-| Wakes | `wake_count=133` from `runner-*.json` only. `wake_bar_20_met=true`. `correlation.basis=runner_artifacts_only`, `strength=no_events` |
-| Report gates | `can_close_l2_4=false`, `verified=false`, `causation=not_proven` |
+| Scheduler | Operational log **enabled** on the host (`wevtutil sl ... /e:true`; IsEnabled=True, RecordCount=0 at enable time). Re-capture: `task_history.available=true`, `error=null`, `task_runs=0`. Enabling does not backfill the incident window. `scheduler_history_not_in_capture` is gone |
+| Wakes | `correlation.basis=task_runs`, `strength=no_events`, `wake_count=0`, `wake_bar_20_met=false`. 133 runner files remain in the capture and are not scheduler starts |
+| Report gates | `can_close_l2_4=false`, `verified=false`, `causation=not_proven`. Blockers: `tool_does_not_close_gate`, `time_correlation_is_not_causation`, `founder_reapproval_required_before_new_interactive_duty`, `process_tree_unavailable`, `no_duty_anchors`, `fewer_than_20_duty_wakes` |
 
-Do not enable the Task Scheduler Operational log or re-add Interactive console tasks from this change. Next founder decision is whether to enable that history and re-capture (read-only). Scaffold fixtures under `tests/fixtures/l2_4/` stay synthetic. Product L2 (task split / worker) remains **not started**.
+Do not re-add Interactive console tasks. 11/04 Windows Terminal / reboot causation cannot be reconstructed from scheduler history. A later forward-looking soak with history already on is a separate founder gate. Product L2 (task split / worker) remains **not started**.
 
 ## Stop
 

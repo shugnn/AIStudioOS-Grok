@@ -339,18 +339,22 @@ def test_capture_script_is_read_only_and_names_the_schema():
         "@($histogram)",
     ):
         assert wrapped not in text
+    assert "No events were found|找不到任何与指定的选择条件匹配的事件" in text
 
 
 def test_committed_host_capture_stays_incomplete():
-    """LAPTOP-Q14O4JJT export. Bytes of capture/report stay the host files."""
+    """Second LAPTOP-Q14O4JJT export, after Operational history was enabled.
+
+    The log does not backfill. task_runs stays an empty readable list.
+    """
     host = ROOT / "docs" / "progress" / "l2_4" / "host"
     capture_bytes = (host / "capture.json").read_bytes()
     report_bytes = (host / "report.json").read_bytes()
     assert hashlib.sha256(capture_bytes).hexdigest() == (
-        "31e23fa88d2ee75d312480f4fcd7dabc1357651f549255f8f86de2bad75ee760"
+        "e5754bc53b412dd87156943a6f2cb9b29d61d47c63586d11fc2cdfbc387996bc"
     )
     assert hashlib.sha256(report_bytes).hexdigest() == (
-        "b9fd93e25ac94922dd423065883f43a01024b7def9cfcec2585d3729f0e0081d"
+        "2cf000698f72af7b1135da6842f9474628f594dde47adb5141b86e3b9dc277a4"
     )
     capture = json.loads(capture_bytes)
     report = json.loads(report_bytes)
@@ -362,7 +366,9 @@ def test_committed_host_capture_stays_incomplete():
     assert capture["collector_mode"] == "read_only"
     assert capture["wt_errors"] == []
     assert capture["task_runs"] == []
-    assert capture["task_history"]["available"] is False
+    assert capture["task_history"]["available"] is True
+    assert capture["task_history"]["error"] is None
+    assert capture["task_history"]["runs"] == []
     assert len(capture["reboots"]) == 6
     assert len(capture["runner_artifacts"]) == 133
     assert capture["application_error_1000"]["total_in_window"] == 1
@@ -374,17 +380,19 @@ def test_committed_host_capture_stays_incomplete():
     assert report["causation"] == "not_proven"
     assert report["verified"] is False
     assert report["label"] == "host_capture_unverified"
-    assert report["correlation"]["basis"] == "runner_artifacts_only"
+    assert report["correlation"]["basis"] == "task_runs"
     assert report["correlation"]["strength"] == "no_events"
     assert report["reboot_residue"]["detected"] is False
-    assert report["wake_count"] == 133
-    assert report["wake_bar_20_met"] is True
+    assert report["wake_count"] == 0
+    assert report["wake_bar_20_met"] is False
     assert report["gates"]["can_close_l2_4"] is False
+    assert "scheduler_history_not_in_capture" not in report["gates"]["blockers"]
     assert report["gates"]["blockers"] == [
         "tool_does_not_close_gate",
         "time_correlation_is_not_causation",
         "founder_reapproval_required_before_new_interactive_duty",
         "process_tree_unavailable",
-        "scheduler_history_not_in_capture",
+        "no_duty_anchors",
+        "fewer_than_20_duty_wakes",
     ]
     assert l2.validate_report(report) == []

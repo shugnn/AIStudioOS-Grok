@@ -53,7 +53,7 @@ Gate stays **INCOMPLETE**. Synthetic fixtures are not the host incident. The hos
 | `docs/progress/l2_4/host/report.json` | Same run. `INCOMPLETE`, `causation=not_proven`, `can_close_l2_4=false` |
 | `docs/progress/l2_4/host/SHA256SUMS.json` | Hashes for that directory |
 
-Host facts: WT Application Error 1000 count 0 (1× Explorer.EXE in the 1000 histogram). `task_runs=0` because `Microsoft-Windows-TaskScheduler/Operational` is disabled. `wake_count=133` is runner-file only (`correlation.basis=runner_artifacts_only`). Not a duty-cycle PASS and not production acceptance.
+Host facts (second capture, 2026-11-09T16:40:46Z): `Microsoft-Windows-TaskScheduler/Operational` is enabled on `LAPTOP-Q14O4JJT`. The 2026-11-03..06 window still has zero scheduler starts for the watched task names (`task_history.available=true`, `error=null`, `task_runs=0`; enabling does not backfill). WT Application Error 1000 count 0 (1× Explorer.EXE). `reboots=6`, `reboot_residue.detected=false`. `correlation.basis=task_runs`, `strength=no_events`, `wake_count=0`. `scheduler_history_not_in_capture` is not in the blocker list. Not a duty-cycle PASS and not production acceptance.
 
 ## Commands
 

@@ -1,0 +1,992 @@
+[
+  {
+    "rule": "A2",
+    "order_id": 2,
+    "customer_id": "C0568",
+    "order_date": "2026-01-08",
+    "amount": "1443.49",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 44,
+    "customer_id": "C0670",
+    "order_date": "2026-07-17",
+    "amount": "1545.01",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 160,
+    "customer_id": "C0379",
+    "order_date": "2026-06-01",
+    "amount": "1996.19",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 205,
+    "customer_id": "C0279",
+    "order_date": "2026-04-28",
+    "amount": "1251.57",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 256,
+    "customer_id": "C0059",
+    "order_date": "2026-05-10",
+    "amount": "1463.94",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 258,
+    "customer_id": "C0757",
+    "order_date": "2026-07-19",
+    "amount": "1665.64",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 398,
+    "customer_id": "C0105",
+    "order_date": "2026-07-20",
+    "amount": "1688.52",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 487,
+    "customer_id": "C0326",
+    "order_date": "2026-04-11",
+    "amount": "1594.46",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 557,
+    "customer_id": "C0672",
+    "order_date": "2026-09-04",
+    "amount": "1180.49",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 580,
+    "customer_id": "C0504",
+    "order_date": "2026-09-08",
+    "amount": "1828.52",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 590,
+    "customer_id": "C0514",
+    "order_date": "2026-04-02",
+    "amount": "1157.95",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 635,
+    "customer_id": "C0592",
+    "order_date": "2026-05-10",
+    "amount": "1947.84",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 692,
+    "customer_id": "C0255",
+    "order_date": "2026-06-01",
+    "amount": "1388.04",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 735,
+    "customer_id": "C0192",
+    "order_date": "2026-05-23",
+    "amount": "1361.37",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 869,
+    "customer_id": "C0240",
+    "order_date": "2026-07-27",
+    "amount": "1108.10",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 908,
+    "customer_id": "C0224",
+    "order_date": "2026-05-18",
+    "amount": "1880.33",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 926,
+    "customer_id": "C0368",
+    "order_date": "2026-08-02",
+    "amount": "1848.48",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 950,
+    "customer_id": "C0221",
+    "order_date": "2026-08-24",
+    "amount": "1725.05",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 979,
+    "customer_id": "C0001",
+    "order_date": "2026-02-09",
+    "amount": "1356.74",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 994,
+    "customer_id": "C0461",
+    "order_date": "2026-04-15",
+    "amount": "1209.58",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1065,
+    "customer_id": "C0062",
+    "order_date": "2026-07-08",
+    "amount": "1845.73",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1247,
+    "customer_id": "C0208",
+    "order_date": "2026-06-16",
+    "amount": "1552.38",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1265,
+    "customer_id": "C0724",
+    "order_date": "2026-08-06",
+    "amount": "1210.69",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1332,
+    "customer_id": "C0662",
+    "order_date": "2026-03-03",
+    "amount": "1183.42",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1459,
+    "customer_id": "C0309",
+    "order_date": "2026-07-16",
+    "amount": "1282.17",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1466,
+    "customer_id": "C0030",
+    "order_date": "2026-04-26",
+    "amount": "1731.53",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1693,
+    "customer_id": "C0031",
+    "order_date": "2026-08-08",
+    "amount": "1191.37",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1718,
+    "customer_id": "C0119",
+    "order_date": "2026-01-13",
+    "amount": "1864.36",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1746,
+    "customer_id": "C0511",
+    "order_date": "2026-02-11",
+    "amount": "1340.51",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 1887,
+    "customer_id": "C0380",
+    "order_date": "2026-02-03",
+    "amount": "1685.46",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A1",
+    "order_id": 1967,
+    "customer_id": "C0223",
+    "order_date": "2026-02-12",
+    "amount": "7.46",
+    "status": "pending",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2003,
+    "customer_id": "C0214",
+    "order_date": "2026-04-07",
+    "amount": "1046.67",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2020,
+    "customer_id": "C0395",
+    "order_date": "2026-07-23",
+    "amount": "1140.77",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2034,
+    "customer_id": "C0049",
+    "order_date": "2026-06-19",
+    "amount": "1655.01",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2039,
+    "customer_id": "C0017",
+    "order_date": "2026-09-06",
+    "amount": "1203.69",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2092,
+    "customer_id": "C0671",
+    "order_date": "2026-06-03",
+    "amount": "1755.88",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2115,
+    "customer_id": "C0517",
+    "order_date": "2026-04-30",
+    "amount": "1630.88",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2135,
+    "customer_id": "C0624",
+    "order_date": "2026-06-02",
+    "amount": "1383.99",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2170,
+    "customer_id": "C0043",
+    "order_date": "2026-07-03",
+    "amount": "1641.50",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2221,
+    "customer_id": "C0721",
+    "order_date": "2026-03-29",
+    "amount": "1850.43",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2258,
+    "customer_id": "C0422",
+    "order_date": "2026-06-18",
+    "amount": "1639.79",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2267,
+    "customer_id": "C0385",
+    "order_date": "2026-06-28",
+    "amount": "1949.30",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2287,
+    "customer_id": "C0113",
+    "order_date": "2026-01-14",
+    "amount": "1363.62",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2302,
+    "customer_id": "C0691",
+    "order_date": "2026-08-29",
+    "amount": "1199.34",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2352,
+    "customer_id": "C0537",
+    "order_date": "2026-07-31",
+    "amount": "1031.86",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2407,
+    "customer_id": "C0331",
+    "order_date": "2026-01-16",
+    "amount": "1224.95",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2423,
+    "customer_id": "C0507",
+    "order_date": "2026-04-21",
+    "amount": "1162.44",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A1",
+    "order_id": 2471,
+    "customer_id": "C0454",
+    "order_date": "2026-01-18",
+    "amount": "6.12",
+    "status": "paid",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2547,
+    "customer_id": "C0535",
+    "order_date": "2026-03-22",
+    "amount": "1631.23",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2579,
+    "customer_id": "C0308",
+    "order_date": "2026-05-30",
+    "amount": "1893.85",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2647,
+    "customer_id": "C0081",
+    "order_date": "2026-03-15",
+    "amount": "1685.66",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2671,
+    "customer_id": "C0046",
+    "order_date": "2026-08-08",
+    "amount": "1900.23",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2677,
+    "customer_id": "C0395",
+    "order_date": "2026-04-01",
+    "amount": "1887.70",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2743,
+    "customer_id": "C0730",
+    "order_date": "2026-07-21",
+    "amount": "1907.77",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2949,
+    "customer_id": "C0404",
+    "order_date": "2026-01-02",
+    "amount": "1826.53",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 2999,
+    "customer_id": "C0248",
+    "order_date": "2026-03-01",
+    "amount": "1479.60",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3002,
+    "customer_id": "C0124",
+    "order_date": "2026-05-24",
+    "amount": "1306.12",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3003,
+    "customer_id": "C0263",
+    "order_date": "2026-02-19",
+    "amount": "1910.35",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3038,
+    "customer_id": "C0416",
+    "order_date": "2026-03-22",
+    "amount": "1159.17",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3153,
+    "customer_id": "C0111",
+    "order_date": "2026-01-08",
+    "amount": "1783.71",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3156,
+    "customer_id": "C0206",
+    "order_date": "2026-03-22",
+    "amount": "1852.92",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A1",
+    "order_id": 3322,
+    "customer_id": "C0180",
+    "order_date": "2026-07-07",
+    "amount": "5.34",
+    "status": "paid",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3359,
+    "customer_id": "C0163",
+    "order_date": "2026-05-13",
+    "amount": "1969.86",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3361,
+    "customer_id": "C0404",
+    "order_date": "2026-03-01",
+    "amount": "1499.12",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3382,
+    "customer_id": "C0475",
+    "order_date": "2026-06-11",
+    "amount": "1356.29",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3416,
+    "customer_id": "C0133",
+    "order_date": "2026-03-02",
+    "amount": "1425.80",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3422,
+    "customer_id": "C0141",
+    "order_date": "2026-07-29",
+    "amount": "1770.62",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3473,
+    "customer_id": "C0129",
+    "order_date": "2026-08-29",
+    "amount": "1623.99",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3505,
+    "customer_id": "C0321",
+    "order_date": "2026-04-03",
+    "amount": "1833.06",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3538,
+    "customer_id": "C0293",
+    "order_date": "2026-08-18",
+    "amount": "1532.36",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3651,
+    "customer_id": "C0768",
+    "order_date": "2026-04-23",
+    "amount": "1213.76",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3696,
+    "customer_id": "C0124",
+    "order_date": "2026-01-07",
+    "amount": "1342.80",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3708,
+    "customer_id": "C0420",
+    "order_date": "2026-04-29",
+    "amount": "1779.03",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3748,
+    "customer_id": "C0641",
+    "order_date": "2026-05-07",
+    "amount": "1742.87",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3866,
+    "customer_id": "C0578",
+    "order_date": "2026-06-12",
+    "amount": "1711.69",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3869,
+    "customer_id": "C0408",
+    "order_date": "2026-04-07",
+    "amount": "1997.85",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 3952,
+    "customer_id": "C0519",
+    "order_date": "2026-09-17",
+    "amount": "1541.67",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4078,
+    "customer_id": "C0194",
+    "order_date": "2026-09-03",
+    "amount": "1021.99",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A1",
+    "order_id": 4105,
+    "customer_id": "C0182",
+    "order_date": "2026-07-07",
+    "amount": "9.04",
+    "status": "paid",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4189,
+    "customer_id": "C0556",
+    "order_date": "2026-08-20",
+    "amount": "1538.29",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4211,
+    "customer_id": "C0329",
+    "order_date": "2026-01-21",
+    "amount": "1731.53",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4248,
+    "customer_id": "C0422",
+    "order_date": "2026-08-04",
+    "amount": "1777.52",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4311,
+    "customer_id": "C0694",
+    "order_date": "2026-05-08",
+    "amount": "1715.28",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4337,
+    "customer_id": "C0104",
+    "order_date": "2026-07-01",
+    "amount": "1464.64",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4535,
+    "customer_id": "C0483",
+    "order_date": "2026-08-17",
+    "amount": "1805.86",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4679,
+    "customer_id": "C0209",
+    "order_date": "2026-05-09",
+    "amount": "1540.58",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4704,
+    "customer_id": "C0031",
+    "order_date": "2026-07-03",
+    "amount": "1129.05",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4760,
+    "customer_id": "C0081",
+    "order_date": "2026-09-23",
+    "amount": "1750.08",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4792,
+    "customer_id": "C0385",
+    "order_date": "2026-04-06",
+    "amount": "1734.47",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4793,
+    "customer_id": "C0654",
+    "order_date": "2026-09-27",
+    "amount": "1029.04",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4826,
+    "customer_id": "C0751",
+    "order_date": "2026-04-27",
+    "amount": "1349.35",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 4963,
+    "customer_id": "C0191",
+    "order_date": "2026-04-27",
+    "amount": "1300.83",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5013,
+    "customer_id": "C0795",
+    "order_date": "2026-07-11",
+    "amount": "1580.58",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5047,
+    "customer_id": "C0686",
+    "order_date": "2026-08-04",
+    "amount": "1294.76",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5074,
+    "customer_id": "C0366",
+    "order_date": "2026-02-20",
+    "amount": "1603.71",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5075,
+    "customer_id": "C0214",
+    "order_date": "2026-07-07",
+    "amount": "1681.50",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5091,
+    "customer_id": "C0665",
+    "order_date": "2026-08-30",
+    "amount": "1042.18",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5155,
+    "customer_id": "C0334",
+    "order_date": "2026-04-19",
+    "amount": "1889.22",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A1",
+    "order_id": 5298,
+    "customer_id": "C0592",
+    "order_date": "2026-05-11",
+    "amount": "5.94",
+    "status": "paid",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5315,
+    "customer_id": "C0245",
+    "order_date": "2026-05-16",
+    "amount": "1526.69",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5329,
+    "customer_id": "C0022",
+    "order_date": "2026-09-21",
+    "amount": "1566.18",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5443,
+    "customer_id": "C0641",
+    "order_date": "2026-06-08",
+    "amount": "1673.14",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5514,
+    "customer_id": "C0315",
+    "order_date": "2026-09-17",
+    "amount": "1520.78",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5522,
+    "customer_id": "C0722",
+    "order_date": "2026-05-22",
+    "amount": "1441.12",
+    "status": "cancelled",
+    "channel": "store"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5554,
+    "customer_id": "C0776",
+    "order_date": "2026-07-18",
+    "amount": "1954.11",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5565,
+    "customer_id": "C0205",
+    "order_date": "2026-05-04",
+    "amount": "1438.64",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5653,
+    "customer_id": "C0201",
+    "order_date": "2026-01-19",
+    "amount": "1307.04",
+    "status": "cancelled",
+    "channel": "web"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5720,
+    "customer_id": "C0172",
+    "order_date": "2026-04-10",
+    "amount": "1166.85",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5722,
+    "customer_id": "C0561",
+    "order_date": "2026-01-11",
+    "amount": "1225.73",
+    "status": "cancelled",
+    "channel": "app"
+  },
+  {
+    "rule": "A2",
+    "order_id": 5775,
+    "customer_id": "C0753",
+    "order_date": "2026-02-12",
+    "amount": "1672.50",
+    "status": "cancelled",
+    "channel": "app"
+  }
+]

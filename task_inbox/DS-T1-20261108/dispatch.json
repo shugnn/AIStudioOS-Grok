@@ -4,11 +4,56 @@
   "inbox": "task_inbox/DS-T1-20261108/",
   "worker": "control_plane.providers + scripts/worker_run_task.py",
   "jobs": [
-    {"job_id": "J1", "title": "generate_or_verify_orders_csv", "status": "PENDING"},
-    {"job_id": "J2", "title": "monthly_summary", "status": "PENDING"},
-    {"job_id": "J3", "title": "anomaly_list", "status": "PENDING"},
-    {"job_id": "J4", "title": "evidence_pack_manifest", "status": "PENDING"}
+    {
+      "job_id": "J1",
+      "title": "generate_or_verify_orders_csv",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T1-20261108/data/orders.csv",
+        "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "bytes": 237705,
+        "lines": 6001
+      }
+    },
+    {
+      "job_id": "J2",
+      "title": "monthly_summary",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T1-20261108/deliverables/summary.json",
+        "sha256": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2"
+      }
+    },
+    {
+      "job_id": "J3",
+      "title": "anomaly_list",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T1-20261108/deliverables/anomalies.json",
+        "sha256": "a5d368e0f7c5970f38b5fd2c093e8b6448bf7ff00996521275bd23624a3606c1"
+      }
+    },
+    {
+      "job_id": "J4",
+      "title": "evidence_pack_manifest",
+      "status": "DONE",
+      "evidence": {
+        "paths": [
+          {
+            "path": "task_inbox/DS-T1-20261108/deliverables/report.md",
+            "sha256": "2e337adc347783fa5ad31513065e43c3b011fcee940bc49df430bfaa5b1ebf1f"
+          },
+          {
+            "path": "task_inbox/DS-T1-20261108/deliverables/manifest.json",
+            "sha256": "3e018ac7ac2a843c74fafb12f67bc10c0ac3fef2bb4aef154dfb72bcde647020"
+          }
+        ]
+      }
+    }
   ],
   "network": false,
-  "paid": false
+  "paid": false,
+  "executed_utc": "2026-11-09T15:54:24Z",
+  "fingerprint_match": true,
+  "executed_by": "scripts/worker_run_task.py"
 }

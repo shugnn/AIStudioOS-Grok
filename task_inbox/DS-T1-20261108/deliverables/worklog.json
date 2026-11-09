@@ -1,0 +1,31 @@
+{
+  "task_id": "DS-T1-20261108",
+  "worker": "scripts/worker_run_task.py",
+  "started_utc": "2026-11-09T15:54:24Z",
+  "steps": [
+    {
+      "step": "run",
+      "result": {
+        "ok": true,
+        "status": "DONE",
+        "fingerprint_match": true,
+        "sha256_orders": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "bytes": 237705,
+        "lines": 6001,
+        "total_orders": 6000,
+        "total_amount": "5983804.03",
+        "anomaly_count": 110,
+        "deliverables": "task_inbox/DS-T1-20261108/deliverables",
+        "manifest_sha256": "3e018ac7ac2a843c74fafb12f67bc10c0ac3fef2bb4aef154dfb72bcde647020",
+        "output_sha256": {
+          "task_inbox/DS-T1-20261108/deliverables/summary.json": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2",
+          "task_inbox/DS-T1-20261108/deliverables/anomalies.json": "a5d368e0f7c5970f38b5fd2c093e8b6448bf7ff00996521275bd23624a3606c1",
+          "task_inbox/DS-T1-20261108/deliverables/report.md": "2e337adc347783fa5ad31513065e43c3b011fcee940bc49df430bfaa5b1ebf1f"
+        },
+        "component_version": "ds-t1-worker-1",
+        "network": false
+      }
+    }
+  ],
+  "finished_utc": "2026-11-09T15:54:24Z"
+}

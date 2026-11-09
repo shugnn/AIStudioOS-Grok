@@ -16,7 +16,7 @@
   "gate_result": "NOT_A_GATE",
   "exit_0_is_gate_pass": false,
   "not_started_scaffold_intact": true,
-  "operator_note": "Running this preflight is not a start decision. Filling R2_CHECKLIST.md is not a start decision. Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py.",
+  "operator_note": "Running this preflight is not a start decision. Filling R2_CHECKLIST.md is not a start decision. A matching SHA256SUMS.json is not a start decision. Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py.",
   "gates": {
     "can_accept_l2_2": false,
     "can_close_l2_2": false,
@@ -35,6 +35,18 @@
       "ok": true,
       "missing": [],
       "detail": "present"
+    },
+    "evidence_sums": {
+      "ok": true,
+      "present": true,
+      "count": 5,
+      "mismatched": [],
+      "missing_from_sums": [],
+      "self_report": "docs/progress/l2_2/scaffold/preflight.json",
+      "self_report_listed": true,
+      "self_digest_checked_by": "tests/test_l2_2_preflight.py",
+      "binds_clock_start": false,
+      "detail": "bound_not_a_start"
     },
     "contract": {
       "ok": true,
@@ -117,6 +129,7 @@
     "Leave R2_CHECKLIST.md unfilled until a separate explicit start decision. Filling the checklist is not that decision.",
     "Do not register, create, or enable Interactive console scheduled tasks.",
     "Leave the 2026-11-03..06 L2-4 reconstruction INCOMPLETE on PR #11. Do not re-capture that window.",
+    "SHA256SUMS.json binds scaffold bytes only. It is not permission to start.",
     "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not."
   ],
   "source": {

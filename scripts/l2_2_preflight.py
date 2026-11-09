@@ -11,6 +11,12 @@ that would have over-claimed and was refused.
 Exit 0 is not a gate PASS. can_start_clock, can_accept_l2_2, and can_close_l2_2
 stay false. Running this tool is not a start decision.
 
+docs/progress/l2_2/SHA256SUMS.json is a byte binding written by
+scripts/evidence_sha256sums.py. A match is not a start, an accept, or a close.
+This report verifies those bytes except its own file: the committed report
+cannot record a digest of itself. tests/test_l2_2_preflight.py checks that
+self digest.
+
   python3 scripts/l2_2_preflight.py
 """
 from __future__ import annotations
@@ -25,7 +31,19 @@ ROOT = Path(__file__).resolve().parents[1]
 STOP_RELATIVE = Path("docs") / "progress" / "EMERGENCY_STOP"
 CHECKLIST_RELATIVE = Path("docs") / "progress" / "l2_2" / "R2_CHECKLIST.md"
 SCHEMA_RELATIVE = Path("docs") / "progress" / "l2_2" / "SCHEMA.json"
+SUMS_RELATIVE = Path("docs") / "progress" / "l2_2" / "SHA256SUMS.json"
+SELF_REPORT = "docs/progress/l2_2/scaffold/preflight.json"
 FIXTURE_RELATIVE = Path("tests") / "fixtures" / "l2_2" / "scaffold_clock_not_started.json"
+
+# Source files the sums file must list. The self report is listed too, but its
+# digest is checked by tests rather than by the report that would rewrite it.
+BOUND_SOURCES = (
+    "docs/progress/l2_2/README.md",
+    "docs/progress/l2_2/R2_CHECKLIST.md",
+    "docs/progress/l2_2/SCHEMA.json",
+    "docs/progress/l2_2/scaffold/preflight.json",
+    "docs/progress/l2_2/scaffold/report.json",
+)
 
 # The README start line. Parsed only. Never executed.
 DOCUMENTED_ARGV = [
@@ -52,6 +70,8 @@ REQUIRED_PATHS = (
     "docs/progress/l2_2/SCHEMA.json",
     "docs/progress/l2_2/README.md",
     "docs/progress/l2_2/scaffold/report.json",
+    "docs/progress/l2_2/scaffold/preflight.json",
+    "docs/progress/l2_2/SHA256SUMS.json",
     "tests/fixtures/l2_2/scaffold_clock_not_started.json",
     "tests/fixtures/l2_2/scaffold_exit0_only.json",
     "tests/fixtures/l2_2/scaffold_full_wall_cannot_accept.json",
@@ -64,6 +84,7 @@ REQUIRED_PATHS = (
 
 CHECK_ORDER = (
     "scaffold_files",
+    "evidence_sums",
     "contract",
     "soak_flags",
     "r2_checklist",
@@ -81,6 +102,7 @@ OPERATOR_PREFIX = "Who decided"
 OPERATOR_NOTE = (
     "Running this preflight is not a start decision. "
     "Filling R2_CHECKLIST.md is not a start decision. "
+    "A matching SHA256SUMS.json is not a start decision. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -90,6 +112,7 @@ NEXT_STEPS = (
     "Leave R2_CHECKLIST.md unfilled until a separate explicit start decision. Filling the checklist is not that decision.",
     "Do not register, create, or enable Interactive console scheduled tasks.",
     "Leave the 2026-11-03..06 L2-4 reconstruction INCOMPLETE on PR #11. Do not re-capture that window.",
+    "SHA256SUMS.json binds scaffold bytes only. It is not permission to start.",
     "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -163,6 +186,181 @@ def _check_files(root: Path) -> dict[str, Any]:
         "missing": missing,
         "detail": "present" if not missing else "missing:" + ",".join(missing),
     }
+
+
+def _sums_result(
+    ok: bool,
+    *,
+    present: bool,
+    count: int,
+    mismatched: list[str],
+    missing_from_sums: list[str],
+    self_report_listed: bool,
+    detail: str,
+) -> dict[str, Any]:
+    return {
+        "ok": ok,
+        "present": present,
+        "count": count,
+        "mismatched": mismatched,
+        "missing_from_sums": missing_from_sums,
+        "self_report": SELF_REPORT,
+        "self_report_listed": self_report_listed,
+        "self_digest_checked_by": "tests/test_l2_2_preflight.py",
+        "binds_clock_start": False,
+        "detail": detail,
+    }
+
+
+def _repo_file(root: Path, rel: str) -> Path | None:
+    rel = rel.replace("\\", "/")
+    parts = Path(rel).parts
+    if not rel or rel.startswith("/") or ".." in parts:
+        return None
+    candidate = (root / rel).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def _sums_overclaims(node: Any) -> bool:
+    """True when a sums document tries to smuggle a start, accept, close, or PASS."""
+    if isinstance(node, dict):
+        if node.get("l2_2_status") == "PASS":
+            return True
+        if node.get("clock_state") == "STARTED":
+            return True
+        if node.get("production_7x24") == "ACCEPTED":
+            return True
+        for key in GATE_KEYS:
+            if node.get(key) is True:
+                return True
+        return any(_sums_overclaims(value) for value in node.values())
+    if isinstance(node, list):
+        return any(_sums_overclaims(value) for value in node)
+    return False
+
+
+def _check_sums(root: Path, path: Path) -> dict[str, Any]:
+    """Verify SHA256SUMS.json against the tree. Does not start the clock.
+
+    The digest function is evidence_sha256sums.sha256_file. This check does not
+    compare SELF_REPORT: writing that result into the report would change the
+    bytes the sums file binds. The test module recomputes that digest.
+    """
+    blank = list(BOUND_SOURCES)
+    if not path.is_file():
+        return _sums_result(
+            False,
+            present=False,
+            count=0,
+            mismatched=[],
+            missing_from_sums=blank,
+            self_report_listed=False,
+            detail="missing",
+        )
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _sums_result(
+            False,
+            present=True,
+            count=0,
+            mismatched=[],
+            missing_from_sums=blank,
+            self_report_listed=False,
+            detail="unreadable",
+        )
+    if not isinstance(doc, dict):
+        return _sums_result(
+            False,
+            present=True,
+            count=0,
+            mismatched=[],
+            missing_from_sums=blank,
+            self_report_listed=False,
+            detail="malformed",
+        )
+    try:
+        from evidence_sha256sums import sha256_file
+    except Exception:
+        return _sums_result(
+            False,
+            present=True,
+            count=0,
+            mismatched=[],
+            missing_from_sums=blank,
+            self_report_listed=False,
+            detail="hasher_import",
+        )
+    files = doc.get("files")
+    overclaim = _sums_overclaims(doc)
+    listed: dict[str, tuple[str, int]] = {}
+    malformed = not isinstance(files, list) or not isinstance(doc.get("count"), int)
+    if isinstance(files, list):
+        malformed = malformed or doc.get("count") != len(files)
+        for entry in files:
+            if not isinstance(entry, dict):
+                malformed = True
+                continue
+            rel = entry.get("path")
+            digest = entry.get("sha256")
+            size = entry.get("bytes")
+            if (
+                not isinstance(rel, str)
+                or not isinstance(digest, str)
+                or isinstance(size, bool)
+                or not isinstance(size, int)
+            ):
+                malformed = True
+                continue
+            rel = rel.replace("\\", "/")
+            if rel in listed:
+                malformed = True
+            listed[rel] = (digest, size)
+    git_head = doc.get("git_head")
+    utc = doc.get("utc")
+    git_head_ok = isinstance(git_head, str) and len(git_head) == 40 and all(
+        char in "0123456789abcdef" for char in git_head
+    )
+    utc_ok = isinstance(utc, str) and bool(utc)
+    if not git_head_ok or not utc_ok:
+        malformed = True
+    mismatched: list[str] = []
+    missing_on_disk: list[str] = []
+    for rel in sorted(listed):
+        if rel == SELF_REPORT:
+            continue
+        file_path = _repo_file(root, rel)
+        digest, size = listed[rel]
+        if file_path is None or not file_path.is_file():
+            missing_on_disk.append(rel)
+            continue
+        if file_path.stat().st_size != size or sha256_file(file_path) != digest:
+            mismatched.append(rel)
+    required_missing = [rel for rel in BOUND_SOURCES if rel not in listed]
+    self_listed = SELF_REPORT in listed
+    if overclaim:
+        detail = "overclaim"
+    elif malformed:
+        detail = "malformed"
+    elif mismatched or missing_on_disk:
+        detail = "mismatch"
+    elif required_missing or not self_listed:
+        detail = "incomplete_manifest"
+    else:
+        detail = "bound_not_a_start"
+    return _sums_result(
+        detail == "bound_not_a_start",
+        present=True,
+        count=len(listed),
+        mismatched=mismatched + missing_on_disk,
+        missing_from_sums=required_missing,
+        self_report_listed=self_listed,
+        detail=detail,
+    )
 
 
 def _check_contract(root: Path) -> dict[str, Any]:
@@ -432,14 +630,17 @@ def preflight(
     *,
     checklist_path: Path | None = None,
     stop_path: Path | None = None,
+    sums_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an honest NOT_STARTED report. Does not launch soak or write the stop file."""
     repo = (root or ROOT).resolve()
     checklist = checklist_path or (repo / CHECKLIST_RELATIVE)
     stop = stop_path or default_stop_path(repo)
+    sums = sums_path or (repo / SUMS_RELATIVE)
     try:
         checks = {
             "scaffold_files": _check_files(repo),
+            "evidence_sums": _check_sums(repo, sums),
             "contract": _check_contract(repo),
             "soak_flags": _check_soak_flags(),
             "r2_checklist": _check_r2(checklist),
@@ -529,6 +730,9 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     r2 = checks.get("r2_checklist") if isinstance(checks.get("r2_checklist"), dict) else {}
     if isinstance(r2, dict):
         decision = str(r2.get("start_decision") or "")
+    sums = checks.get("evidence_sums") if isinstance(checks.get("evidence_sums"), dict) else {}
+    if isinstance(sums, dict) and sums.get("binds_clock_start") is True:
+        violations.append("sums_imply_start")
     if decision in {"given", "started", "approved"}:
         violations.append("r2_implies_start")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):

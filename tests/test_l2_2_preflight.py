@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import coverage_gap_log as gaplog  # noqa: E402
+import evidence_sha256sums as sums_tool  # noqa: E402
 import l2_2_preflight as pre  # noqa: E402
 import l2_2_score as l2  # noqa: E402
 import soak_2h  # noqa: E402
@@ -66,6 +67,13 @@ def test_real_repo_preflight_is_not_started_and_intact():
     assert report["not_started_scaffold_intact"] is True
     assert report["failures"] == []
     assert report["checks"]["scaffold_files"]["missing"] == []
+    sums_check = report["checks"]["evidence_sums"]
+    assert sums_check["ok"] is True
+    assert sums_check["detail"] == "bound_not_a_start"
+    assert sums_check["binds_clock_start"] is False
+    assert sums_check["self_report_listed"] is True
+    assert sums_check["mismatched"] == []
+    assert sums_check["missing_from_sums"] == []
     assert report["checks"]["soak_flags"]["action"] == "argparse_only"
     assert report["checks"]["soak_flags"]["executed"] is False
     assert report["checks"]["soak_flags"]["via_l1"] is True
@@ -309,3 +317,83 @@ def test_operator_notes_say_running_is_not_a_start():
     assert schema["preflight_schema"] == pre.SCHEMA
     assert schema["can_start_clock"] is False
     assert "PASS" not in schema["l2_2_status_emitted"]
+    assert any("SHA256SUMS.json" in note and "do not start" in note for note in schema["notes"])
+
+
+def test_evidence_package_indexes_preflight_and_sums_as_not_started():
+    text = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")
+    section = text.split("## L2-2", 1)[1].split("\n## ", 1)[0]
+    assert "scripts/l2_2_preflight.py" in section
+    assert "scaffold/preflight.json" in section
+    assert "SHA256SUMS.json" in section
+    assert "scripts/evidence_sha256sums.py" in section
+    assert "NOT STARTED" in section
+    assert "NOT ACCEPTED" in section
+    assert "pull/11" in section
+    assert "931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6" in section
+    assert "does not recapture" in section
+
+
+def test_sha256sums_bind_the_l2_2_tree_and_do_not_start():
+    sums_path = ROOT / "docs" / "progress" / "l2_2" / "SHA256SUMS.json"
+    doc = json.loads(sums_path.read_text(encoding="utf-8"))
+    assert isinstance(doc.get("git_head"), str) and len(doc["git_head"]) == 40
+    assert doc["count"] == len(doc["files"])
+    listed = []
+    for entry in doc["files"]:
+        path = ROOT / entry["path"]
+        assert path.is_file()
+        assert path.stat().st_size == entry["bytes"]
+        assert sums_tool.sha256_file(path) == entry["sha256"]
+        listed.append(entry["path"])
+    expected = sorted(
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "docs" / "progress" / "l2_2").rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS.json"
+    )
+    assert sorted(listed) == expected
+    assert "docs/progress/l2_2/scaffold/preflight.json" in listed
+    assert "docs/progress/l2_2/SHA256SUMS.json" not in listed
+    assert "can_start_clock" not in doc
+    assert doc.get("l2_2_status", "NOT_STARTED") != "PASS"
+    assert doc.get("production_7x24", "NOT_ACCEPTED") != "ACCEPTED"
+
+
+def test_tampered_sums_do_not_start_the_clock(tmp_path: Path):
+    original = json.loads((ROOT / "docs" / "progress" / "l2_2" / "SHA256SUMS.json").read_text(encoding="utf-8"))
+    flipped = json.loads(json.dumps(original))
+    for entry in flipped["files"]:
+        if entry["path"] != pre.SELF_REPORT:
+            entry["sha256"] = "0" * 64
+            break
+    path = tmp_path / "SHA256SUMS.json"
+    path.write_text(json.dumps(flipped), encoding="utf-8")
+    report = pre.preflight(sums_path=path)
+    _assert_not_a_start(report)
+    assert report["checks"]["evidence_sums"]["ok"] is False
+    assert report["checks"]["evidence_sums"]["detail"] == "mismatch"
+    assert report["checks"]["evidence_sums"]["binds_clock_start"] is False
+    assert report["not_started_scaffold_intact"] is False
+    assert report["gates"]["can_start_clock"] is False
+
+
+def test_sums_overclaim_cannot_flip_gates(tmp_path: Path):
+    original = json.loads((ROOT / "docs" / "progress" / "l2_2" / "SHA256SUMS.json").read_text(encoding="utf-8"))
+    poisoned = json.loads(json.dumps(original))
+    poisoned["l2_2_status"] = "PASS"
+    poisoned["production_7x24"] = "ACCEPTED"
+    poisoned["can_start_clock"] = True
+    poisoned["can_accept_l2_2"] = True
+    poisoned["can_close_l2_2"] = True
+    path = tmp_path / "SHA256SUMS.json"
+    path.write_text(json.dumps(poisoned), encoding="utf-8")
+    report = pre.preflight(sums_path=path)
+    _assert_not_a_start(report)
+    assert report["checks"]["evidence_sums"]["detail"] == "overclaim"
+    assert report["checks"]["evidence_sums"]["binds_clock_start"] is False
+    assert report["not_started_scaffold_intact"] is False
+    assert '"production_7x24": "ACCEPTED"' not in json.dumps(report)
+    assert '"l2_2_status": "PASS"' not in json.dumps(report)
+    forged = json.loads(json.dumps(pre.preflight()))
+    forged["checks"]["evidence_sums"]["binds_clock_start"] = True
+    assert "sums_imply_start" in pre.validate_report(forged)

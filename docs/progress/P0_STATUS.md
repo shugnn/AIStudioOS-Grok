@@ -43,7 +43,7 @@
 
 ## L2-2 scaffold (clock not started)
 
-Offline scorer `scripts/l2_2_score.py`. Offline preflight `scripts/l2_2_preflight.py` (exit 0 is a NOT STARTED report, not a start). 72h means monotonic wall **259200s** on the existing `soak_2h.py --via-l1` path. `can_accept_l2_2` and `can_start_clock` stay false. Gap lines go through `scripts/coverage_gap_log.py` and do not start the clock. Interactive console scheduled tasks are a founder major gate and are **out of scope**. The Ubuntu-24H metrics file (86400.001s) is not this gate. Product L2 (task split / worker) stays **NOT STARTED**.
+Offline scorer `scripts/l2_2_score.py`. Offline preflight `scripts/l2_2_preflight.py` (exit 0 is a NOT STARTED report, not a start). `docs/progress/l2_2/SHA256SUMS.json` binds those scaffold bytes and does not start the clock. 72h means monotonic wall **259200s** on the existing `soak_2h.py --via-l1` path. `can_accept_l2_2` and `can_start_clock` stay false. Gap lines go through `scripts/coverage_gap_log.py` and do not start the clock. Interactive console scheduled tasks are a founder major gate and are **out of scope**. The Ubuntu-24H metrics file (86400.001s) is not this gate. Product L2 (task split / worker) stays **NOT STARTED**.
 
 ## Stop
 

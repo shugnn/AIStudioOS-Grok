@@ -59,7 +59,7 @@ PYTHONPATH=. python scripts/soak_2h.py --cycles 10 --interval 2 --via-l1 --idle-
 | `docs/progress/DUAL_TRACK_MATRIX.md` | Grok vs ChatGPT gates |
 | `docs/progress/EVIDENCE_PACKAGE.md` | Evidence layout |
 | `docs/progress/soak_metrics_policy.md` | Effective vs idle |
-| `docs/progress/l2_2/README.md` | 72h scaffold. Clock **NOT STARTED**. Preflight: `scripts/l2_2_preflight.py` (not a start) |
+| `docs/progress/l2_2/README.md` | 72h scaffold. Clock **NOT STARTED**. Preflight: `scripts/l2_2_preflight.py` (not a start). Sums: `docs/progress/l2_2/SHA256SUMS.json` (not a start) |
 | `docs/progress/EMERGENCY_STOP.md` | Kill switch procedure |
 | Issue #9 | P0 acceptance & evidence |
 

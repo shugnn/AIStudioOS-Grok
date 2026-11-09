@@ -26,6 +26,7 @@ This table is the **duty-cycle** L2. It is not the 2026-11-07 product L2 (task s
 - The scorer does not register scheduled tasks and does not start a clock.
 - `scripts/coverage_gap_log.py` appends ok/yellow/red gap lines. `docs/progress/l2_2/R2_CHECKLIST.md` is the blank R2 note. Neither one starts the 72h clock.
 - `scripts/l2_2_preflight.py` checks that scaffold offline. Exit 0 is a `NOT_STARTED` report. `can_start_clock` stays false. Running it is not a start decision and does not launch the soak.
+- `docs/progress/l2_2/SHA256SUMS.json` (from `scripts/evidence_sha256sums.py`) binds the scaffold bytes. The binding does not start the clock and does not accept production 7×24.
 
 **Still required before any real clock**
 

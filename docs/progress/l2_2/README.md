@@ -33,6 +33,8 @@ The committed Ubuntu-24H file `docs/progress/soak_2h/metrics.json` is wall **864
 | `tests/test_l2_2_score.py` | Short wall, exit0-only, full wall still refused, Interactive registration refused, forged PASS rejected |
 | `docs/progress/l2_2/scaffold/report.json` | Score of the not-started fixture. Label `scaffold` |
 | `scripts/l2_2_preflight.py` | Offline readiness check. Emits `NOT_STARTED`. Does not launch soak. `can_start_clock` stays false |
+| `docs/progress/l2_2/scaffold/preflight.json` | Committed output of that check. Label `scaffold`. Not a start decision |
+| `docs/progress/l2_2/SHA256SUMS.json` | Byte binding from `scripts/evidence_sha256sums.py`. Not a start, not a PASS, not production acceptance |
 | `scripts/coverage_gap_log.py` | Append-only yellow/red/ok gap line. Does not start the clock |
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank R2 note that points at the logger |
 
@@ -43,7 +45,10 @@ PYTHONPATH=. python scripts/l2_2_preflight.py
 PYTHONPATH=. python -m pytest tests/test_l2_2_score.py tests/test_l2_2_preflight.py -q
 PYTHONPATH=. python scripts/l2_2_score.py \
   --capture tests/fixtures/l2_2/scaffold_clock_not_started.json
+python scripts/evidence_sha256sums.py docs/progress/l2_2 --glob "**/*"
 ```
+
+The sums command rewrites `SHA256SUMS.json` for the files in this directory. It does not launch the soak. A matching file is not a gate PASS and does not set `can_start_clock`. The preflight checks those bytes, except the digest of `scaffold/preflight.json` itself, which the tests recompute.
 
 Exit 0 from the preflight means the not-started scaffold still matches this repo: the pieces are present, the documented soak flags parse, `R2_CHECKLIST.md` is still unfilled, `docs/progress/EMERGENCY_STOP` is absent, and the scorer still refuses PASS / start / accept / close. Exit 0 is an honest NOT STARTED report. It does **not** mean L2-2 passed, it does **not** set `can_start_clock`, and it does **not** launch `soak_2h.py`. Running the preflight is not a start decision. Filling the checklist is not a start decision.
 

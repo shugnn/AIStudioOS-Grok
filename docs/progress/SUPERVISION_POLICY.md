@@ -69,8 +69,13 @@ Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster)
 |-------|------|
 | `scripts/stall_watchdog.py` | Progress age check; `--runner-glob` for L1 |
 | `scripts/soak_2h.py` | DUT metrics; `max_wall_seconds`; finally metrics |
+| `scripts/l2_2_score.py` | Offline 72h bundle scorer. Does not start a clock and does not register Interactive tasks |
 | `docs/progress/EMERGENCY_STOP` | Human red stop |
 | Yellow gap logger | **TODO** thin `coverage_gap` append helper before next long run |
+
+## L2-2 scaffold
+
+`docs/progress/l2_2/` defines the 72h duty as monotonic wall 259200s on the existing soak path. The clock is **NOT STARTED**. A missing R3 receipt stays supervision-unverified. Interactive console scheduled tasks stay out of scope (founder major gate, not requested here). The yellow-gap logger above is still **TODO** and is required before a real long run, not instead of it.
 
 ## D1 historical note
 

@@ -1,0 +1,47 @@
+{
+  "schema": "aistudioos-grok.l2-2.capture.v1",
+  "evidence_class": "scaffold",
+  "synthetic": true,
+  "note": "Synthetic 72h-shaped wall with exit 0 and zero with_work. Dated 2026-02-01. Not a host soak. Not business progress. Not the 2026-11-03..06 incident window.",
+  "captured_utc": "2026-02-01T00:00:00Z",
+  "host": null,
+  "git_sha": "scaffold-not-a-host-sha",
+  "clock": {
+    "started": true,
+    "start_utc": "2026-02-01T00:00:00Z",
+    "end_utc": "2026-02-04T00:00:00Z"
+  },
+  "wall": {
+    "required_seconds": 259200,
+    "elapsed_seconds": 259200.0,
+    "max_wall_seconds": 259200,
+    "source": "monotonic"
+  },
+  "metrics": {
+    "final": true,
+    "stopped_early": "max_wall_seconds",
+    "cycles_ran": 2,
+    "cycles_exit0": 2,
+    "cycles_with_work": 0,
+    "cycles_idle": 2,
+    "wall_elapsed_s": 259200.0,
+    "max_wall_seconds": 259200,
+    "via_l1": true
+  },
+  "summary_rows": [
+    {"utc": "2026-02-01T00:10:00Z", "exit": 0, "with_work": false, "idle": true},
+    {"utc": "2026-02-02T00:10:00Z", "exit": 0, "with_work": false, "idle": true}
+  ],
+  "supervision": {
+    "r2_declared_before_start": true,
+    "r3_injection_receipt": {"path": "synthetic://r3-not-a-host-receipt", "verdict": "synthetic_placeholder"},
+    "watch_target": "soak_summary_live",
+    "coverage_gaps": []
+  },
+  "runner": {
+    "kind": "soak_2h_via_l1",
+    "interactive": false,
+    "registered_this_run": false,
+    "task_names": []
+  }
+}

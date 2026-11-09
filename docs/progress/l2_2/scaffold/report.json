@@ -1,0 +1,108 @@
+{
+  "schema": "aistudioos-grok.l2-2.report.v1",
+  "evidence_class": "scaffold",
+  "label": "scaffold",
+  "verified": false,
+  "supervision_verified": false,
+  "l2_2_status": "NOT_STARTED",
+  "clock_state": "NOT_STARTED",
+  "production_7x24": "NOT_ACCEPTED",
+  "business_verdict": "UNSCORED",
+  "business_fail": false,
+  "product_l2_task_split": "NOT_STARTED",
+  "interactive_registration": "founder_gated_out_of_scope",
+  "definition": {
+    "wall_required_seconds": 259200,
+    "wall_source_required": "monotonic",
+    "driver": "scripts/soak_2h.py --via-l1 --max-wall-seconds 259200",
+    "exit0_is_business": false,
+    "interactive_schtasks": "out_of_scope",
+    "note": "72h means monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200. cycles x interval is not the wall. cycles_exit0 is process success only."
+  },
+  "bars": {
+    "host_evidence": false,
+    "clock_started": false,
+    "runner_non_interactive": false,
+    "wall_monotonic_72h": false,
+    "with_work": false,
+    "summary_reconciled": false,
+    "r2_declared_before_start": false,
+    "r3_receipt_present": false,
+    "watch_target_live": false,
+    "git_sha_present": false
+  },
+  "bars_all_true": false,
+  "wall": {
+    "required_seconds": 259200,
+    "elapsed_seconds": null,
+    "source": "unset",
+    "elapsed_meets_259200": false,
+    "counts_toward_gate": false
+  },
+  "reconciliation": {
+    "status": "not_applicable",
+    "mismatches": []
+  },
+  "coverage_gaps": {
+    "yellow": 0,
+    "red": 0,
+    "rows": [],
+    "yellow_is_not_business_fail": true
+  },
+  "runner": {
+    "kind": "none",
+    "allowed": false,
+    "rejected": false,
+    "registered_this_run": false,
+    "interactive": false,
+    "task_names": []
+  },
+  "triage": {
+    "business": false,
+    "host": false,
+    "supervision": false,
+    "policy": false
+  },
+  "gates": {
+    "can_accept_l2_2": false,
+    "can_close_l2_2": false,
+    "can_start_clock": false,
+    "close_policy": "This tool never accepts L2-2 and never starts the 72h clock. A later explicit non-Interactive run can be reviewed by the observation track. Production 7x24 stays NOT ACCEPTED. Interactive console scheduled tasks stay out of scope.",
+    "blockers": [
+      "tool_does_not_accept_l2_2",
+      "tool_does_not_start_clock",
+      "production_7x24_not_accepted",
+      "interactive_registration_founder_gated_out_of_scope",
+      "observation_track_has_not_accepted",
+      "scaffold_fixture_not_host_evidence",
+      "clock_not_started"
+    ]
+  },
+  "l2_4": {
+    "status": "INCOMPLETE",
+    "window": "2026-11-03..06",
+    "pr": "https://github.com/shugnn/AIStudioOS-Grok/pull/11",
+    "tip": "931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6",
+    "relitigated": false
+  },
+  "next_steps": [
+    "Leave the 2026-11-03..06 L2-4 reconstruction on PR #11. Do not re-capture that window to start L2-2.",
+    "Do not register, create, or enable Interactive console scheduled tasks. That is a founder major gate and is not approved by this scaffold.",
+    "Keep the 72h clock NOT STARTED until a founder or worker explicitly decides to start the existing non-Interactive local soak.",
+    "Before that start, write the R2 note: watch the live soak summary.jsonl while soak_2h.py is the DUT (runner-*.json only when the DUT is L1 with no soak); yellow gap 13s-5min logs coverage_gap and is not a business FAIL; red gap >5min stops and seals as supervision failure.",
+    "Only after that explicit start decision, on a host already allowed to run the local soak: PYTHONPATH=. python scripts/soak_2h.py --cycles 5000 --interval 60 --via-l1 --seed 300 --idle-policy reseed --max-wall-seconds 259200",
+    "Cycles must be large enough that max-wall stops the process. cycles x interval is not the wall. cycles_exit0 is not business progress. A 86400s wall is not this 72h gate.",
+    "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
+    "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
+    "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate."
+  ],
+  "source": {
+    "synthetic": true,
+    "note": "Synthetic fixture dated 2026-02-01. Not a host 72h soak. Not the 2026-11-03..06 incident window. Not Ubuntu-24H.",
+    "host": null,
+    "git_sha": null,
+    "captured_utc": "2026-02-01T00:00:00Z",
+    "collector": "scripts/l2_2_score.py",
+    "collector_mode": "offline_score"
+  }
+}

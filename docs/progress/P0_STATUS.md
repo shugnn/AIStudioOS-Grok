@@ -35,11 +35,15 @@
 
 | ID | Notes |
 |----|-------|
-| L2-4 | INCOMPLETE (WT correlation + reboot) |
-| L2-2 72h | not started |
+| L2-4 | **INCOMPLETE** (WT correlation + reboot). 2026-11-03..06 reconstruction is exhausted on [PR #11](https://github.com/shugnn/AIStudioOS-Grok/pull/11) tip `931758c` (`task_runs=0`, WT Error 1000 count 0). Not relitigated here |
+| L2-2 72h | **NOT STARTED**. Scaffold only (`docs/progress/l2_2/`). Clock not started. **NOT ACCEPTED**. No Interactive schtasks |
 | L2-5/6 | default deny |
 | J-Exp-01 | design only until ACK |
 | summary.jsonl full push | large; host Token/SSH |
+
+## L2-2 scaffold (clock not started)
+
+Offline scorer `scripts/l2_2_score.py`. 72h means monotonic wall **259200s** on the existing `soak_2h.py --via-l1` path. `can_accept_l2_2` and `can_start_clock` stay false. Interactive console scheduled tasks are a founder major gate and are **out of scope**. The Ubuntu-24H metrics file (86400.001s) is not this gate. Product L2 (task split / worker) stays **NOT STARTED**.
 
 ## Stop
 

@@ -1,0 +1,45 @@
+{
+  "capture_schema": "aistudioos-grok.l2-2.capture.v1",
+  "report_schema": "aistudioos-grok.l2-2.report.v1",
+  "wall_required_seconds": 259200,
+  "wall_source_required": "monotonic",
+  "evidence_class": ["scaffold", "host_observation"],
+  "l2_2_status_emitted": ["NOT_STARTED", "INCOMPLETE"],
+  "production_7x24": "NOT_ACCEPTED",
+  "can_accept_l2_2": false,
+  "can_close_l2_2": false,
+  "can_start_clock": false,
+  "supervision_verified_emitted": false,
+  "verified_emitted": false,
+  "business_verdict": "UNSCORED",
+  "product_l2_task_split": "NOT_STARTED",
+  "interactive_registration": "founder_gated_out_of_scope",
+  "allowed_runner_kinds": ["soak_2h_via_l1", "existing_local_loop"],
+  "forbidden_runner_kinds": ["interactive_schtasks", "logon_schtasks", "schtasks_new"],
+  "watch_target": {
+    "soak_2h_via_l1": "soak_summary_live",
+    "existing_local_loop": "runner_glob_live",
+    "forbidden": ["ended_experiment", "stale_summary"]
+  },
+  "coverage_gap": {
+    "yellow_seconds": "13 inclusive through 300 inclusive",
+    "red_seconds": "> 300",
+    "yellow_is_business_fail": false
+  },
+  "l2_4_crosslink": {
+    "status": "INCOMPLETE",
+    "window": "2026-11-03..06",
+    "pr": "https://github.com/shugnn/AIStudioOS-Grok/pull/11",
+    "tip": "931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6"
+  },
+  "notes": [
+    "72h is monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200. cycles x interval is not the wall.",
+    "cycles_exit0 is process success only. It cannot accept the gate.",
+    "Scaffold fixtures are synthetic and dated 2026-02-01. They are not the 2026-11-03..06 incident and not Ubuntu-24H.",
+    "Exit 0 from scripts/l2_2_score.py means an honest NOT_STARTED or INCOMPLETE report, not a gate PASS.",
+    "The scorer never starts the clock and never registers Interactive console scheduled tasks.",
+    "Registering Interactive duty is a founder major gate and is out of scope for the L2-2 scaffold.",
+    "Lighting every informational bar still leaves can_accept_l2_2 false.",
+    "This duty-cycle gate is not the 2026-11-07 product L2 (task split / worker), which stays NOT STARTED."
+  ]
+}

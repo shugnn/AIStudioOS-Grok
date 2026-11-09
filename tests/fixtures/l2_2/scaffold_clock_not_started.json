@@ -1,0 +1,34 @@
+{
+  "schema": "aistudioos-grok.l2-2.capture.v1",
+  "evidence_class": "scaffold",
+  "synthetic": true,
+  "note": "Synthetic fixture dated 2026-02-01. Not a host 72h soak. Not the 2026-11-03..06 incident window. Not Ubuntu-24H.",
+  "captured_utc": "2026-02-01T00:00:00Z",
+  "host": null,
+  "git_sha": null,
+  "clock": {
+    "started": false,
+    "start_utc": null,
+    "end_utc": null
+  },
+  "wall": {
+    "required_seconds": 259200,
+    "elapsed_seconds": null,
+    "max_wall_seconds": null,
+    "source": "unset"
+  },
+  "metrics": null,
+  "summary_rows": [],
+  "supervision": {
+    "r2_declared_before_start": false,
+    "r3_injection_receipt": null,
+    "watch_target": null,
+    "coverage_gaps": []
+  },
+  "runner": {
+    "kind": "none",
+    "interactive": false,
+    "registered_this_run": false,
+    "task_names": []
+  }
+}

@@ -15,7 +15,8 @@
 
 - Ubuntu-24H: wall 86400.001 · final true · with_work 1185/1233
 - R3 before long run
-- L2-4 incomplete (console/WT)
+- L2-4 incomplete (console/WT). Historical 2026-11-03..06 path is exhausted on PR #11 (tip `931758c`)
+- L2-2 72h scaffold only: clock **NOT STARTED**, **NOT ACCEPTED**, no Interactive schtasks (`docs/progress/l2_2/`)
 
 ## ChatGPT (last Grok scan 2026-11-07)
 

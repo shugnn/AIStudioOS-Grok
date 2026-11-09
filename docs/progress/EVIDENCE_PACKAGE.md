@@ -40,6 +40,19 @@ OS scheduler: keep `Get-ScheduledTaskInfo` + ≥3 runner JSON timestamps in Issu
 | `docs/progress/exp03_crash_recovery/` | Crash recovery evidence |
 | `docs/progress/exp04_cancel_stress/` | Cancel + long queue |
 
+## L2-2 72h scaffold (`docs/progress/l2_2/`)
+
+Clock **NOT STARTED**. Gate **NOT ACCEPTED**. No Interactive scheduled task is registered by this package.
+
+| File | Role |
+|------|------|
+| `SCHEMA.json` | Capture/report contract. Wall bar is monotonic **259200s** |
+| `scaffold/report.json` | Score of the not-started fixture. Not host evidence |
+| `scripts/l2_2_score.py` | Offline scorer. Exit 0 is an honest report, not a PASS |
+| `tests/fixtures/l2_2/` | Synthetic **2026-02-01** captures |
+
+`cycles_exit0` and the Ubuntu-24H wall (86400.001s) do not accept this gate. L2-4 host files, when present, stay on PR #11 and are a different gate.
+
 ## Commands
 
 ```powershell

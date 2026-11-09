@@ -35,11 +35,25 @@
 
 | ID | Notes |
 |----|-------|
-| L2-4 | INCOMPLETE (WT correlation + reboot) |
+| L2-4 | **INCOMPLETE** (WT correlation + reboot). In-repo prep 2026-11-09 is **scaffold-verified** only: `scripts/l2_4_correlate.py`, `SCHEMA.json`, synthetic fixtures, read-only `scripts/l2_4_capture_host.ps1` (not executed). No host WT/reboot export. Not a duty-cycle PASS. See `docs/progress/l2_4/README.md`. |
 | L2-2 72h | not started |
 | L2-5/6 | default deny |
 | J-Exp-01 | design only until ACK |
 | summary.jsonl full push | large; host Token/SSH |
+
+## L2-4 prep (2026-11-09)
+
+Scaffold only. The 2026-11-04 Windows Terminal / force-reboot narrative is unchanged and is **not** backed by an event-log file in this repo.
+
+| Piece | Class |
+|-------|--------|
+| Correlator + unit tests | scaffold-verified (synthetic 2026-01-01 fixtures) |
+| Host capture script | written, **not run** (needs the founder Windows host) |
+| Host `capture.json` / reboot log | **absent** |
+
+Reproduce: `PYTHONPATH=. python -m pytest tests/test_l2_4_correlate.py -q`
+
+Production 7×24 remains **NOT ACCEPTED**. Product L2 (task split / worker, founder 2026-11-07) remains **not started**. This row is the older duty-cycle gate only.
 
 ## Stop
 

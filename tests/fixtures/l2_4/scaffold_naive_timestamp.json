@@ -1,0 +1,11 @@
+{
+  "schema": "aistudioos-grok.l2-4.capture.v1",
+  "evidence_class": "scaffold",
+  "synthetic": true,
+  "note": "Invalid on purpose: naive timestamp must be rejected.",
+  "tasks": [],
+  "wt_errors": [
+    {"utc": "2026-01-01T00:00:00", "event_id": 1000, "faulting_application": "WindowsTerminal.exe"}
+  ],
+  "reboots": []
+}

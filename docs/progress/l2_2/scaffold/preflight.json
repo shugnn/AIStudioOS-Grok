@@ -1,0 +1,126 @@
+{
+  "schema": "aistudioos-grok.l2-2.preflight.v1",
+  "report_kind": "offline_preflight",
+  "evidence_class": "scaffold",
+  "label": "scaffold",
+  "l2_2_status": "NOT_STARTED",
+  "clock_state": "NOT_STARTED",
+  "clock_effect": "none",
+  "soak_launched": false,
+  "interactive_tasks_registered": false,
+  "production_7x24": "NOT_ACCEPTED",
+  "product_l2_task_split": "NOT_STARTED",
+  "business_verdict": "UNSCORED",
+  "verified": false,
+  "supervision_verified": false,
+  "gate_result": "NOT_A_GATE",
+  "exit_0_is_gate_pass": false,
+  "not_started_scaffold_intact": true,
+  "operator_note": "Running this preflight is not a start decision. Filling R2_CHECKLIST.md is not a start decision. Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py.",
+  "gates": {
+    "can_accept_l2_2": false,
+    "can_close_l2_2": false,
+    "can_start_clock": false,
+    "close_policy": "This preflight never accepts L2-2, never closes it, and never starts the 72h clock. A check that holds means the not-started scaffold is intact. It is not permission to launch soak_2h.py. Production 7x24 stays NOT ACCEPTED."
+  },
+  "l2_4": {
+    "status": "INCOMPLETE",
+    "window": "2026-11-03..06",
+    "pr": "https://github.com/shugnn/AIStudioOS-Grok/pull/11",
+    "tip": "931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6",
+    "relitigated": false
+  },
+  "checks": {
+    "scaffold_files": {
+      "ok": true,
+      "missing": [],
+      "detail": "present"
+    },
+    "contract": {
+      "ok": true,
+      "preflight_schema": "aistudioos-grok.l2-2.preflight.v1",
+      "wall_required_seconds": 259200,
+      "detail": "contract_refuses_gates"
+    },
+    "soak_flags": {
+      "ok": true,
+      "action": "argparse_only",
+      "executed": false,
+      "via_l1": true,
+      "idle_policy": "reseed",
+      "max_wall_seconds": 259200,
+      "cycles": 5000,
+      "interval": 60,
+      "seed": 300,
+      "detail": "parsed_not_executed"
+    },
+    "r2_checklist": {
+      "ok": true,
+      "present": true,
+      "unfilled": true,
+      "start_decision": "not_given",
+      "detail": "blank_template"
+    },
+    "emergency_stop": {
+      "ok": true,
+      "flag_present": false,
+      "path": "docs/progress/EMERGENCY_STOP",
+      "detail": "absent"
+    },
+    "gap_logger": {
+      "ok": true,
+      "schema": "aistudioos-grok.coverage-gap.v1",
+      "sample_band": "yellow",
+      "sample_timestamp": "2026-02-01T00:00:30Z",
+      "implies_soak_complete": false,
+      "clock_effect": "none",
+      "appended": false,
+      "detail": "sample_not_appended"
+    },
+    "supervision_monitor": {
+      "ok": true,
+      "action": "argparse_only",
+      "wired_to_gap_logger": true,
+      "live_dut_switch_parses": true,
+      "executed": false,
+      "detail": "parsed_not_executed"
+    },
+    "scorer_refuses": {
+      "ok": true,
+      "status": "NOT_STARTED",
+      "gates_false": true,
+      "forged_pass_rejected": true,
+      "forged_clock_rejected": true,
+      "forged_accept_rejected": true,
+      "forged_close_rejected": true,
+      "detail": "refused"
+    }
+  },
+  "failures": [],
+  "documented_soak_argv": [
+    "--cycles",
+    "5000",
+    "--interval",
+    "60",
+    "--via-l1",
+    "--seed",
+    "300",
+    "--idle-policy",
+    "reseed",
+    "--max-wall-seconds",
+    "259200"
+  ],
+  "documented_soak_argv_executed": false,
+  "next_steps": [
+    "This preflight did not start the 72h clock and did not launch soak_2h.py.",
+    "Exit 0 is an honest NOT_STARTED report, not a gate PASS and not permission to start.",
+    "Leave R2_CHECKLIST.md unfilled until a separate explicit start decision. Filling the checklist is not that decision.",
+    "Do not register, create, or enable Interactive console scheduled tasks.",
+    "Leave the 2026-11-03..06 L2-4 reconstruction INCOMPLETE on PR #11. Do not re-capture that window.",
+    "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not."
+  ],
+  "source": {
+    "collector": "scripts/l2_2_preflight.py",
+    "collector_mode": "offline_preflight"
+  }
+}

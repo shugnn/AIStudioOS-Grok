@@ -32,18 +32,22 @@ The committed Ubuntu-24H file `docs/progress/soak_2h/metrics.json` is wall **864
 | `tests/fixtures/l2_2/` | Synthetic captures dated **2026-02-01**. Not host evidence. Not the November incident |
 | `tests/test_l2_2_score.py` | Short wall, exit0-only, full wall still refused, Interactive registration refused, forged PASS rejected |
 | `docs/progress/l2_2/scaffold/report.json` | Score of the not-started fixture. Label `scaffold` |
+| `scripts/l2_2_preflight.py` | Offline readiness check. Emits `NOT_STARTED`. Does not launch soak. `can_start_clock` stays false |
 | `scripts/coverage_gap_log.py` | Append-only yellow/red/ok gap line. Does not start the clock |
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank R2 note that points at the logger |
 
 Reproduce:
 
 ```bash
-PYTHONPATH=. python -m pytest tests/test_l2_2_score.py -q
+PYTHONPATH=. python scripts/l2_2_preflight.py
+PYTHONPATH=. python -m pytest tests/test_l2_2_score.py tests/test_l2_2_preflight.py -q
 PYTHONPATH=. python scripts/l2_2_score.py \
   --capture tests/fixtures/l2_2/scaffold_clock_not_started.json
 ```
 
-Exit 0 means the report is an honest NOT STARTED or INCOMPLETE document. It does **not** mean L2-2 passed and it does **not** start a clock.
+Exit 0 from the preflight means the not-started scaffold still matches this repo: the pieces are present, the documented soak flags parse, `R2_CHECKLIST.md` is still unfilled, `docs/progress/EMERGENCY_STOP` is absent, and the scorer still refuses PASS / start / accept / close. Exit 0 is an honest NOT STARTED report. It does **not** mean L2-2 passed, it does **not** set `can_start_clock`, and it does **not** launch `soak_2h.py`. Running the preflight is not a start decision. Filling the checklist is not a start decision.
+
+Exit 0 from the scorer means the report is an honest NOT STARTED or INCOMPLETE document. It does **not** mean L2-2 passed and it does **not** start a clock.
 
 ## Interactive duty is out of scope
 
@@ -57,7 +61,7 @@ The clock stays **NOT STARTED** until a founder or worker explicitly decides to 
 
 1. Leave L2-4 on PR #11. Do not re-capture 2026-11-03..06 in order to start L2-2.
 2. Do not register Interactive console tasks.
-3. Fill `docs/progress/l2_2/R2_CHECKLIST.md` before any process starts. The logger is `scripts/coverage_gap_log.py` (`band`: ok below 13s, yellow 13s–5min, red above 5min). Use `--live-dut` only for the live watch file. The checklist is not a start decision, and a gap line does not complete the soak.
+3. Fill `docs/progress/l2_2/R2_CHECKLIST.md` before any process starts. The logger is `scripts/coverage_gap_log.py` (`band`: ok below 13s, yellow 13s–5min, red above 5min). Use `--live-dut` only for the live watch file. The checklist is not a start decision, and a gap line does not complete the soak. `scripts/l2_2_preflight.py` can be run at any time before that decision; running it is not the decision.
 4. Only after that explicit start decision, on a host already allowed to run the local soak (the same free `soak_2h.py` path used for the 24h wall, not a new scheduled task):
 
 ```bash

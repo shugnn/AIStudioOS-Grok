@@ -25,6 +25,7 @@ This table is the **duty-cycle** L2. It is not the 2026-11-07 product L2 (task s
 - Scaffold fixtures: `tests/fixtures/l2_2/` (synthetic **2026-02-01**). Not the 2026-11-03..06 incident and not Ubuntu-24H.
 - The scorer does not register scheduled tasks and does not start a clock.
 - `scripts/coverage_gap_log.py` appends ok/yellow/red gap lines. `docs/progress/l2_2/R2_CHECKLIST.md` is the blank R2 note. Neither one starts the 72h clock.
+- `scripts/l2_2_preflight.py` checks that scaffold offline. Exit 0 is a `NOT_STARTED` report. `can_start_clock` stays false. Running it is not a start decision and does not launch the soak.
 
 **Still required before any real clock**
 

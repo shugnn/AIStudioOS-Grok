@@ -270,7 +270,8 @@ def write_metrics(
     return metrics
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Flag surface only. Calling this does not start a soak."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--cycles", type=int, default=120)
     ap.add_argument("--interval", type=int, default=60)
@@ -287,7 +288,11 @@ def main() -> int:
         default=0,
         help="hard stop after this many monotonic seconds (0=disabled). e.g. 86400 for 24h",
     )
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     seed_n = args.seed if args.seed is not None else max(args.cycles, 30)
     log_path = OUT / "soak.log"

@@ -1,6 +1,7 @@
 {
   "capture_schema": "aistudioos-grok.l2-2.capture.v1",
   "report_schema": "aistudioos-grok.l2-2.report.v1",
+  "preflight_schema": "aistudioos-grok.l2-2.preflight.v1",
   "wall_required_seconds": 259200,
   "wall_source_required": "monotonic",
   "evidence_class": ["scaffold", "host_observation"],
@@ -40,6 +41,7 @@
     "cycles_exit0 is process success only. It cannot accept the gate.",
     "Scaffold fixtures are synthetic and dated 2026-02-01. They are not the 2026-11-03..06 incident and not Ubuntu-24H.",
     "Exit 0 from scripts/l2_2_score.py means an honest NOT_STARTED or INCOMPLETE report, not a gate PASS.",
+    "scripts/l2_2_preflight.py is an offline readiness check. Exit 0 is an honest NOT_STARTED report. It does not launch soak_2h.py and does not set can_start_clock. Running it is not a start decision.",
     "The scorer never starts the clock and never registers Interactive console scheduled tasks.",
     "Registering Interactive duty is a founder major gate and is out of scope for the L2-2 scaffold.",
     "Lighting every informational bar still leaves can_accept_l2_2 false.",

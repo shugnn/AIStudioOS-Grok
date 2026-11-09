@@ -39,3 +39,7 @@ PYTHONPATH=. python scripts/coverage_gap_log.py \
 4. Do not register Interactive console tasks.
 5. After a real run, score with `scripts/l2_2_score.py` and expect **INCOMPLETE**.
 6. An R3 receipt is still required before any supervision-verified tag. The observation track accepts or rejects.
+
+## Offline preflight
+
+`python scripts/l2_2_preflight.py` only checks this blank note and the rest of the scaffold. Running it is not a start decision. Filling this file is not a start decision. The 72h clock stays **NOT STARTED** until a separate explicit decision.

@@ -90,7 +90,8 @@ def observe(
     }
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Flag surface only. Calling this does not watch a file or start a soak."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--interval", type=float, default=30.0)
     ap.add_argument("--yellow-seconds", type=float, default=gaplog.YELLOW_MIN_SECONDS)
@@ -105,7 +106,11 @@ def main() -> int:
         help="claim the watch file is the live DUT (does not start a soak)",
     )
     ap.add_argument("--gap-log", type=Path, default=GAP_LOG)
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     PROGRESS.mkdir(parents=True, exist_ok=True)
     source = gaplog.watch_source(runner_glob=args.runner_glob, live_dut=args.live_dut)

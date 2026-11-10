@@ -1,0 +1,145 @@
+{
+  "produced_by": "control_plane.task_decomposer.TaskDecomposer.decompose",
+  "written_after_derivation": true,
+  "read_as_job_source": false,
+  "used_worker_jobs_py": false,
+  "decomposer_fields": {
+    "statement": "为图书馆借阅数据生成「借阅运营汇总 + 逾期清单 + 可独立核验的证据包」。",
+    "schema": {
+      "columns": [
+        {
+          "name": "loan_id"
+        },
+        {
+          "name": "book_id"
+        },
+        {
+          "name": "member_id"
+        },
+        {
+          "name": "borrowed_date"
+        },
+        {
+          "name": "loan_days"
+        },
+        {
+          "name": "returned_date"
+        },
+        {
+          "name": "category"
+        }
+      ]
+    },
+    "reference_date": "2026-10-31"
+  },
+  "ignored_keys": [
+    "observation_card",
+    "source",
+    "task_id"
+  ],
+  "input": {
+    "name": "loans.csv",
+    "sha256": "429b3287c37d07c350926e53bacc0f475f77dabd94dc1eb3bc1f703776ffdf51",
+    "bytes": 165090
+  },
+  "jobs": [
+    {
+      "job_id": "J1",
+      "title": "verify_input_schema_keyed_by_loan_id",
+      "kind": "verify_input_schema",
+      "status": "DONE",
+      "reason": "rule=verify_input_schema; because=evidence; key=loan_id",
+      "inputs": {
+        "key": "loan_id",
+        "columns": [
+          "loan_id",
+          "book_id",
+          "member_id",
+          "borrowed_date",
+          "loan_days",
+          "returned_date",
+          "category"
+        ]
+      },
+      "output": "J1_verify_input_schema.json",
+      "error": null
+    },
+    {
+      "job_id": "J2",
+      "title": "summarize_loan_id_by_category_and_month_of_borrowed_date_top_member_id",
+      "kind": "loan_operations_summary",
+      "status": "DONE",
+      "reason": "rule=loan_operations_summary; because=summary; key=loan_id; member=member_id; time_column=borrowed_date; category=category; duration=loan_days; end=returned_date; reference_date=2026-10-31",
+      "inputs": {
+        "key": "loan_id",
+        "member": "member_id",
+        "time_column": "borrowed_date",
+        "category": "category",
+        "start": "borrowed_date",
+        "end": "returned_date",
+        "duration": "loan_days",
+        "reference_date": "2026-10-31",
+        "top_n": 10,
+        "tie_break": "count_desc_then_id_asc"
+      },
+      "output": "summary.json",
+      "error": null
+    },
+    {
+      "job_id": "J3",
+      "title": "list_overdue_loan_id_from_borrowed_date_plus_loan_days_until_returned_date",
+      "kind": "overdue_list",
+      "status": "DONE",
+      "reason": "rule=overdue_list; because=overdue; key=loan_id; start=borrowed_date; duration=loan_days; end=returned_date; reference_date=2026-10-31; compare=elapsed_days_gt_duration",
+      "inputs": {
+        "key": "loan_id",
+        "start": "borrowed_date",
+        "duration": "loan_days",
+        "end": "returned_date",
+        "reference_date": "2026-10-31"
+      },
+      "output": "overdue.json",
+      "error": null
+    },
+    {
+      "job_id": "J4",
+      "title": "assemble_evidence_pack_over_calendar_date_dimension_duration_identifier",
+      "kind": "evidence_pack",
+      "status": "DONE",
+      "reason": "rule=evidence_pack; because=evidence; roles=calendar_date,dimension,duration,identifier; covers=J1,J2,J3",
+      "inputs": {
+        "roles": [
+          "calendar_date",
+          "dimension",
+          "duration",
+          "identifier"
+        ],
+        "covers": [
+          "J1",
+          "J2",
+          "J3"
+        ]
+      },
+      "output": "J4_evidence_pack.json",
+      "error": null
+    }
+  ],
+  "evidence_pack": {
+    "name": "J4_evidence_pack.json",
+    "sha256": "2334b219270d11ba41d9cffae92fdc1288e6322d46bf95dc1122f45b06480f17",
+    "bytes": 1581
+  },
+  "ok": true,
+  "network": false,
+  "paid": false,
+  "claim_boundary": {
+    "l2_granted": false,
+    "l2_accepted": false,
+    "l2_status": "CONDITIONAL",
+    "production_7x24": "NOT ACCEPTED",
+    "l2_2_72h_clock": "NOT STARTED",
+    "observation_card": false,
+    "t3_run": false,
+    "t1_or_t2_rerun": false
+  }
+}

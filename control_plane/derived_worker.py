@@ -57,6 +57,22 @@ Execution rules (closed, offline, no network, no paid API):
 ``evidence_pack``
     Hash the input and the other job files that were written. Do not hash
     this file, ``derived_dispatch.json``, or ``worklog.json``.
+
+``loan_operations_summary``
+    Count every row. Returned means ``inputs.end`` is non-blank.
+    Outstanding means that cell is blank. Overdue uses the same comparison
+    as ``overdue_list``. ``inputs.category`` and the month of
+    ``inputs.time_column`` count every row. The member ranking is
+    ``inputs.member`` by count descending, then the id ascending, limited
+    to ``inputs.top_n``. The reference date comes from
+    ``inputs.reference_date``. It is not a built-in calendar date.
+
+``overdue_list``
+    A row is overdue when ``inputs.end`` is blank and
+    (``inputs.reference_date`` − ``inputs.start``) in whole days is greater
+    than ``inputs.duration``. Equal to the duration is not overdue. A blank
+    or unparseable start or duration is not overdue. Items are sorted by
+    the key ascending. The reference date is ``inputs.reference_date``.
 """
 
 from __future__ import annotations
@@ -67,12 +83,12 @@ import hashlib
 import io
 import json
 import statistics
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Optional
 
-from control_plane.task_decomposer import get_decomposer
+from control_plane.task_decomposer import get_decomposer, output_name, project_plan
 
 
 CLAIM_BOUNDARY: dict[str, Any] = {
@@ -105,6 +121,7 @@ _DECOMPOSER_KEYS = (
     "goal",
     "schema",
     "columns",
+    "reference_date",
 )
 
 
@@ -162,6 +179,7 @@ def run_goal(goal: dict[str, Any], csv_path: Path, out_dir: Path) -> dict[str, A
         _write_dispatch(out_dir, goal, csv_path, jobs, evidence_name=None)
         steps.append({"step": "write_derived_dispatch"})
         _write_worklog(out_dir, started, steps, ok=False, error="no_jobs_derived")
+        _maybe_write_plan_envelope(out_dir, goal, csv_path, jobs)
         return _result(False, "no_jobs_derived", out_dir, jobs)
 
     if not csv_path.is_file():
@@ -170,6 +188,7 @@ def run_goal(goal: dict[str, Any], csv_path: Path, out_dir: Path) -> dict[str, A
         _write_dispatch(out_dir, goal, csv_path, jobs, evidence_name=None)
         steps.append({"step": "write_derived_dispatch"})
         _write_worklog(out_dir, started, steps, ok=False, error="missing_input")
+        _maybe_write_plan_envelope(out_dir, goal, csv_path, jobs)
         return _result(False, "missing_input", out_dir, jobs)
 
     try:
@@ -180,6 +199,7 @@ def run_goal(goal: dict[str, Any], csv_path: Path, out_dir: Path) -> dict[str, A
         _write_dispatch(out_dir, goal, csv_path, jobs, evidence_name=None)
         steps.append({"step": "write_derived_dispatch"})
         _write_worklog(out_dir, started, steps, ok=False, error="invalid_input_encoding")
+        _maybe_write_plan_envelope(out_dir, goal, csv_path, jobs)
         return _result(False, "invalid_input_encoding", out_dir, jobs)
     except csv.Error as exc:
         for job in jobs:
@@ -187,6 +207,7 @@ def run_goal(goal: dict[str, Any], csv_path: Path, out_dir: Path) -> dict[str, A
         _write_dispatch(out_dir, goal, csv_path, jobs, evidence_name=None)
         steps.append({"step": "write_derived_dispatch"})
         _write_worklog(out_dir, started, steps, ok=False, error="invalid_csv")
+        _maybe_write_plan_envelope(out_dir, goal, csv_path, jobs)
         return _result(False, "invalid_csv", out_dir, jobs)
 
     evidence_name = _execute(jobs, header, rows, csv_path, out_dir, steps)
@@ -195,6 +216,7 @@ def run_goal(goal: dict[str, Any], csv_path: Path, out_dir: Path) -> dict[str, A
     ok = all(job.get("status") == "DONE" for job in jobs)
     error = None if ok else "job_failed"
     _write_worklog(out_dir, started, steps, ok=ok, error=error)
+    _maybe_write_plan_envelope(out_dir, goal, csv_path, jobs)
     return _result(ok, error, out_dir, jobs)
 
 
@@ -241,7 +263,7 @@ def _execute(
             if kind == "verify_input_schema" and status != "DONE":
                 blocked = True
             continue
-        name = f"{job.get('job_id') or 'job'}_{kind}.json"
+        name = output_name(job)
         _write_json(out_dir / name, payload)
         written[name] = out_dir / name
         _mark(job, status, output=name, error=error)
@@ -251,7 +273,7 @@ def _execute(
 
     if evidence_job is None:
         return None
-    name = f"{evidence_job.get('job_id') or 'job'}_evidence_pack.json"
+    name = output_name(evidence_job)
     payload = _evidence_payload(evidence_job, jobs, csv_path, written, name)
     _write_json(out_dir / name, payload)
     _mark(evidence_job, "DONE", output=name, error=None)
@@ -694,12 +716,145 @@ def _evidence_payload(
     }
 
 
+def _loan_summary(
+    job: dict[str, Any],
+    inputs: dict[str, Any],
+    header: list[str],
+    rows: list[dict[str, str]],
+    csv_path: Path,
+    key: Optional[str],
+) -> tuple[Optional[dict[str, Any]], str, Optional[str]]:
+    del csv_path, key
+    needed_keys = (
+        "key", "member", "time_column", "category", "start", "end", "duration", "reference_date",
+    )
+    del job
+    if any(not isinstance(inputs.get(name), str) or not inputs.get(name) for name in needed_keys):
+        return None, "FAILED", "invalid_inputs"
+    top_n = inputs.get("top_n")
+    if not isinstance(top_n, int) or isinstance(top_n, bool) or top_n < 1:
+        return None, "FAILED", "invalid_inputs"
+    if inputs.get("tie_break") != "count_desc_then_id_asc":
+        return None, "FAILED", "invalid_inputs"
+    try:
+        reference = date.fromisoformat(inputs["reference_date"])
+    except ValueError:
+        return None, "FAILED", "invalid_reference_date"
+    columns = [inputs[name] for name in ("member", "time_column", "category", "start", "end", "duration")]
+    missing = [name for name in columns if name not in header]
+    if missing:
+        return None, "FAILED", "missing_column:" + ",".join(missing)
+
+    total = 0
+    returned = 0
+    overdue = 0
+    by_category: dict[str, int] = {}
+    by_month: dict[str, int] = {}
+    members: dict[str, int] = {}
+    for row in rows:
+        total += 1
+        if row.get(inputs["end"], "").strip():
+            returned += 1
+        elif _row_is_overdue(row, inputs["start"], inputs["duration"], reference):
+            overdue += 1
+        category = row.get(inputs["category"], "")
+        by_category[category] = by_category.get(category, 0) + 1
+        borrowed = _parse_date(row.get(inputs["time_column"], ""))
+        if borrowed is not None:
+            month = f"{borrowed.year:04d}-{borrowed.month:02d}"
+            by_month[month] = by_month.get(month, 0) + 1
+        member = row.get(inputs["member"], "")
+        members[member] = members.get(member, 0) + 1
+    ranked = sorted(members.items(), key=lambda item: (-item[1], item[0]))[:top_n]
+    member_field = inputs["member"]
+    payload = {
+        "total_loans": total,
+        "total_returned": returned,
+        "total_outstanding": total - returned,
+        "total_overdue": overdue,
+        "by_category": {name: by_category[name] for name in sorted(by_category)},
+        "by_month": {name: by_month[name] for name in sorted(by_month)},
+        "top10_members": [
+            {member_field: member_id, "loans": count}
+            for member_id, count in ranked
+        ],
+    }
+    return payload, "DONE", None
+
+
+def _overdue(
+    job: dict[str, Any],
+    inputs: dict[str, Any],
+    header: list[str],
+    rows: list[dict[str, str]],
+    csv_path: Path,
+    key: Optional[str],
+) -> tuple[Optional[dict[str, Any]], str, Optional[str]]:
+    del job, csv_path, key
+    for name in ("key", "start", "duration", "end", "reference_date"):
+        if not isinstance(inputs.get(name), str) or not inputs.get(name):
+            return None, "FAILED", "invalid_inputs"
+    try:
+        reference = date.fromisoformat(inputs["reference_date"])
+    except ValueError:
+        return None, "FAILED", "invalid_reference_date"
+    missing = [
+        name for name in (inputs["key"], inputs["start"], inputs["duration"], inputs["end"])
+        if name not in header
+    ]
+    if missing:
+        return None, "FAILED", "missing_column:" + ",".join(missing)
+    key_name = inputs["key"]
+    values = []
+    for row in rows:
+        if row.get(inputs["end"], "").strip():
+            continue
+        if not _row_is_overdue(row, inputs["start"], inputs["duration"], reference):
+            continue
+        values.append(_json_key(row.get(key_name, "")))
+    values.sort(key=_sort_key)
+    return {"items": [{key_name: value} for value in values]}, "DONE", None
+
+
+def _row_is_overdue(row: dict[str, str], start: str, duration: str, reference: date) -> bool:
+    borrowed = _parse_date(row.get(start, ""))
+    days = _parse_decimal(row.get(duration, ""))
+    if borrowed is None or days is None:
+        return False
+    return Decimal((reference - borrowed).days) > days
+
+
+def _parse_date(value: str) -> Optional[date]:
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _json_key(raw: str) -> Any:
+    text = raw.strip()
+    if text.isdigit():
+        return int(text)
+    return text
+
+
+def _sort_key(value: Any) -> tuple:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return (0, value)
+    return (1, str(value))
+
+
 _HANDLERS = {
     "verify_input_schema": _verify,
     "temporal_aggregate": _aggregate,
     "anomaly_list": _anomalies,
     "sla_breach_list": _sla,
     "backlog_aging": _aging,
+    "loan_operations_summary": _loan_summary,
+    "overdue_list": _overdue,
 }
 
 
@@ -765,6 +920,192 @@ def _write_worklog(
         "claim_boundary": dict(CLAIM_BOUNDARY),
     }
     _write_json(out_dir / "worklog.json", payload)
+
+
+def _maybe_write_plan_envelope(
+    out_dir: Path,
+    goal: dict[str, Any],
+    csv_path: Path,
+    jobs: list[dict[str, Any]],
+) -> None:
+    """Write plan.json, report.md, and manifest.json for a loan-shaped run.
+
+    The trigger is the derived job kinds, not a task id. ``plan.json`` is a
+    projection of the jobs ``decompose`` already returned. The manifest
+    copies ``task_id`` onto the record when the goal carries one. It does
+    not use that id to choose jobs. ``worklog.json`` is left out of the
+    manifest because its clock changes between runs.
+    """
+    kinds = {job.get("kind") for job in jobs}
+    if not ({"loan_operations_summary", "overdue_list"} & kinds):
+        return
+    plan = project_plan(goal, jobs, Path(csv_path).name)
+    for task, job in zip(plan["derived_tasks"], jobs):
+        if job.get("kind") == "evidence_pack" and job.get("status") == "DONE":
+            task["outputs"] = list(task["outputs"]) + ["report.md", "manifest.json"]
+    _write_json(out_dir / "plan.json", plan)
+    report = _render_report(goal, jobs, plan, csv_path, out_dir)
+    (out_dir / "report.md").write_text(report, encoding="utf-8")
+    files: dict[str, Any] = {}
+    for path in sorted(out_dir.iterdir()):
+        if not path.is_file() or path.name in {"manifest.json", "worklog.json"}:
+            continue
+        files[path.name] = _file_meta(path)
+    task_id = goal.get("task_id") if isinstance(goal.get("task_id"), str) else None
+    input_meta: dict[str, Any] = {"name": Path(csv_path).name}
+    if csv_path.is_file():
+        try:
+            input_meta.update(_file_meta(csv_path))
+            text = csv_path.read_text(encoding="utf-8")
+            input_meta["lines"] = len(text.splitlines())
+        except (OSError, UnicodeError):
+            input_meta["unreadable"] = True
+    payload = {
+        "task_id": task_id,
+        "goal": plan["goal"],
+        "input": input_meta,
+        "deliverables": files,
+        "derivation": {
+            "produced_by": "control_plane.task_decomposer.TaskDecomposer.decompose",
+            "plan_projected_from_decompose": True,
+            "read_as_job_source": False,
+            "used_preauthored_dispatch": False,
+            "used_worker_jobs_py": False,
+        },
+        "submission": {
+            "submitted_for_observation": goal.get("observation_card") is True,
+            "observation_track_acceptance": False,
+            "l2_granted": False,
+            "l2_accepted": False,
+            "l2_status": "CONDITIONAL",
+            "production_7x24": "NOT ACCEPTED",
+            "l2_2_72h_clock": "NOT STARTED",
+            "comment_6761044915_is_not_a_start": True,
+        },
+        "network": False,
+        "paid": False,
+        "claim_boundary": dict(CLAIM_BOUNDARY),
+    }
+    _write_json(out_dir / "manifest.json", payload)
+
+
+def _render_report(
+    goal: dict[str, Any],
+    jobs: list[dict[str, Any]],
+    plan: dict[str, Any],
+    csv_path: Path,
+    out_dir: Path,
+) -> str:
+    task_id = goal.get("task_id") if isinstance(goal.get("task_id"), str) else "(none)"
+    if goal.get("observation_card") is True:
+        opening = (
+            f"`{task_id}` is submitted for observation-track acceptance. "
+            "This is a T3 run submitted for observation-track acceptance. "
+            "Observation-track acceptance is not claimed. "
+            "claim_boundary.t3_run stays false on every run, including this one. "
+            "That constant does not grant or accept the submission."
+        )
+    else:
+        opening = (
+            "This run is not an observation card. "
+            "Observation-track acceptance is not claimed."
+        )
+    summary_path = out_dir / "summary.json"
+    overdue_path = out_dir / "overdue.json"
+    summary = _read_json_if_present(summary_path)
+    overdue = _read_json_if_present(overdue_path)
+    input_line = "Input file was not readable."
+    if csv_path.is_file():
+        try:
+            meta = _file_meta(csv_path)
+            line_count = len(csv_path.read_text(encoding="utf-8").splitlines())
+            input_line = (
+                f"Input `{csv_path.name}` sha256 `{meta['sha256']}`, "
+                f"{meta['bytes']} bytes, {line_count} lines."
+            )
+        except (OSError, UnicodeError):
+            input_line = f"Input `{csv_path.name}` could not be read."
+    lines = [
+        f"# {task_id}",
+        "",
+        opening,
+        "",
+        "L2 is not granted and not accepted.",
+        "",
+        "Production 7×24 is NOT ACCEPTED.",
+        "",
+        "The L2-2 72h clock is NOT STARTED. Comment 6761044915 is not a start.",
+        "",
+        "## Goal",
+        "",
+        str(plan.get("goal") or ""),
+        "",
+        "## Why this split",
+        "",
+        str(plan.get("why") or ""),
+        "",
+        "## Alternatives considered",
+        "",
+    ]
+    for item in plan.get("alternatives_considered") or []:
+        lines.append(f"- {item}")
+    lines.extend(["", "## Derived tasks", ""])
+    for task in plan.get("derived_tasks") or []:
+        lines.append(
+            f"- `{task.get('task_id')}` {task.get('purpose')} "
+            f"outputs: {', '.join(task.get('outputs') or []) or '(none)'}."
+        )
+    lines.extend([
+        "",
+        "## Rules used for the numbers",
+        "",
+        "A loan is returned when the return-date cell is non-blank. Outstanding means that cell is blank. A populated return date is not reinterpreted against the reference date.",
+        "",
+        "Overdue means outstanding and (reference date − borrowed date) in whole days is greater than loan days. Equal to the loan days is not overdue. The reference date is the `reference_date` on the derived job, not a date built into the executor.",
+        "",
+        "Category counts and month counts include every loan. The month is the borrow date's `YYYY-MM`. The top members are ranked by loan count descending, then member id ascending.",
+        "",
+        "## Results",
+        "",
+    ])
+    if isinstance(summary, dict):
+        lines.append(f"- total_loans: {summary.get('total_loans')}")
+        lines.append(f"- total_returned: {summary.get('total_returned')}")
+        lines.append(f"- total_outstanding: {summary.get('total_outstanding')}")
+        lines.append(f"- total_overdue: {summary.get('total_overdue')}")
+        lines.append(f"- by_category: {json.dumps(summary.get('by_category'), ensure_ascii=False)}")
+        lines.append(f"- by_month: {json.dumps(summary.get('by_month'), ensure_ascii=False)}")
+        lines.append(f"- top10_members: {json.dumps(summary.get('top10_members'), ensure_ascii=False)}")
+    else:
+        lines.append("summary.json was not written.")
+    if isinstance(overdue, dict) and isinstance(overdue.get("items"), list):
+        lines.append(f"- overdue items: {len(overdue['items'])}")
+    else:
+        lines.append("overdue.json was not written.")
+    lines.extend([
+        "",
+        "## Input",
+        "",
+        input_line,
+        "",
+        "## Derivation",
+        "",
+        "Jobs were produced by `TaskDecomposer.decompose()`. `plan.json` is a projection of those jobs. `derived_dispatch.json` was written after derivation and was not read as an input. No pre-written `dispatch.json` was read. `worker_jobs.py` was not imported.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def _read_json_if_present(path: Path) -> Optional[dict[str, Any]]:
+    if not path.is_file():
+        return None
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    return loaded
 
 
 def _key_column(jobs: list[dict[str, Any]]) -> Optional[str]:

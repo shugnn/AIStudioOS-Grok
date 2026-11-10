@@ -98,7 +98,7 @@ Same rules, inputs crossed. This is the check that the two results are not two s
 
 ## Limits, stated plainly
 
-- The intent list is a closed ASCII vocabulary. A Chinese-only statement such as 「月度经营汇总、异常清单和证据包」tokenizes to nothing and returns `[]`. That is fail-closed, not a successful parse of the Chinese goal.
+- At the time this evidence was first recorded, the intent list was ASCII-only. A Chinese-only statement such as 「月度经营汇总、异常清单和证据包」returned `[]`. A later extension maps a closed set of Chinese phrases onto the same intents and can emit a loan-count summary and an overdue list when the columns support them. A Chinese sentence with none of those phrases still returns `[]`. Case A and Case B above are unchanged. That extension does not grant L2.
 - `state` is classified as status. A geographic `state` column would be treated as a status. Case A uses `status`, not `state`.
 - Unknown numeric measures need a declared type (`weight` as `float` becomes a measure). An unknown categorical such as `tier` stays a dimension; `by tier` still works for an SLA group because the group is the named column, not a row in a fixture table.
 - These jobs are proposals (`status: PENDING`). Nothing here computed a summary, an SLA list, or an evidence pack.

@@ -1,6 +1,8 @@
 # Derive, then execute
 
-This note is the product path that sits after the Case A / Case B derivation evidence in [`l2-derivation-evidence.md`](l2-derivation-evidence.md). Those evidence files are unchanged. Observation-track comment 6767990189 on Issue #9 accepted that derivation as the right capability and left L2 (self-decompose / self-implement) CONDITIONAL, pending one later end-to-end observation. This repository does not contain that observation card. This run is not that card.
+This note is the product path that sits after the Case A / Case B derivation evidence in [`l2-derivation-evidence.md`](l2-derivation-evidence.md). Observation-track comment 6767990189 on Issue #9 accepted that derivation as the right capability and left L2 (self-decompose / self-implement) CONDITIONAL, pending one later end-to-end observation.
+
+`task_inbox/DS-T3-20261111/` is that later card, received from Issue #9 comment 6775337980. The goal and the generated `loans.csv` are the card. There is no `dispatch.json` in that folder. This is a T3 run submitted for observation-track acceptance. Observation-track acceptance is not claimed.
 
 **L2 remains CONDITIONAL. It is not granted and not accepted.**
 
@@ -8,11 +10,11 @@ This note is the product path that sits after the Case A / Case B derivation evi
 
 **The L2-2 72h clock is NOT STARTED.** Comment 6761044915 is not a start.
 
-This is not a T3 run. T1 (`DS-T1-20261108`) and T2 (`DS-T2-20261110`) were not rerun. Their dispatch files and deliverables were not rewritten. No `task_inbox/DS-T3-*` card was added.
+T1 (`DS-T1-20261108`) and T2 (`DS-T2-20261110`) were not rerun. Their files were not rewritten.
 
 ## What the worker does
 
-`scripts/worker_run_task.py` reads a goal statement, a column schema, and an input CSV. It calls `TaskDecomposer.decompose()`. That call still ignores task id and fixture name. The derived jobs are executed from each job's `kind` and structured `inputs` (key, columns, grain, measures, time column, SLA start/end, aging open/close). Titles are not a dispatch table.
+`scripts/worker_run_task.py` reads a goal statement, a column schema, and an input CSV. It calls `TaskDecomposer.decompose()`. That call still ignores task id and fixture name. ASCII tokens and a closed set of Chinese phrases (汇总, 逾期, 证据包, 月度, 异常, and the other phrases in the decomposer) map onto the same intents. The derived jobs are executed from each job's `kind` and structured `inputs` (key, columns, grain, measures, time column, SLA start/end, aging open/close, and, for a loan-shaped schema, the borrow date, duration, return date, category, and member columns). Titles are not a dispatch table. A reference date on the goal is copied into those loan jobs. It is not hard-coded, and it does not select the task id.
 
 The derived job list is written to `derived_dispatch.json` in the output directory after derivation. That file is a product output. The runner does not read it, and it does not read a pre-written `dispatch.json`, to decide which jobs to run. It does not import `worker_jobs.py`.
 
@@ -44,6 +46,10 @@ The closed rules live in `control_plane/derived_worker.py`. Short form:
 | `sla_breach_list` | No duration threshold. First match on `inputs.start` / `inputs.end`: missing or bad start, missing end, bad end, or end before start. Counts use `inputs.group_by`. |
 | `backlog_aging` | `as_of` is the latest parsed timestamp in `inputs.open` and `inputs.close`, not the wall clock. Blank close stays open and is aged to `as_of`. Buckets use `inputs.grain` of the open time. |
 | `evidence_pack` | Hash the input and the other job files named by the run. The pack does not hash itself, `derived_dispatch.json`, or `worklog.json`. |
+| `loan_operations_summary` | Fires when the statement asks for a summary and the schema has a duration (`*_days`), two calendar dates, a category dimension, and a second identifier. Counts every row. Returned means the return-date cell is non-blank. Overdue uses the overdue rule below. Category and borrow-month counts include every row. Members are ranked by count, then id, limited to `top_n`. Writes `summary.json`. |
+| `overdue_list` | Fires when the statement asks for overdue and the schema has a duration, two calendar dates, and an identifier. A row is included when the return date is blank and (reference date − start date) in days is greater than the duration. Writes `overdue.json`. |
+
+When either loan job is derived, the runner also writes `plan.json`, `report.md`, and `manifest.json`. `plan.json` is a projection of the jobs `decompose()` returned (`why` and `alternatives_considered` come from which rules fired). It is not a second job list. `manifest.json` copies `task_id` from the goal for traceability. That copy does not choose jobs.
 
 A failed `verify_input_schema` does not run the later analytical jobs. The derived list is still written, with those jobs marked skipped. The evidence pack still records what was written.
 

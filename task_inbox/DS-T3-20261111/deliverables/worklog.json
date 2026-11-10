@@ -1,0 +1,62 @@
+{
+  "worker": "scripts/worker_run_task.py",
+  "path": "derive_then_execute",
+  "started_utc": "2026-11-10T18:43:07Z",
+  "finished_utc": "2026-11-10T18:43:07Z",
+  "decomposer": "control_plane.task_decomposer.TaskDecomposer.decompose",
+  "used_preauthored_dispatch": false,
+  "used_worker_jobs_py": false,
+  "ok": true,
+  "error": null,
+  "steps": [
+    {
+      "step": "decompose",
+      "job_count": 4,
+      "kinds": [
+        "verify_input_schema",
+        "loan_operations_summary",
+        "overdue_list",
+        "evidence_pack"
+      ]
+    },
+    {
+      "step": "execute",
+      "job_id": "J1",
+      "kind": "verify_input_schema",
+      "status": "DONE"
+    },
+    {
+      "step": "execute",
+      "job_id": "J2",
+      "kind": "loan_operations_summary",
+      "status": "DONE"
+    },
+    {
+      "step": "execute",
+      "job_id": "J3",
+      "kind": "overdue_list",
+      "status": "DONE"
+    },
+    {
+      "step": "execute",
+      "job_id": "J4",
+      "kind": "evidence_pack",
+      "status": "DONE"
+    },
+    {
+      "step": "write_derived_dispatch"
+    }
+  ],
+  "network": false,
+  "paid": false,
+  "claim_boundary": {
+    "l2_granted": false,
+    "l2_accepted": false,
+    "l2_status": "CONDITIONAL",
+    "production_7x24": "NOT ACCEPTED",
+    "l2_2_72h_clock": "NOT STARTED",
+    "observation_card": false,
+    "t3_run": false,
+    "t1_or_t2_rerun": false
+  }
+}

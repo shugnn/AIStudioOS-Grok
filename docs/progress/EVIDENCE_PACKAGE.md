@@ -53,6 +53,7 @@ Clock **NOT STARTED**. L2-2 gate **NOT ACCEPTED**. Production 7×24 **NOT ACCEPT
 | `SHA256SUMS.json` | SHA-256 binding written by `scripts/evidence_sha256sums.py` (`--glob "**/*"`). Not a PASS |
 | `scripts/l2_2_score.py` | Offline scorer. Exit 0 is an honest report, not a PASS |
 | `scripts/l2_2_preflight.py` | Offline readiness check. Exit 0 is `NOT_STARTED`, not a gate PASS and not a start |
+| `scripts/health_check.py` | Re-runs that preflight and scores the not-started fixture. Exit 0 is `overall_ok`, not a start and not acceptance. Its pytest step is the unit suite, not L2-2 acceptance |
 | `tests/fixtures/l2_2/` | Synthetic **2026-02-01** captures |
 | `scripts/coverage_gap_log.py` | Runtime gap lines only. A line is not soak completeness |
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank pre-start note. Clock stays **NOT STARTED** |

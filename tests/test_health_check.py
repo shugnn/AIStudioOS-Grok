@@ -1,0 +1,339 @@
+"""health_check L2-2 section. Exit 0 is not a start and not acceptance."""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import health_check as hc  # noqa: E402
+import l2_2_preflight as pre  # noqa: E402
+import l2_2_score as l2  # noqa: E402
+
+CHECKLIST = ROOT / "docs" / "progress" / "l2_2" / "R2_CHECKLIST.md"
+PREFLIGHT_JSON = ROOT / "docs" / "progress" / "l2_2" / "scaffold" / "preflight.json"
+STOP = ROOT / "docs" / "progress" / "EMERGENCY_STOP"
+NOT_STARTED = ROOT / "tests" / "fixtures" / "l2_2" / "scaffold_clock_not_started.json"
+WALL_SHORT = ROOT / "tests" / "fixtures" / "l2_2" / "scaffold_wall_short.json"
+
+GATE_KEYS = ("can_start_clock", "can_accept_l2_2", "can_close_l2_2")
+
+
+def _honest() -> tuple[dict, dict, str]:
+    preflight_report = pre.preflight()
+    scored = l2.score(l2.load_capture(NOT_STARTED))
+    return preflight_report, scored, CHECKLIST.read_text(encoding="utf-8")
+
+
+def _assess(preflight_report: dict, scored: dict, r2_text: str, **kwargs) -> dict:
+    return hc.assess_l2_2_offline(
+        preflight_report,
+        scored,
+        r2_text=r2_text,
+        preflight_exit=kwargs.get("preflight_exit", 0),
+        score_exit=kwargs.get("score_exit", 0),
+    )
+
+
+def _assert_gates_closed(result: dict) -> None:
+    assert result["soak_launched"] is False
+    assert result["production_7x24"] == "NOT_ACCEPTED"
+    assert result["can_start_clock"] is False
+    assert result["can_accept_l2_2"] is False
+    assert result["can_close_l2_2"] is False
+    assert result["gate_result"] == "NOT_A_GATE"
+    assert result["exit_0_is_gate_pass"] is False
+    assert result["pytest_is_l2_2_acceptance"] is False
+    text = json.dumps({key: result[key] for key in GATE_KEYS})
+    assert "true" not in text
+
+
+def test_healthy_not_started_scaffold_keeps_gates_false():
+    preflight_report, scored, r2_text = _honest()
+    assert preflight_report["l2_2_status"] == "NOT_STARTED"
+    assert scored["l2_2_status"] == "NOT_STARTED"
+    assert scored["clock_state"] == "NOT_STARTED"
+    result = _assess(preflight_report, scored, r2_text)
+    assert result["ok"] is True
+    assert result["violations"] == []
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["clock_state"] == "NOT_STARTED"
+    assert result["r2_unfilled"] is True
+    _assert_gates_closed(result)
+
+
+def test_subprocess_preflight_and_score_stay_not_started():
+    before = {
+        CHECKLIST: CHECKLIST.read_bytes(),
+        PREFLIGHT_JSON: PREFLIGHT_JSON.read_bytes(),
+        STOP: STOP.read_bytes() if STOP.exists() else None,
+    }
+    assert before[STOP] is None
+    result = hc.run_l2_2_assessment()
+    assert result["ok"] is True, result["violations"]
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["clock_state"] == "NOT_STARTED"
+    assert result["r2_unfilled"] is True
+    _assert_gates_closed(result)
+    after = {
+        CHECKLIST: CHECKLIST.read_bytes(),
+        PREFLIGHT_JSON: PREFLIGHT_JSON.read_bytes(),
+        STOP: STOP.read_bytes() if STOP.exists() else None,
+    }
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    ("target", "key", "value", "needle"),
+    [
+        ("preflight", "l2_2_status", "PASS", "forged_pass"),
+        ("preflight", "clock_state", "STARTED", "forged_clock_start"),
+        ("preflight", "soak_launched", True, "soak_launched"),
+        ("preflight", "production_7x24", "ACCEPTED", "forged_production_accepted"),
+        ("preflight", "exit_0_is_gate_pass", True, "forged_pass"),
+        ("preflight", "gate:can_start_clock", True, "forged_can_start_clock"),
+        ("preflight", "gate:can_accept_l2_2", True, "forged_can_accept_l2_2"),
+        ("preflight", "gate:can_close_l2_2", True, "forged_can_close_l2_2"),
+        ("score", "l2_2_status", "PASS", "forged_pass"),
+        ("score", "clock_state", "STARTED", "forged_clock_start"),
+        ("score", "production_7x24", "ACCEPTED", "forged_production_accepted"),
+        ("score", "gate:can_start_clock", True, "forged_can_start_clock"),
+        ("score", "gate:can_accept_l2_2", True, "forged_can_accept_l2_2"),
+        ("score", "gate:can_close_l2_2", True, "forged_can_close_l2_2"),
+    ],
+)
+def test_forged_start_pass_accept_close_are_refused(target, key, value, needle):
+    preflight_report, scored, r2_text = _honest()
+    before = CHECKLIST.read_bytes()
+    forged_pre = json.loads(json.dumps(preflight_report))
+    forged_score = json.loads(json.dumps(scored))
+    chosen = forged_pre if target == "preflight" else forged_score
+    if key.startswith("gate:"):
+        chosen["gates"][key.split(":", 1)[1]] = value
+    else:
+        chosen[key] = value
+    result = _assess(forged_pre, forged_score, r2_text)
+    assert result["ok"] is False
+    assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    _assert_gates_closed(result)
+    assert CHECKLIST.read_bytes() == before
+    assert "**Not given**" in CHECKLIST.read_text(encoding="utf-8")
+
+
+def test_nested_pass_accepted_and_start_are_refused():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    forged["extra"] = {
+        "l2_2_status": "PASS",
+        "production_7x24": "ACCEPTED",
+        "can_start_clock": True,
+        "clock_state": "STARTED",
+    }
+    result = _assess(forged, scored, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "forged_pass",
+        "forged_production_accepted",
+        "forged_can_start_clock",
+        "forged_clock_start",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    _assert_gates_closed(result)
+
+
+def test_scorer_exit_0_on_started_fixture_is_not_acceptance():
+    preflight_report, _, r2_text = _honest()
+    started = l2.score(l2.load_capture(WALL_SHORT))
+    assert started["l2_2_status"] == "INCOMPLETE"
+    assert started["clock_state"] != "NOT_STARTED"
+    assert l2.validate_report(started) == []
+    result = _assess(preflight_report, started, r2_text, score_exit=0)
+    assert result["ok"] is False
+    assert "forged_clock_start" in result["violations"]
+    assert "l2_2_status" in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    _assert_gates_closed(result)
+
+
+def test_filled_checklist_text_is_refused_and_disk_stays_blank():
+    preflight_report, scored, r2_text = _honest()
+    before = CHECKLIST.read_bytes()
+    filled = r2_text.replace("**Not given**", "**Ada 2026-02-01T00:00:00Z**", 1)
+    result = _assess(preflight_report, scored, filled)
+    assert result["ok"] is False
+    assert result["r2_unfilled"] is False
+    assert "r2_checklist_not_blank" in result["violations"]
+    assert "r2_disagrees" in result["violations"]
+    _assert_gates_closed(result)
+    assert CHECKLIST.read_bytes() == before
+    assert "The copy in git is unfilled." in CHECKLIST.read_text(encoding="utf-8")
+
+
+def test_commands_score_the_not_started_fixture_and_do_not_launch_soak():
+    commands = hc.l2_2_commands()
+    assert len(commands) == 2
+    assert commands[0][1].endswith("l2_2_preflight.py")
+    assert commands[1][1].endswith("l2_2_score.py")
+    assert commands[1][2] == "--capture"
+    assert commands[1][3].endswith("tests/fixtures/l2_2/scaffold_clock_not_started.json")
+    blob = " ".join(" ".join(cmd) for cmd in commands)
+    assert "soak_2h" not in blob
+    assert "schtasks" not in blob
+    pytest_cmd = hc.pytest_command()
+    assert pytest_cmd[1:4] == ["-m", "pytest", "tests/"]
+    assert pytest_cmd[4] == "-q"
+    assert "soak_2h" not in " ".join(pytest_cmd)
+
+
+def test_source_keeps_existing_steps_and_does_not_register_tasks():
+    text = (ROOT / "scripts" / "health_check.py").read_text(encoding="utf-8")
+    main = text.split("def main", 1)[1]
+    order = [
+        '"emergency_stop"',
+        '"import_control_plane"',
+        '"l1_dry_protocol"',
+        '"seed_one"',
+        '"l1_auto_loop_once"',
+        "l2_2_offline_step()",
+        "run_pytest_step()",
+    ]
+    indexes = [main.index(token) for token in order]
+    assert indexes == sorted(indexes)
+    assert 'step(\n        "l2_2_offline"' in text
+    assert 'step("pytest_suite"' in text
+    assert "soak_2h.main" not in text
+    assert "schtasks" not in text
+    assert "Register-ScheduledTask" not in text
+    assert "Enable-ScheduledTask" not in text
+
+
+def test_interpreter_prefers_the_running_executable(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(hc.sys, "executable", sys.executable)
+    assert hc.interpreter() == sys.executable
+
+
+def test_interpreter_falls_back_to_python3(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(hc.sys, "executable", "")
+
+    def which(name: str) -> str | None:
+        return "/usr/bin/python3" if name == "python3" else None
+
+    monkeypatch.setattr(hc.shutil, "which", which)
+    assert hc.interpreter() == "/usr/bin/python3"
+
+
+def test_pytest_step_is_not_acceptance(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("HEALTH_CHECK_SKIP_PYTEST", raising=False)
+    seen: dict[str, list[str]] = {}
+
+    def fake_run(cmd, **_kwargs):
+        seen["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="12 passed in 0.01s\n", stderr="")
+
+    monkeypatch.setattr(hc.subprocess, "run", fake_run)
+    row = hc.run_pytest_step()
+    assert seen["cmd"][1:5] == ["-m", "pytest", "tests/", "-q"]
+    assert "soak_2h" not in " ".join(seen["cmd"])
+    assert row["ok"] is True
+    assert row["step"] == "pytest_suite"
+    assert row["is_l2_2_acceptance"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["soak_launched"] is False
+    assert row["exit_0_is_gate_pass"] is False
+    assert "unit_suite_not_l2_2_acceptance" in row["detail"]
+
+
+def test_pytest_failure_does_not_open_gates(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("HEALTH_CHECK_SKIP_PYTEST", raising=False)
+
+    def fake_run(cmd, **_kwargs):
+        return subprocess.CompletedProcess(cmd, 1, stdout="1 failed\n", stderr="")
+
+    monkeypatch.setattr(hc.subprocess, "run", fake_run)
+    row = hc.run_pytest_step()
+    assert row["ok"] is False
+    assert row["is_l2_2_acceptance"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+
+
+def test_pytest_step_skips_reentry(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_health_check.py::test (call)")
+
+    def fake_run(*_args, **_kwargs):
+        raise AssertionError("pytest must not re-enter from inside pytest")
+
+    monkeypatch.setattr(hc.subprocess, "run", fake_run)
+    row = hc.run_pytest_step()
+    assert row["ok"] is True
+    assert row["is_l2_2_acceptance"] is False
+    assert "not_an_acceptance" in row["detail"]
+
+
+def test_summary_never_grants_gates():
+    healthy = {
+        "step": "l2_2_offline",
+        "ok": True,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "r2_unfilled": True,
+        "can_start_clock": False,
+    }
+    summary = hc.summarize([healthy], True)
+    assert summary["overall_ok"] is True
+    assert summary["l2_2_status"] == "NOT_STARTED"
+    assert summary["clock_state"] == "NOT_STARTED"
+    assert summary["l2_2_checked"] is True
+    assert summary["r2_unfilled"] is True
+    assert summary["soak_launched"] is False
+    assert summary["production_7x24"] == "NOT_ACCEPTED"
+    assert summary["can_start_clock"] is False
+    assert summary["can_accept_l2_2"] is False
+    assert summary["can_close_l2_2"] is False
+    assert summary["gate_result"] == "NOT_A_GATE"
+    assert summary["exit_0_is_gate_pass"] is False
+    assert summary["pytest_is_l2_2_acceptance"] is False
+
+    forged = {
+        "step": "l2_2_offline",
+        "ok": False,
+        "l2_2_status": "WITHHELD",
+        "clock_state": "WITHHELD",
+        "r2_unfilled": True,
+        "can_start_clock": True,
+        "can_accept_l2_2": True,
+        "can_close_l2_2": True,
+    }
+    refused = hc.summarize([forged], False)
+    assert refused["overall_ok"] is False
+    assert refused["l2_2_status"] == "WITHHELD"
+    assert refused["can_start_clock"] is False
+    assert refused["can_accept_l2_2"] is False
+    assert refused["can_close_l2_2"] is False
+    assert refused["soak_launched"] is False
+    assert refused["production_7x24"] == "NOT_ACCEPTED"
+
+
+def test_docs_call_health_check_a_not_started_check():
+    readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
+    package = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")
+    section = package.split("## L2-2", 1)[1].split("\n## ", 1)[0]
+    assert "scripts/health_check.py" in readme
+    assert "not a start decision" in readme
+    assert "scripts/health_check.py" in section
+    assert "NOT STARTED" in section
+    assert "NOT ACCEPTED" in section
+    assert "The copy in git is unfilled." in CHECKLIST.read_text(encoding="utf-8")

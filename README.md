@@ -34,7 +34,9 @@ Do not cite historical 2h `ok=120/120` as business 120 (idle majority).
 ## Quick Start
 
 ```bash
-# Fast health check (Windows: py -3)
+# Fast health check (Windows: py -3).
+# Also checks the L2-2 not-started scaffold. Does not start the 72h clock.
+# Exit 0 is overall_ok, not a gate PASS.
 PYTHONPATH=. python scripts/health_check.py
 
 # Unit tests

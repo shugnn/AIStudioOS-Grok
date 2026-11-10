@@ -21,6 +21,11 @@ satisfy founder condition 2, and is not a start. A dummy-process exercise of
 scripts/supervisor_watchdog.py can write a crash record within 10 seconds.
 That exercise is not a live L2-2 supervisor watchdog, does not demonstrate a
 supervision write every 10 minutes, and does not satisfy founder condition 2.
+scripts/supervision_cadence.py can write supervision records on a short
+time-compressed interval. That exercise does not demonstrate a real
+supervision write at least once every 10 minutes, and it does not satisfy
+founder condition 2. A write later than 600 seconds does not meet the cadence
+bound.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -265,8 +270,19 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
             or node.get("dummy_crash_within_10s_satisfies_condition_2") is True
             or node.get("demonstrates_10_minute_supervision_cadence") is True
             or node.get("record_11s_later_meets_requirement") is True
+            or node.get("time_compressed_exercise_satisfies_condition_2") is True
+            or node.get("offline_exercise_satisfies_condition_2") is True
+            or node.get("time_compressed_exercise_demonstrates_10_minute_cadence") is True
+            or node.get("writes_on_schedule_demonstrate_10_minute_cadence") is True
+            or node.get("bound_gap_demonstrates_10_minute_supervision_cadence") is True
         ):
             _add(violations, "condition_2_unsatisfied")
+        if (
+            node.get("stall_watchdog_is_cadence_writer") is True
+            or node.get("supervisor_watchdog_is_cadence_writer") is True
+            or node.get("is_live_l2_2_supervisor") is True
+        ):
+            _add(violations, "supervision_cadence_writer")
         if (
             node.get("offline_probe_is_supervisor_watchdog") is True
             or node.get("is_supervisor_watchdog_of_live_supervisor") is True
@@ -383,6 +399,46 @@ def _dummy_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
     return row_ok(preflight_report.get("supervisor_watchdog_implementation")) and row_ok(
         score_report.get("supervisor_watchdog_implementation")
     )
+
+
+def _cadence_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
+    """True only when both reports record a closed short-interval exercise that passed."""
+
+    def row_ok(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and row.get("ok") is True
+            and row.get("writes_on_schedule_passed") is True
+            and row.get("time_compressed") is True
+            and row.get("simulated_clock") is False
+            and row.get("late_write_meets_cadence") is False
+            and row.get("production_max_seconds") == 600
+            and row.get("condition_2_satisfied") is False
+            and row.get("demonstrates_10_minute_supervision_cadence") is False
+            and row.get("is_supervisor_watchdog_of_live_supervisor") is False
+            and row.get("l2_2_status") == "NOT_STARTED"
+            and row.get("clock_state") == "NOT_STARTED"
+            and row.get("can_start_clock") is False
+            and row.get("production_7x24") == "NOT_ACCEPTED"
+        )
+
+    if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
+        return False
+    return row_ok(preflight_report.get("supervision_cadence_writer")) and row_ok(
+        score_report.get("supervision_cadence_writer")
+    )
+
+
+def _cadence_row_ok(row: Any) -> bool:
+    """True when the short cadence scaffold stays closed and the exercise passed."""
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import supervision_cadence as cadence
+    except Exception:
+        return False
+    return cadence.scaffold_violations(row, require_success=True) == []
 
 
 def _implementation_row_ok(row: Any) -> bool:
@@ -559,6 +615,8 @@ def assess_l2_2_offline(
                 "supervisor_watchdog_honesty_mismatch",
                 "supervisor_watchdog_implementation",
                 "supervisor_watchdog_implementation_mismatch",
+                "supervision_cadence_writer",
+                "supervision_cadence_writer_mismatch",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -772,6 +830,12 @@ def assess_l2_2_offline(
             _add(violations, "supervisor_watchdog_implementation_mismatch")
         if not _implementation_row_ok(implementation):
             _add(violations, "supervisor_watchdog_implementation")
+        cadence = checks.get("supervision_cadence_writer")
+        top_cadence = preflight_report.get("supervision_cadence_writer")
+        if cadence != top_cadence:
+            _add(violations, "supervision_cadence_writer_mismatch")
+        if not _cadence_row_ok(cadence):
+            _add(violations, "supervision_cadence_writer")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -838,11 +902,16 @@ def assess_l2_2_offline(
         scored_implementation = score_report.get("supervisor_watchdog_implementation")
         if not _implementation_row_ok(scored_implementation):
             _add(violations, "supervisor_watchdog_implementation")
+        scored_cadence = score_report.get("supervision_cadence_writer")
+        if not _cadence_row_ok(scored_cadence):
+            _add(violations, "supervision_cadence_writer")
         blockers = score_report.get("gates", {}).get("blockers") if isinstance(score_report.get("gates"), dict) else []
         if not isinstance(blockers, list) or "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_honesty")
         if not isinstance(blockers, list) or "supervisor_watchdog_dummy_scaffold_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_implementation")
+        if not isinstance(blockers, list) or "supervision_cadence_offline_exercise_is_not_condition_2" not in blockers:
+            _add(violations, "supervision_cadence_writer")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -870,6 +939,7 @@ def assess_l2_2_offline(
                 "supervisor_watchdog_required",
                 "supervisor_watchdog_honesty",
                 "supervisor_watchdog_implementation",
+                "supervision_cadence_writer",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -950,6 +1020,8 @@ def assess_l2_2_offline(
         "dummy_tests_satisfy_condition_2": False,
         "implementation_satisfies_condition_2": False,
         "demonstrates_10_minute_supervision_cadence": False,
+        "writes_on_schedule_passed": _cadence_exercise_passed(preflight_report, score_report) if ok else False,
+        "late_write_meets_cadence": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
@@ -1018,6 +1090,8 @@ def l2_2_offline_step() -> dict:
         dummy_tests_satisfy_condition_2=False,
         implementation_satisfies_condition_2=False,
         demonstrates_10_minute_supervision_cadence=False,
+        writes_on_schedule_passed=assessment["writes_on_schedule_passed"],
+        late_write_meets_cadence=False,
         record_11s_later_meets_requirement=False,
         a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
@@ -1132,6 +1206,14 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "dummy_tests_satisfy_condition_2": False,
         "implementation_satisfies_condition_2": False,
         "demonstrates_10_minute_supervision_cadence": False,
+        "writes_on_schedule_passed": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("writes_on_schedule_passed") is True
+            and l2.get("demonstrates_10_minute_supervision_cadence") is not True
+            and l2.get("condition_2_satisfied") is not True
+        ),
+        "late_write_meets_cadence": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,

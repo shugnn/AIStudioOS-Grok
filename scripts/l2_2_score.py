@@ -12,7 +12,9 @@ the clock, treat LOCAL_ONLY as public evidence, end on an unknown root cause,
 or treat the soak-DUT stall watchdog as a watchdog of the supervisor.
 An offline synthetic supervisor probe is not that watchdog either, does not
 satisfy founder condition 2, and is not a start. A dummy-process exercise of
-scripts/supervisor_watchdog.py is not that watchdog either.
+scripts/supervisor_watchdog.py is not that watchdog either. A time-compressed
+exercise of scripts/supervision_cadence.py is not the 10-minute supervision
+cadence either.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -237,6 +239,8 @@ NEXT_STEPS = (
     "Product L2 (self-decompose / self-implement) is CONDITIONAL on the observation track, not granted, pending one end-to-end T3: a new goal and a new schema, the product derives the task set, then executes and delivers, with no handwritten dispatch. T2 DS-T2-20261110 is ACCEPTED (Issue #9 comment 6765608469, 2026-11-10T11:00:40Z, evidence PR #13 tip 9cac002). Comment 6767990189 (2026-11-10T13:00:44Z) accepted the PR #14 tip 738b47a derivation evidence and left L2 CONDITIONAL. No task_inbox/DS-T3 card is on main. PR #15 tip a07ec9f prepared that path with a local demo fixture and is not a T3 run and not acceptance. This scorer does not run T3, does not rerun T1 or T2, and does not grant product L2. L2-3 mid-run kill recovery is a separate gate.",
     "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. That approval is not a start, not a PASS, and it does not set can_start_clock. The five conditions stay unsatisfied until a later explicit declaration: supervision policy (yellow 13s through 300s, red above 300s, monotonic clock), supervision writes at least once every 10 minutes and a separate process records a supervisor crash within 10s (the soak-DUT stall watchdog is not that watchdog; an offline synthetic supervisor-alive versus supervisor-crash-unrecorded probe is not that watchdog either and does not satisfy condition 2), public evidence of final metrics plus a log summary plus a SHA list (LOCAL_ONLY does not count), three-way failure attribution (business, host, supervision; unknown root cause is not a terminal attribution), and no production 7x24 claim. A 72h result is not production readiness. This scorer does not post the L2-2 START line.",
     "scripts/supervisor_watchdog.py can watch a pid and write a crash record within 10 seconds. Offline dummy-process tests are not a live L2-2 supervisor watchdog, do not demonstrate a supervision write every 10 minutes, and do not satisfy founder condition 2. The synthetic-file probe and scripts/stall_watchdog.py do not satisfy it either. A report that treats the scaffold, the dummy tests, the synthetic probe, or the stall hook as condition 2, PASS, started, ACCEPTED, or production 7x24 fails closed.",
+    "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is at most 600 seconds. The offline exercise uses a short time-compressed interval. Writes on that short schedule do not demonstrate a supervision write at least once every 10 minutes and do not satisfy founder condition 2. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer. A report that treats the short exercise as the 10-minute cadence, as condition 2, PASS, started, ACCEPTED, or production 7x24 fails closed.",
+    "Issue #9 comment 6776483825 (2026-11-10T19:00:37Z) recorded an observation-track acceptance of T3 and product L2, void if plan.json was handwritten to fool the check. This scorer does not re-claim that verdict, does not accept L2-2, and does not start the clock. Production 7x24 stays NOT ACCEPTED.",
 )
 
 
@@ -1587,6 +1591,22 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     if scaffold.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
         blockers.append("forged_pass")
 
+    cadence_claim = doc.get("supervision_cadence_claim") if isinstance(doc.get("supervision_cadence_claim"), dict) else None
+    cadence = supervision_cadence_scaffold(cadence_claim)
+    blockers.append("supervision_cadence_offline_exercise_is_not_condition_2")
+    if (
+        cadence.get("time_compressed_claimed_as_10_minute_cadence") is True
+        or cadence.get("offline_exercise_claimed_as_condition_2") is True
+    ) and "condition_2_unsatisfied" not in blockers:
+        blockers.append("condition_2_unsatisfied")
+    if (
+        cadence.get("stall_watchdog_claimed_as_cadence_writer") is True
+        or cadence.get("crash_watchdog_claimed_as_cadence_writer") is True
+    ):
+        blockers.append("supervision_cadence_writer")
+    if cadence.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
+        blockers.append("forged_pass")
+
     stopped = metrics.get("stopped_early") if isinstance(metrics, dict) else None
     supervision_fault = bool(ended_watch or red_gaps or (started and not r2))
     if started and not watch_live and not runner_bad and not ended_watch:
@@ -1634,6 +1654,10 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
                 "A dummy-process exercise of scripts/supervisor_watchdog.py "
                 "is not that watchdog, does not demonstrate a supervision write "
                 "every 10 minutes, and does not satisfy founder condition 2. "
+                "A time-compressed exercise of scripts/supervision_cadence.py "
+                "can write on a short interval. That exercise does not demonstrate "
+                "a supervision write every 10 minutes and does not satisfy founder "
+                "condition 2. A write later than 600 seconds does not meet the cadence bound. "
                 "A 72h result is not production readiness."
             ),
         },
@@ -1653,6 +1677,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         "founder_start_conditions": founder,
         "supervisor_watchdog_honesty": supervisor_honesty,
         "supervisor_watchdog_implementation": scaffold,
+        "supervision_cadence_writer": cadence,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -2248,6 +2273,31 @@ def supervisor_watchdog_scaffold(claim: dict[str, Any] | None = None) -> dict[st
     return block
 
 
+def supervision_cadence_scaffold(claim: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Time-compressed cadence result. Passing it does not satisfy founder condition 2."""
+    try:
+        import supervision_cadence as cadence
+    except Exception:
+        return {
+            "ok": False,
+            "detail": "import_failed",
+            "condition_2_satisfied": False,
+            "demonstrates_10_minute_supervision_cadence": False,
+        }
+    block = cadence.stable_scaffold_status()
+    cadence.annotate_scaffold_claim(block, claim if isinstance(claim, dict) else None)
+    cadence.apply_closed_flags(block)
+    return block
+
+
+def _cadence_report_violations(block: Any) -> list[str]:
+    try:
+        import supervision_cadence as cadence
+    except Exception:
+        return ["supervision_cadence_writer"]
+    return cadence.scaffold_violations(block, require_success=True)
+
+
 def _scaffold_report_violations(block: Any) -> list[str]:
     try:
         import supervisor_watchdog as watchdog
@@ -2385,11 +2435,14 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_founder_block_violations(report.get("founder_start_conditions")))
     violations.extend(_supervisor_watchdog_honesty_violations(report.get("supervisor_watchdog_honesty")))
     violations.extend(_scaffold_report_violations(report.get("supervisor_watchdog_implementation")))
+    violations.extend(_cadence_report_violations(report.get("supervision_cadence_writer")))
     blockers = gates.get("blockers") if isinstance(gates.get("blockers"), list) else []
     if "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
         violations.append("supervisor_watchdog_honesty")
     if "supervisor_watchdog_dummy_scaffold_is_not_condition_2" not in blockers:
         violations.append("supervisor_watchdog_implementation")
+    if "supervision_cadence_offline_exercise_is_not_condition_2" not in blockers:
+        violations.append("supervision_cadence_writer")
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

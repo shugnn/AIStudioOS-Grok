@@ -47,6 +47,25 @@
     "l2_2_status": "NOT_STARTED",
     "clock_state": "NOT_STARTED"
   },
+  "supervision_cadence_writer": {
+    "tool": "scripts/supervision_cadence.py",
+    "action": "time_compressed_offline_writes",
+    "dut": "offline_exercise",
+    "production_max_seconds": 600,
+    "intended_production_bound_seconds": 600,
+    "time_compressed": true,
+    "simulated_clock": false,
+    "late_write_meets_cadence": false,
+    "condition_2_satisfied": false,
+    "demonstrates_10_minute_supervision_cadence": false,
+    "is_supervisor_watchdog_of_live_supervisor": false,
+    "can_start_clock": false,
+    "can_accept_l2_2": false,
+    "can_close_l2_2": false,
+    "production_7x24": "NOT_ACCEPTED",
+    "l2_2_status": "NOT_STARTED",
+    "clock_state": "NOT_STARTED"
+  },
   "interactive_registration": "founder_gated_out_of_scope",
   "founder_start_conditions": {
     "approval_issue": 9,
@@ -108,10 +127,11 @@
     "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. It is not a start, not a PASS, and it does not set can_start_clock. The five conditions (supervision policy, supervision cadence plus a watchdog of the supervisor, public evidence, three-way failure attribution, and no production 7x24 claim) stay unsatisfied in this scaffold. LOCAL_ONLY does not count as public evidence. Unknown root cause is not a terminal attribution. scripts/stall_watchdog.py watches a soak DUT and is not a watchdog of the supervisor. A 72h result is not production readiness. This scaffold does not post the L2-2 START line.",
     "The offline supervisor-watchdog probe classifies synthetic temp files only: supervisor alive, a crash with no other-process record, and a crash record 11 seconds later. It does not satisfy founder condition 2, is not a watchdog of a live supervisor, and is not a start. A report that treats that probe or scripts/stall_watchdog.py as the required supervisor watchdog, or that claims condition 2, PASS, started, ACCEPTED, or production 7x24, fails closed.",
     "scripts/supervisor_watchdog.py watches a pid and writes a crash record within 10 seconds. Dummy-process tests can pass that timing check. They do not satisfy founder condition 2, do not demonstrate a supervision write every 10 minutes, and are not a live L2-2 supervisor watchdog. A crash record 11 seconds later does not meet the requirement. Treating the scaffold, the dummy tests, the synthetic probe, or stall_watchdog.py as condition 2 fails closed.",
+    "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is 600 seconds. A time-compressed offline exercise can show writes on a short interval. That exercise does not demonstrate a supervision write every 10 minutes, does not satisfy founder condition 2, and is not a start. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer.",
     "product_l2_task_split NOT_STARTED means this duty-cycle report does not grant product L2. The observation-track product L2 status is CONDITIONAL, not granted, pending T3. T2 DS-T2-20261110 is ACCEPTED (Issue #9 comment 6765608469, 2026-11-10T11:00:40Z, PR #13 tip 9cac002). Comment 6767990189 (2026-11-10T13:00:44Z) accepted PR #14 tip 738b47a as derivation evidence and left L2 CONDITIONAL. No task_inbox/DS-T3 card is on main. PR #15 tip a07ec9f prepared the derive-then-execute path and is not a T3 run and not acceptance.",
     "The scorer never starts the clock and never registers Interactive console scheduled tasks.",
     "Registering Interactive duty is a founder major gate and is out of scope for the L2-2 scaffold.",
     "Lighting every informational bar still leaves can_accept_l2_2 false.",
-    "This duty-cycle gate is not the 2026-11-07 product L2 (self-decompose / self-implement). Product L2 is CONDITIONAL, not granted, pending T3. T2 is ACCEPTED. This scaffold does not grant product L2."
+    "This duty-cycle gate is not the 2026-11-07 product L2 (self-decompose / self-implement). Product L2 was CONDITIONAL, not granted, pending T3, in earlier observation comments. Issue #9 comment 6776483825 (2026-11-10T19:00:37Z) later recorded an observation-track acceptance of T3 and product L2, void if plan.json was handwritten to fool the check. This scaffold does not re-claim that verdict and does not grant product L2. T2 is ACCEPTED."
   ]
 }

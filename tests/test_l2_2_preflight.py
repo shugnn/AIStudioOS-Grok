@@ -1257,3 +1257,57 @@ def test_dummy_supervisor_watchdog_is_recorded_and_is_not_condition_2():
     assert "forged_can_start_clock" in names
     assert report["supervisor_watchdog_implementation"]["condition_2_satisfied"] is False
     assert report["gates"]["can_start_clock"] is False
+
+
+def test_short_cadence_exercise_is_recorded_and_is_not_condition_2():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    row = report["supervision_cadence_writer"]
+    assert row == report["checks"]["supervision_cadence_writer"]
+    assert row["ok"] is True
+    assert row["detail"] == "implementation_exists_short_interval_writes_on_schedule"
+    assert row["tool"] == "scripts/supervision_cadence.py"
+    assert row["action"] == "time_compressed_offline_writes"
+    assert row["time_compressed"] is True
+    assert row["simulated_clock"] is False
+    assert row["writes_on_schedule_passed"] is True
+    assert row["exercise_interval_seconds"] == 0.2
+    assert row["production_max_seconds"] == 600
+    assert row["late_gap_seconds"] == 601
+    assert row["late_write_meets_cadence"] is False
+    assert row["bound_gap_within_numeric_bound"] is True
+    assert row["condition_2_satisfied"] is False
+    assert row["demonstrates_10_minute_supervision_cadence"] is False
+    assert row["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert row["is_live_l2_2_supervisor"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["soak_launched"] is False
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "time_compressed_called_10_minute_cadence",
+        "offline_exercise_called_condition_2",
+        "stall_watchdog_called_cadence_writer",
+        "crash_watchdog_called_cadence_writer",
+    ]
+    for item in row["refused_claims"]:
+        assert item["condition_2_satisfied"] is False
+        assert item["demonstrates_10_minute_supervision_cadence"] is False
+        assert item["can_start_clock"] is False
+    forged = json.loads(json.dumps(report))
+    forged["supervision_cadence_writer"]["demonstrates_10_minute_supervision_cadence"] = True
+    forged["supervision_cadence_writer"]["condition_2_satisfied"] = True
+    forged["supervision_cadence_writer"]["can_start_clock"] = True
+    forged["supervision_cadence_writer"]["l2_2_status"] = "PASS"
+    forged["checks"]["supervision_cadence_writer"] = json.loads(json.dumps(forged["supervision_cadence_writer"]))
+    names = set(pre.validate_report(forged))
+    assert "condition_2_unsatisfied" in names
+    assert "forged_can_start_clock" in names
+    assert "forged_pass" in names
+    assert report["supervision_cadence_writer"]["demonstrates_10_minute_supervision_cadence"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert '"demonstrates_10_minute_supervision_cadence": true' not in json.dumps(report)

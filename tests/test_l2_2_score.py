@@ -120,6 +120,7 @@ def test_clock_not_started_is_the_canonical_report():
         "founder_start_conditions_unsatisfied",
         "supervisor_watchdog_offline_probe_is_not_condition_2",
         "supervisor_watchdog_dummy_scaffold_is_not_condition_2",
+        "supervision_cadence_offline_exercise_is_not_condition_2",
     ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -1174,6 +1175,20 @@ def test_offline_supervisor_probe_is_not_condition_2_and_not_a_start():
     assert scaffold["clock_state"] == "NOT_STARTED"
     assert scaffold["can_start_clock"] is False
     assert "supervisor_watchdog_dummy_scaffold_is_not_condition_2" in report["gates"]["blockers"]
+    cadence = report["supervision_cadence_writer"]
+    assert cadence["ok"] is True
+    assert cadence["writes_on_schedule_passed"] is True
+    assert cadence["time_compressed"] is True
+    assert cadence["late_write_meets_cadence"] is False
+    assert cadence["production_max_seconds"] == 600
+    assert cadence["condition_2_satisfied"] is False
+    assert cadence["demonstrates_10_minute_supervision_cadence"] is False
+    assert cadence["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert cadence["can_start_clock"] is False
+    assert cadence["clock_state"] == "NOT_STARTED"
+    assert cadence["l2_2_status"] == "NOT_STARTED"
+    assert cadence["production_7x24"] == "NOT_ACCEPTED"
+    assert "supervision_cadence_offline_exercise_is_not_condition_2" in report["gates"]["blockers"]
     assert l2.validate_report(report) == []
 
     claimed = _load("scaffold_clock_not_started.json")
@@ -1303,3 +1318,36 @@ def test_status_docs_match_issue_9_product_facts():
     assert "**Not given**" in decision
     assert "founder condition 2" in decision
     assert "The copy in git is unfilled." in decision
+
+
+def test_time_compressed_cadence_claim_does_not_satisfy_condition_2():
+    claimed = _load("scaffold_clock_not_started.json")
+    claimed["supervision_cadence_claim"] = {
+        "demonstrates_10_minute_supervision_cadence": True,
+        "condition_2_satisfied": True,
+        "tool": "scripts/stall_watchdog.py",
+        "l2_2_status": "PASS",
+        "clock_state": "STARTED",
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+    }
+    report = l2.score(claimed)
+    row = report["supervision_cadence_writer"]
+    assert row["time_compressed_claimed_as_10_minute_cadence"] is True
+    assert row["offline_exercise_claimed_as_condition_2"] is True
+    assert row["stall_watchdog_claimed_as_cadence_writer"] is True
+    assert row["pass_or_start_claimed"] is True
+    assert row["demonstrates_10_minute_supervision_cadence"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["gates"]["can_close_l2_2"] is False
+    assert "condition_2_unsatisfied" in report["gates"]["blockers"]
+    assert "supervision_cadence_writer" in report["gates"]["blockers"]
+    assert "supervision_cadence_offline_exercise_is_not_condition_2" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []

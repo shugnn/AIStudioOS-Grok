@@ -34,7 +34,7 @@
 
 ## 恢复报告
 
-`idempotency_keys` 只列出「同一 key 被再次提交」的碰撞。每个作业 key `{task_id}:{job_id}` 只提交一次时，该列表为 `[]`。已提交的 key 在 `state/checkpoint.json` 的 journal 里。
+`idempotency_keys` 按 `state/checkpoint.json` journal 里 `job_committed` 的顺序列出本次使用的幂等键（`{task_id}:{job_id}`）。本任务为 J1、J2、J3、J4 各一次。报告写在 J4 记入 journal 之前，写入器只补上这一笔尚未入账的最后一键，不另造键，也不把已在 journal 里的键再追加一次。`duplicate_jobs` 仍是碰撞 / 重跑证据；没有作业被再次提交时为 `[]`。零重复：每个键只出现一次，且 `duplicate_jobs` 为 `[]`。
 
 ## 注入与恢复
 

@@ -16,9 +16,14 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from control_plane.worker_resume import assess_recovery, sha256_bytes
+from control_plane.worker_resume import (
+    _write_recovery_and_manifest,
+    assess_recovery,
+    sha256_bytes,
+)
 
 TASK_ID = "DS-T2-20261110"
+USED_KEYS = [f"{TASK_ID}:{job}" for job in ("J1", "J2", "J3", "J4")]
 SEALED = REPO / "tests" / "fixtures" / "ds_t1_sealed"
 PUBLISHED = {
     "orders.csv": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
@@ -146,6 +151,83 @@ def _kill_after_j2(root: Path) -> dict:
             pass
 
 
+def _commit(job_id: str) -> dict:
+    return {
+        "event": "job_committed",
+        "job_id": job_id,
+        "idempotency_key": f"{TASK_ID}:{job_id}",
+    }
+
+
+def test_writer_lists_keys_used_without_inventing_a_second_final_key(tmp_path: Path):
+    inbox = tmp_path / TASK_ID
+    out = inbox / "deliverables"
+    (inbox / "data").mkdir(parents=True)
+    out.mkdir()
+    (inbox / "data" / "orders.csv").write_bytes(b"order\n")
+    (out / "summary.json").write_text("{}\n", encoding="utf-8")
+    (out / "anomalies.json").write_text("[]\n", encoding="utf-8")
+    (out / "report.md").write_text("report\n", encoding="utf-8")
+    specs = [{"job_id": job} for job in ("J1", "J2", "J3", "J4")]
+    module = type("Module", (), {"COMPONENT_VERSION": "ds-t2-worker-1"})()
+
+    def checkpoint(journal: list) -> dict:
+        return {
+            "task_id": TASK_ID,
+            "journal": journal,
+            "duplicate_jobs": [],
+            "kill_window": {
+                "kill_checkpoint": "after_J2_before_J3",
+                "jobs_done": ["J1", "J2"],
+            },
+            "sigkill": {"killed_pid": 2406, "killed_utc": "2026-11-10T08:29:48Z"},
+            "resume": {"resumed_utc": "2026-11-10T08:29:49Z"},
+        }
+
+    before_j4 = [
+        _commit("J1"),
+        _commit("J2"),
+        {"event": "kill_window_open"},
+        {"event": "resumed"},
+        _commit("J3"),
+    ]
+    _write_recovery_and_manifest(
+        module=module,
+        inbox=inbox,
+        out=out,
+        ckpt=checkpoint(before_j4),
+        specs=specs,
+    )
+    written = json.loads((out / "recovery_report.json").read_text(encoding="utf-8"))
+    assert written["idempotency_keys"] == USED_KEYS
+    assert written["duplicate_jobs"] == []
+    assert written["killed_pid"] == 2406
+    assert written["killed_utc"] == "2026-11-10T08:29:48Z"
+    assert written["resumed_utc"] == "2026-11-10T08:29:49Z"
+
+    _write_recovery_and_manifest(
+        module=module,
+        inbox=inbox,
+        out=out,
+        ckpt=checkpoint(before_j4 + [_commit("J4")]),
+        specs=specs,
+    )
+    finished = json.loads((out / "recovery_report.json").read_text(encoding="utf-8"))
+    assert finished["idempotency_keys"] == USED_KEYS
+
+    repeated = before_j4 + [_commit("J4"), _commit("J2")]
+    _write_recovery_and_manifest(
+        module=module,
+        inbox=inbox,
+        out=out,
+        ckpt=checkpoint(repeated),
+        specs=specs,
+    )
+    collided = json.loads((out / "recovery_report.json").read_text(encoding="utf-8"))
+    assert collided["idempotency_keys"] == USED_KEYS + [f"{TASK_ID}:J2"]
+    assert collided["duplicate_jobs"] == []
+
+
 def test_sealed_fixture_hashes():
     for name, digest in PUBLISHED.items():
         if name == "orders.csv":
@@ -211,7 +293,13 @@ def test_resume_via_product_entry_matches_t1(tmp_path: Path):
     assert commits == ["J1", "J2", "J3", "J4"]
     report = json.loads((inbox / "deliverables" / "recovery_report.json").read_text(encoding="utf-8"))
     assert report["duplicate_jobs"] == []
-    assert report["idempotency_keys"] == []
+    journal_keys = [
+        event["idempotency_key"]
+        for event in checkpoint["journal"]
+        if event["event"] == "job_committed"
+    ]
+    assert journal_keys == USED_KEYS
+    assert report["idempotency_keys"] == USED_KEYS
     assert report["kill_checkpoint"] == "after_J2_before_J3"
     assert report["jobs_done_before"] == ["J1", "J2"]
     assert report["jobs_done_after"] == ["J1", "J2", "J3", "J4"]
@@ -279,6 +367,27 @@ def test_forged_fields_and_tampered_summary_fail(tmp_path: Path):
     assert verdict["ok"] is False
     assert any("idempotency_keys" in item for item in verdict["failures"])
 
+    report["idempotency_keys"] = []
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    verdict = assess_recovery(inbox, SEALED)
+    assert verdict["ok"] is False
+    assert any("idempotency_keys" in item for item in verdict["failures"])
+
+    report_path.write_text(original, encoding="utf-8")
+    ckpt_path = inbox / "state" / "checkpoint.json"
+    ckpt_original = ckpt_path.read_text(encoding="utf-8")
+    ckpt = json.loads(ckpt_original)
+    repeated = dict(next(event for event in ckpt["journal"] if event.get("job_id") == "J2"))
+    repeated["seq"] = len(ckpt["journal"]) + 1
+    ckpt["journal"].append(repeated)
+    ckpt_path.write_text(json.dumps(ckpt, indent=2) + "\n", encoding="utf-8")
+    listed = json.loads(original)
+    listed["idempotency_keys"] = list(listed["idempotency_keys"]) + [f"{TASK_ID}:J2"]
+    report_path.write_text(json.dumps(listed, indent=2) + "\n", encoding="utf-8")
+    verdict = assess_recovery(inbox, SEALED)
+    assert verdict["ok"] is False
+    assert any(item.startswith("A-3") and "idempotency" in item for item in verdict["failures"])
+    ckpt_path.write_text(ckpt_original, encoding="utf-8")
     report_path.write_text(original, encoding="utf-8")
     swapped = json.loads(original)
     swapped["killed_utc"], swapped["resumed_utc"] = swapped["resumed_utc"], swapped["killed_utc"]

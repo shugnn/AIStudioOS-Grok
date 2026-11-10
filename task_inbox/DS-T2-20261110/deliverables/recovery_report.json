@@ -15,5 +15,10 @@
     "J4"
   ],
   "duplicate_jobs": [],
-  "idempotency_keys": []
+  "idempotency_keys": [
+    "DS-T2-20261110:J1",
+    "DS-T2-20261110:J2",
+    "DS-T2-20261110:J3",
+    "DS-T2-20261110:J4"
+  ]
 }

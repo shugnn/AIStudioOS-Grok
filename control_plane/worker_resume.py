@@ -181,6 +181,37 @@ def _job_key(task_id: str, job_id: str) -> str:
     return f"{task_id}:{job_id}"
 
 
+def _committed_idempotency_keys(journal: object) -> list[str]:
+    """job_committed keys in journal order. Repeats stay; they are not collisions-only."""
+    if not isinstance(journal, list):
+        return []
+    keys: list[str] = []
+    for event in journal:
+        if not isinstance(event, dict) or event.get("event") != "job_committed":
+            continue
+        key = event.get("idempotency_key")
+        if isinstance(key, str):
+            keys.append(key)
+    return keys
+
+
+def _keys_for_recovery_report(ckpt: dict, specs: list[dict]) -> list[str]:
+    """Keys used, in journal order.
+
+    recovery_report.json is written inside the final job, before `_commit_job`
+    appends that job's journal row. Include that key once when it is not
+    already in the journal. A finished checkpoint already has the row, so a
+    later rewrite does not add a second copy and does not invent any other key.
+    """
+    keys = _committed_idempotency_keys(ckpt.get("journal"))
+    if not specs:
+        return keys
+    pending = _job_key(ckpt["task_id"], specs[-1]["job_id"])
+    if pending not in keys:
+        keys.append(pending)
+    return keys
+
+
 def _evidence(task_id: str, record: dict) -> dict:
     def one(item: dict) -> dict:
         body = {"path": f"task_inbox/{task_id}/{item['rel']}", "sha256": item["sha256"]}
@@ -432,18 +463,8 @@ def _write_recovery_and_manifest(
         "jobs_done_before": list(window["jobs_done"]),
         "jobs_done_after": [spec["job_id"] for spec in specs],
         "duplicate_jobs": list(ckpt.get("duplicate_jobs") or []),
-        "idempotency_keys": [],
+        "idempotency_keys": _keys_for_recovery_report(ckpt, specs),
     }
-    # Collisions only. An empty list means each committed key was used once.
-    seen: dict[str, int] = {}
-    for event in ckpt["journal"]:
-        if event.get("event") != "job_committed":
-            continue
-        key = event.get("idempotency_key")
-        if not isinstance(key, str):
-            continue
-        seen[key] = seen.get(key, 0) + 1
-    report["idempotency_keys"] = [key for key, count in seen.items() if count > 1]
     recovery_rel = "deliverables/recovery_report.json"
     atomic_write_bytes(out / "recovery_report.json", dumps(report))
 
@@ -737,6 +758,7 @@ def assess_recovery(
             bad("A-6 dispatch_at_kill statuses are not J1 J2 DONE and J3 J4 PENDING")
 
     window = None
+    used_keys: list[str] | None = None
     if isinstance(ckpt, dict):
         if ckpt.get("task_id") != task_id:
             bad("A-5 checkpoint task_id")
@@ -758,6 +780,9 @@ def assess_recovery(
         _check_journal(journal, bad, kill_checkpoint)
         if ckpt.get("duplicate_jobs") != []:
             bad("A-3 checkpoint duplicate_jobs")
+        used_keys = _committed_idempotency_keys(journal)
+        if len(used_keys) != len(set(used_keys)):
+            bad("A-3 idempotency key committed more than once")
         commits = [event for event in journal if isinstance(event, dict) and event.get("event") == "job_committed"]
         keys = [event.get("idempotency_key") for event in commits]
         expected = [f"{task_id}:{job}" for job in ("J1", "J2", "J3", "J4")]
@@ -795,8 +820,13 @@ def assess_recovery(
             bad("A-6 jobs_done_after")
         if recovery.get("duplicate_jobs") != []:
             bad("A-3 duplicate_jobs")
-        if recovery.get("idempotency_keys") != []:
-            bad("A-3 idempotency_keys collision list")
+        reported_keys = recovery.get("idempotency_keys")
+        if not isinstance(reported_keys, list) or any(not isinstance(item, str) for item in reported_keys):
+            bad("A-3 idempotency_keys")
+        elif len(reported_keys) != len(set(reported_keys)):
+            bad("A-3 idempotency_keys repeat")
+        elif used_keys is not None and reported_keys != used_keys:
+            bad("A-3 idempotency_keys are not the keys used")
         try:
             killed = parse_utc(recovery["killed_utc"])
             resumed = parse_utc(recovery["resumed_utc"])

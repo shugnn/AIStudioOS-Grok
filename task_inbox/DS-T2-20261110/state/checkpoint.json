@@ -63,12 +63,12 @@
         },
         {
           "rel": "deliverables/recovery_report.json",
-          "sha256": "479f3de5c07987bd14ee465688ae0a18241999ff4d0f94794d7b1bd8b4ab09f0",
-          "bytes": 345
+          "sha256": "8d95b41d7f1b680e4e8d4e446274421acb677265932611ea68d12110f011ae21",
+          "bytes": 447
         },
         {
           "rel": "deliverables/manifest.json",
-          "sha256": "44d7278cbb4875c25fa80ee104c0f363bdb1ec37b85d398981d4f156bfe2b9a1",
+          "sha256": "3c854412a140db8e48c24854c0cc9bf52cea004a0e790b4a8b4274fcf503f3d4",
           "bytes": 1029
         }
       ]

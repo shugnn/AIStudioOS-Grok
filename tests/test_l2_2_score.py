@@ -52,6 +52,17 @@ def test_schema_ids_match_contract():
     assert doc["product_l2_task_split"] == "NOT_STARTED"
     assert doc["interactive_registration"] == "founder_gated_out_of_scope"
     assert "PASS" not in doc["l2_2_status_emitted"]
+    founder = doc["founder_start_conditions"]
+    assert founder["approval_is_a_start"] is False
+    assert founder["conditions_satisfied"] is False
+    assert founder["can_start_clock"] is False
+    assert founder["start_registration_present"] is False
+    assert founder["local_only_counts_as_public_evidence"] is False
+    assert founder["unknown_root_cause_allowed"] is False
+    assert founder["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    assert founder["a_72h_pass_is_production_readiness"] is False
+    assert founder["approval_comment_id"] == l2.FOUNDER_APPROVAL_COMMENT_ID
+    assert founder["condition_ids"] == list(l2.FOUNDER_CONDITION_IDS)
 
 
 def test_scaffold_fixtures_stay_away_from_the_incident_window():
@@ -91,6 +102,7 @@ def test_clock_not_started_is_the_canonical_report():
         "observation_track_has_not_accepted",
         "scaffold_fixture_not_host_evidence",
         "clock_not_started",
+        "founder_start_conditions_unsatisfied",
     ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -788,4 +800,286 @@ def test_forged_stitch_report_fails_closed():
     assert honest["clock_state"] == "NOT_STARTED"
     assert honest["process_continuity"]["sequential_soaks_are_continuous"] is False
     assert honest["process_continuity"]["stitched_processes_count_toward_gate"] is False
+    assert honest["gates"]["can_start_clock"] is False
+
+
+def _not_started_with(founder: dict) -> dict:
+    doc = _load("scaffold_clock_not_started.json")
+    doc["founder_start"] = founder
+    return doc
+
+
+def test_founder_approval_is_not_a_start():
+    bare = l2.score(_load("scaffold_clock_not_started.json"))
+    block = bare["founder_start_conditions"]
+    assert block["approval_exists"] is True
+    assert block["approval_conditional"] is True
+    assert block["approval_issue"] == 9
+    assert block["approval_comment_id"] == 6761044915
+    assert block["approval_utc"] == "2026-11-10T06:50:14Z"
+    assert block["approval_target_pr"] == 12
+    assert block["approval_is_a_start"] is False
+    assert block["approval_is_a_pass"] is False
+    assert block["approval_claimed_as_start"] is False
+    assert block["approval_without_conditions_is_a_start"] is False
+    assert block["approval_without_start_registration_is_a_start"] is False
+    assert block["start_registration_present"] is False
+    assert block["start_registration_posted_to_issue_9"] is False
+    assert block["conditions_satisfied"] is False
+    assert block["missing_conditions"] == list(l2.FOUNDER_CONDITION_IDS)
+    assert block["can_start_clock"] is False
+    assert block["l2_2_status"] == "NOT_STARTED"
+    assert block["clock_state"] == "NOT_STARTED"
+    assert block["production_7x24"] == "NOT_ACCEPTED"
+    assert block["a_72h_pass_is_production_readiness"] is False
+    assert "founder_start_conditions_unsatisfied" in bare["gates"]["blockers"]
+    assert bare["gates"]["can_start_clock"] is False
+    assert bare["l2_2_status"] == "NOT_STARTED"
+    assert l2.validate_report(bare) == []
+
+    claimed = l2.score(_not_started_with({"approval_is_a_start": True, "start_registration_present": True}))
+    claimed_block = claimed["founder_start_conditions"]
+    assert claimed_block["approval_claimed_as_start"] is True
+    assert claimed_block["start_registration_claimed"] is True
+    assert claimed_block["approval_is_a_start"] is False
+    assert claimed_block["start_registration_present"] is False
+    assert claimed_block["conditions_satisfied"] is False
+    assert claimed_block["can_start_clock"] is False
+    assert claimed["l2_2_status"] == "NOT_STARTED"
+    assert claimed["clock_state"] == "NOT_STARTED"
+    assert claimed["production_7x24"] == "NOT_ACCEPTED"
+    assert "approval_is_not_a_start" in claimed["gates"]["blockers"]
+    assert claimed["gates"]["can_start_clock"] is False
+    assert l2.validate_report(claimed) == []
+
+    legal = l2.legal_founder_declaration()
+    legal["approval_is_a_start"] = True
+    both = l2.score(_not_started_with(legal))
+    assert both["founder_start_conditions"]["conditions_satisfied"] is True
+    assert both["founder_start_conditions"]["approval_is_a_start"] is False
+    assert both["founder_start_conditions"]["approval_claimed_as_start"] is True
+    assert both["founder_start_conditions"]["can_start_clock"] is False
+    assert both["founder_start_conditions"]["declarations_are_not_a_start"] is True
+    assert both["l2_2_status"] == "NOT_STARTED"
+    assert both["clock_state"] == "NOT_STARTED"
+    assert both["gates"]["can_start_clock"] is False
+    assert both["gates"]["can_accept_l2_2"] is False
+    assert both["production_7x24"] == "NOT_ACCEPTED"
+    assert "approval_is_not_a_start" in both["gates"]["blockers"]
+    assert "founder_start_conditions_unsatisfied" not in both["gates"]["blockers"]
+    assert l2.validate_report(both) == []
+
+
+@pytest.mark.parametrize("drop", l2.FOUNDER_CONDITION_IDS)
+def test_missing_founder_condition_fails_closed(drop: str):
+    claim = l2.legal_founder_declaration()
+    claim.pop(
+        {
+            "supervision_policy": "supervision_policy",
+            "supervision_cadence_and_supervisor_watchdog": "supervision_writes",
+            "public_evidence": "evidence",
+            "three_way_attribution": "failure_attribution",
+            "not_production_7x24": "production",
+        }[drop]
+    )
+    if drop == "supervision_cadence_and_supervisor_watchdog":
+        claim.pop("supervisor_watchdog", None)
+    report = l2.score(_not_started_with(claim))
+    block = report["founder_start_conditions"]
+    assert block["conditions_satisfied"] is False
+    assert drop in block["missing_conditions"]
+    assert block["approval_is_a_start"] is False
+    assert block["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert "founder_start_conditions_unsatisfied" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+    forged = json.loads(json.dumps(report))
+    forged["founder_start_conditions"]["conditions_satisfied"] = True
+    forged["founder_start_conditions"]["missing_conditions"] = []
+    forged["l2_2_status"] = "PASS"
+    forged["gates"]["can_start_clock"] = True
+    forged["production_7x24"] = "ACCEPTED"
+    names = set(l2.validate_report(forged))
+    assert "founder_conditions_missing" in names
+    assert "forged_pass" in names
+    assert "forged_clock_start" in names
+    assert "production_claim" in names
+    assert report["gates"]["can_start_clock"] is False
+
+
+@pytest.mark.parametrize("publication", ["LOCAL_ONLY", "local_only", "local-only", "Local Only"])
+def test_local_only_evidence_is_refused(publication: str):
+    claim = l2.legal_founder_declaration()
+    claim["evidence"]["publication"] = publication
+    report = l2.score(_not_started_with(claim))
+    block = report["founder_start_conditions"]
+    evidence = next(item for item in block["conditions"] if item["id"] == "public_evidence")
+    assert evidence["satisfied"] is False
+    assert evidence["detail"] == "local_only_refused"
+    assert block["local_only_refused"] is True
+    assert block["local_only_counts_as_public_evidence"] is False
+    assert block["conditions_satisfied"] is False
+    assert block["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert "local_only_evidence_refused" in report["gates"]["blockers"]
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert l2.validate_report(report) == []
+    forged = json.loads(json.dumps(report))
+    forged["founder_start_conditions"]["local_only_counts_as_public_evidence"] = True
+    forged["founder_start_conditions"]["conditions_satisfied"] = True
+    evidence_row = next(item for item in forged["founder_start_conditions"]["conditions"] if item["id"] == "public_evidence")
+    evidence_row["satisfied"] = True
+    names = set(l2.validate_report(forged))
+    assert "local_only_refused" in names
+    assert "founder_conditions_missing" in names
+
+
+@pytest.mark.parametrize(
+    "terminal,allowed",
+    [
+        ("unknown", False),
+        ("unknown_root_cause", False),
+        ("unknown root cause", False),
+        ("none", True),
+        ("business", True),
+    ],
+)
+def test_unknown_root_cause_is_refused(terminal: str, allowed: bool):
+    claim = l2.legal_founder_declaration()
+    claim["failure_attribution"]["terminal"] = terminal
+    claim["failure_attribution"]["unknown_root_cause_allowed"] = allowed
+    report = l2.score(_not_started_with(claim))
+    block = report["founder_start_conditions"]
+    attribution = next(item for item in block["conditions"] if item["id"] == "three_way_attribution")
+    assert attribution["satisfied"] is False
+    assert attribution["detail"] == "unknown_root_cause_refused"
+    assert block["unknown_root_cause_refused"] is True
+    assert block["unknown_root_cause_allowed"] is False
+    assert block["conditions_satisfied"] is False
+    assert block["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["business_verdict"] == "UNSCORED"
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert "unknown_root_cause_refused" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+    forged = json.loads(json.dumps(report))
+    forged["founder_start_conditions"]["unknown_root_cause_allowed"] = True
+    forged["l2_2_status"] = "PASS"
+    names = set(l2.validate_report(forged))
+    assert "unknown_root_cause_refused" in names
+    assert "forged_pass" in names
+
+
+def test_supervisor_without_watchdog_is_refused():
+    missing = l2.legal_founder_declaration()
+    missing["supervisor_watchdog"] = {
+        "present": False,
+        "kind": "none",
+        "crash_recorded_within_seconds": None,
+    }
+    slow = l2.legal_founder_declaration()
+    slow["supervisor_watchdog"]["crash_recorded_within_seconds"] = 11
+    substituted = l2.legal_founder_declaration()
+    substituted["supervisor_watchdog"] = {
+        "present": True,
+        "kind": "stall_watchdog",
+        "crash_recorded_within_seconds": 5,
+    }
+    for claim, detail in (
+        (missing, "supervisor_watchdog_missing"),
+        (slow, "crash_record_too_slow"),
+        (substituted, "soak_dut_watchdog_is_not_supervisor_watchdog"),
+    ):
+        report = l2.score(_not_started_with(claim))
+        block = report["founder_start_conditions"]
+        watchdog = next(
+            item for item in block["conditions"] if item["id"] == "supervision_cadence_and_supervisor_watchdog"
+        )
+        assert watchdog["satisfied"] is False
+        assert watchdog["detail"] == detail
+        assert block["supervisor_watchdog_refused"] is True
+        assert block["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+        assert block["supervisor_watchdog_kind_required"] == "other_process"
+        assert block["conditions_satisfied"] is False
+        assert block["can_start_clock"] is False
+        assert report["l2_2_status"] == "NOT_STARTED"
+        assert report["clock_state"] == "NOT_STARTED"
+        assert report["production_7x24"] == "NOT_ACCEPTED"
+        assert "supervisor_watchdog_required" in report["gates"]["blockers"]
+        assert report["gates"]["can_start_clock"] is False
+        assert l2.validate_report(report) == []
+    forged = json.loads(json.dumps(l2.score(_not_started_with(substituted))))
+    forged["founder_start_conditions"]["soak_dut_watchdog_counts_as_supervisor_watchdog"] = True
+    forged["founder_start_conditions"]["conditions_satisfied"] = True
+    row = next(
+        item
+        for item in forged["founder_start_conditions"]["conditions"]
+        if item["id"] == "supervision_cadence_and_supervisor_watchdog"
+    )
+    row["satisfied"] = True
+    names = set(l2.validate_report(forged))
+    assert "supervisor_watchdog_required" in names
+    assert "founder_conditions_missing" in names
+
+
+def test_legal_founder_declaration_still_does_not_start_the_clock():
+    report = l2.score(_not_started_with(l2.legal_founder_declaration()))
+    block = report["founder_start_conditions"]
+    assert block["conditions_satisfied"] is True
+    assert block["missing_conditions"] == []
+    assert block["approval_is_a_start"] is False
+    assert block["start_registration_present"] is False
+    assert block["can_start_clock"] is False
+    assert block["declarations_are_not_a_start"] is True
+    assert block["local_only_counts_as_public_evidence"] is False
+    assert block["unknown_root_cause_allowed"] is False
+    assert block["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    assert block["a_72h_pass_is_production_readiness"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["gates"]["can_close_l2_2"] is False
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert "founder_start_conditions_unsatisfied" not in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+
+
+def test_forged_founder_report_fails_closed():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    forged = json.loads(json.dumps(honest))
+    forged["founder_start_conditions"]["approval_is_a_start"] = True
+    forged["founder_start_conditions"]["conditions_satisfied"] = True
+    forged["founder_start_conditions"]["start_registration_present"] = True
+    forged["founder_start_conditions"]["local_only_counts_as_public_evidence"] = True
+    forged["founder_start_conditions"]["unknown_root_cause_allowed"] = True
+    forged["founder_start_conditions"]["soak_dut_watchdog_counts_as_supervisor_watchdog"] = True
+    forged["founder_start_conditions"]["a_72h_pass_is_production_readiness"] = True
+    forged["founder_start_conditions"]["can_start_clock"] = True
+    forged["l2_2_status"] = "PASS"
+    forged["clock_state"] = "WALL_OBSERVED"
+    forged["production_7x24"] = "ACCEPTED"
+    forged["gates"]["can_start_clock"] = True
+    forged["gates"]["can_accept_l2_2"] = True
+    forged["gates"]["can_close_l2_2"] = True
+    names = set(l2.validate_report(forged))
+    assert "approval_is_not_a_start" in names
+    assert "founder_conditions_missing" in names
+    assert "local_only_refused" in names
+    assert "unknown_root_cause_refused" in names
+    assert "supervisor_watchdog_required" in names
+    assert "production_claim" in names
+    assert "forged_pass" in names
+    assert "forged_clock_start" in names
+    assert "forged_accept" in names
+    assert "forged_close" in names
+    assert honest["l2_2_status"] == "NOT_STARTED"
+    assert honest["clock_state"] == "NOT_STARTED"
+    assert honest["founder_start_conditions"]["approval_is_a_start"] is False
+    assert honest["founder_start_conditions"]["conditions_satisfied"] is False
     assert honest["gates"]["can_start_clock"] is False

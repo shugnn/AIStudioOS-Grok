@@ -31,6 +31,10 @@ PYTHONPATH=. python scripts/coverage_gap_log.py \
 
 `operator_sample` is a scratch classification. It is not the Ubuntu-24H summary and not a 72h run. The committed `docs/progress/soak_2h/metrics.json` (wall 86400.001s) is a historical SHORT specimen. The offline preflight records that it is below 259200, that it does not count toward the 72h gate, and that it is not the stall DUT. That binding does not start the 72h clock. Ended SHORT walls are not additive toward 259200. Recording that rule is not a start. Stitching sequential or restarted soak invocations into one capture is not a continuous 72h wall. Recording that rule is not a start.
 
+## Founder start conditions (unfilled)
+
+Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval. It is not a start. The five conditions are unfilled here: supervision policy (yellow 13s through 300s, red above 300s, monotonic clock), supervision writes at least once every 10 minutes plus a watchdog of the supervisor itself (a soak-DUT stall watchdog does not count; a crash of the supervisor must be recorded by another process within 10s), public evidence (final metrics, log summary, and a SHA list; LOCAL_ONLY does not count), three-way failure attribution (business / host / supervision; unknown root cause is not a terminal attribution), and no production 7×24 claim (a 72h result is not production readiness). Recording this list is not a start. `can_start_clock` stays false.
+
 ## Still required before `--max-wall-seconds 259200`
 
 1. An explicit start decision. This checklist is not that decision.

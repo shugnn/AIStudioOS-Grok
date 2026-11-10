@@ -716,6 +716,89 @@ def test_summary_drops_a_forged_stitch_claim():
     assert summary["soak_launched"] is False
 
 
+def test_honest_preflight_records_the_founder_approval_as_not_a_start():
+    preflight_report, scored, r2_text = _honest()
+    row = preflight_report["founder_start_conditions"]
+    assert row["ok"] is True
+    assert row["detail"] == "approval_recorded_not_a_start"
+    assert row["approval_comment_id"] == 6761044915
+    assert row["approval_is_a_start"] is False
+    assert row["conditions_satisfied"] is False
+    assert row["start_registration_present"] is False
+    assert row["templates_unfilled"] is True
+    assert row["local_only_counts_as_public_evidence"] is False
+    assert row["unknown_root_cause_allowed"] is False
+    assert row["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    assert row["a_72h_pass_is_production_readiness"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert scored["founder_start_conditions"]["approval_is_a_start"] is False
+    assert scored["founder_start_conditions"]["conditions_satisfied"] is False
+    assert scored["founder_start_conditions"]["can_start_clock"] is False
+    assert scored["l2_2_status"] == "NOT_STARTED"
+    assert "founder_start_conditions_unsatisfied" in scored["gates"]["blockers"]
+    result = _assess(preflight_report, scored, r2_text)
+    assert result["ok"] is True, result["violations"]
+    assert result["violations"] == []
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["clock_state"] == "NOT_STARTED"
+    assert result["founder_approval_is_a_start"] is False
+    assert result["founder_conditions_satisfied"] is False
+    assert result["founder_start_registration_present"] is False
+    assert result["local_only_counts_as_public_evidence"] is False
+    assert result["unknown_root_cause_allowed"] is False
+    assert result["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    assert result["a_72h_pass_is_production_readiness"] is False
+    assert result["production_7x24"] == "NOT_ACCEPTED"
+    _assert_gates_closed(result)
+
+
+def test_forged_founder_claims_fail_closed_without_opening_gates():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    forged["founder_start_conditions"]["approval_is_a_start"] = True
+    forged["founder_start_conditions"]["conditions_satisfied"] = True
+    forged["founder_start_conditions"]["start_registration_present"] = True
+    forged["founder_start_conditions"]["local_only_counts_as_public_evidence"] = True
+    forged["founder_start_conditions"]["unknown_root_cause_allowed"] = True
+    forged["founder_start_conditions"]["soak_dut_watchdog_counts_as_supervisor_watchdog"] = True
+    forged["founder_start_conditions"]["a_72h_pass_is_production_readiness"] = True
+    forged["founder_start_conditions"]["can_start_clock"] = True
+    forged["founder_start_conditions"]["l2_2_status"] = "PASS"
+    forged["founder_start_conditions"]["clock_state"] = "STARTED"
+    forged["founder_start_conditions"]["production_7x24"] = "ACCEPTED"
+    forged["checks"]["founder_start_conditions"] = json.loads(json.dumps(forged["founder_start_conditions"]))
+    forged_score = json.loads(json.dumps(scored))
+    forged_score["founder_start_conditions"]["approval_is_a_start"] = True
+    forged_score["founder_start_conditions"]["conditions_satisfied"] = True
+    forged_score["founder_start_conditions"]["local_only_counts_as_public_evidence"] = True
+    forged_score["l2_2_status"] = "PASS"
+    forged_score["production_7x24"] = "ACCEPTED"
+    forged_score["gates"]["can_start_clock"] = True
+    result = _assess(forged, forged_score, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "approval_is_not_a_start",
+        "founder_conditions_missing",
+        "local_only_refused",
+        "unknown_root_cause_refused",
+        "supervisor_watchdog_required",
+        "forged_pass",
+        "forged_can_start_clock",
+        "forged_production_accepted",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    assert result["founder_approval_is_a_start"] is False
+    assert result["founder_conditions_satisfied"] is False
+    assert result["founder_start_registration_present"] is False
+    assert result["local_only_counts_as_public_evidence"] is False
+    assert result["unknown_root_cause_allowed"] is False
+    assert result["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    _assert_gates_closed(result)
+
+
 def test_docs_call_health_check_a_not_started_check():
     readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
     package = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")

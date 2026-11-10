@@ -10,9 +10,13 @@ started L2-2 capture, and not the 72h gate. Refuses sums of ended SHORT walls
 Refuses stitching sequential or restarted
 soak invocations into one capture, including a back-to-back pair, three
 sequential 86400 soaks covering 72h of calendar time, and a wall that resets.
+Records the Issue #9 conditional founder approval and refuses a report that
+treats that approval as a start, pretends the five start conditions are
+satisfied, counts LOCAL_ONLY as public evidence, ends on an unknown root
+cause, or treats the soak-DUT stall watchdog as a watchdog of the supervisor.
 Does not launch soak_2h.py, does not point the stall hook at the committed
-Ubuntu-24H soak files, does not start the 72h clock, and does not register
-scheduled tasks.
+Ubuntu-24H soak files, does not start the 72h clock, does not post an L2-2
+START line, and does not register scheduled tasks.
 
 Exit 0: an honest NOT_STARTED report whose not-started scaffold checks held.
 Exit 2: an honest NOT_STARTED report whose checks did not all hold, or a report
@@ -200,6 +204,7 @@ CHECK_ORDER = (
     "ubuntu_24h_specimen",
     "non_additivity",
     "process_continuity",
+    "founder_start_conditions",
     "scorer_refuses",
 )
 
@@ -217,6 +222,7 @@ OPERATOR_NOTE = (
     "The Ubuntu-24H metrics file is a historical SHORT specimen. Recording it does not start the 72h clock, does not count it as 72h, and does not make it the stall DUT. "
     "Historical SHORT walls are not additive toward 259200. A sum of ended 24h walls does not start the 72h clock and does not count toward the gate. "
     "Sequential or restarted soak invocations are not one continuous 72h wall. Stitching them, even back-to-back on the same host, does not start the 72h clock and does not count toward the gate. "
+    "The Issue #9 conditional founder approval is not a start decision. The five start conditions are unfilled. LOCAL_ONLY is not public evidence. Unknown root cause is not a terminal attribution. The soak-DUT stall watchdog is not a watchdog of the supervisor. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -243,7 +249,8 @@ NEXT_STEPS = (
     "The committed Ubuntu-24H metrics file is a historical SHORT specimen (wall 86400.001s, below 259200). It does not count toward the 72h gate and it is not the stall DUT. This preflight does not wrap it as a started capture.",
     "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not a started L2-2 capture. This gate is not a start.",
     "Sequential or restarted soak invocations are not one live process. A back-to-back 86400s pair, three sequential 86400s soaks covering 72h of calendar time, or a wall that resets, is not a started L2-2 capture. This continuity gate is not a start.",
-    "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not.",
+    "Issue #9 comment 6761044915 is a conditional founder approval, not a start and not a PASS. The five conditions stay unfilled in the committed templates. This preflight does not post an L2-2 START line and does not set can_start_clock.",
+    "Production 7x24 stays NOT ACCEPTED. A 72h result is not production readiness. The observation track accepts or rejects. This preflight does not.",
 )
 
 
@@ -608,6 +615,30 @@ def _check_contract(root: Path) -> dict[str, Any]:
         and isinstance(emitted, list)
         and "PASS" not in emitted
     )
+    founder = doc.get("founder_start_conditions") if isinstance(doc.get("founder_start_conditions"), dict) else {}
+    try:
+        import l2_2_score as l2_contract
+    except Exception:
+        l2_contract = None
+    founder_ok = (
+        l2_contract is not None
+        and founder.get("approval_is_a_start") is False
+        and founder.get("conditions_satisfied") is False
+        and founder.get("can_start_clock") is False
+        and founder.get("start_registration_present") is False
+        and founder.get("local_only_counts_as_public_evidence") is False
+        and founder.get("unknown_root_cause_allowed") is False
+        and founder.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is False
+        and founder.get("a_72h_pass_is_production_readiness") is False
+        and founder.get("approval_comment_id") == l2_contract.FOUNDER_APPROVAL_COMMENT_ID
+        and founder.get("approval_utc") == l2_contract.FOUNDER_APPROVAL_UTC
+        and founder.get("approval_issue") == l2_contract.FOUNDER_APPROVAL_ISSUE
+        and founder.get("approval_target_pr") == l2_contract.FOUNDER_APPROVAL_PR
+        and founder.get("condition_ids") == list(l2_contract.FOUNDER_CONDITION_IDS)
+        and founder.get("supervision_write_max_seconds") == l2_contract.SUPERVISION_WRITE_MAX_SECONDS
+        and founder.get("supervisor_watchdog_max_seconds") == l2_contract.SUPERVISOR_WATCHDOG_MAX_SECONDS
+    )
+    ok = ok and founder_ok
     return {
         "ok": ok,
         "preflight_schema": doc.get("preflight_schema") if doc.get("preflight_schema") == SCHEMA else "mismatch",
@@ -1554,6 +1585,550 @@ def _process_continuity_violations(row: Any) -> list[str]:
     return violations
 
 
+FOUNDER_CLOSED_DETAILS = frozenset(
+    {
+        "approval_recorded_not_a_start",
+        "templates_missing",
+        "templates_not_blank",
+        "start_registration_is_not_this_pass",
+        "forged_founder_not_refused",
+        "probe_failed",
+        "scorer_import",
+    }
+)
+FOUNDER_PROBE_LABELS = (
+    "approval_is_not_a_start",
+    "missing_condition",
+    "local_only",
+    "unknown_root_cause",
+    "supervisor_without_watchdog",
+    "soak_dut_watchdog_substituted",
+)
+
+
+def _founder_probe_row(label: str, assessed: dict[str, Any], condition_id: str) -> dict[str, Any]:
+    detail = None
+    for item in assessed.get("conditions") or []:
+        if isinstance(item, dict) and item.get("id") == condition_id:
+            detail = item.get("detail")
+            break
+    return {
+        "label": label,
+        "approval_is_a_start": False,
+        "approval_is_a_pass": False,
+        "approval_claimed_as_start": assessed.get("approval_claimed_as_start") is True,
+        "start_registration_present": False,
+        "start_registration_claimed": assessed.get("start_registration_claimed") is True,
+        "conditions_satisfied": assessed.get("conditions_satisfied") is True,
+        "missing_conditions": list(assessed.get("missing_conditions") or []),
+        "local_only_refused": assessed.get("local_only_refused") is True,
+        "local_only_counts_as_public_evidence": False,
+        "unknown_root_cause_refused": assessed.get("unknown_root_cause_refused") is True,
+        "unknown_root_cause_allowed": False,
+        "supervisor_watchdog_refused": assessed.get("supervisor_watchdog_refused") is True,
+        "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+        "condition_id": condition_id,
+        "condition_detail": detail,
+        "counts_as_start": False,
+        "counts_as_pass": False,
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "production_7x24": "NOT_ACCEPTED",
+        "binds_clock_start": False,
+        "a_72h_pass_is_production_readiness": False,
+        "declarations_are_not_a_start": True,
+    }
+
+
+def _founder_probes(l2: Any) -> tuple[list[dict[str, Any]], bool]:
+    """In-memory claims. None of them starts the clock."""
+    legal = l2.legal_founder_declaration()
+    missing = json.loads(json.dumps(legal))
+    missing.pop("supervision_policy", None)
+    local_only = json.loads(json.dumps(legal))
+    local_only["evidence"]["publication"] = "LOCAL_ONLY"
+    unknown = json.loads(json.dumps(legal))
+    unknown["failure_attribution"]["terminal"] = "unknown root cause"
+    unknown["failure_attribution"]["unknown_root_cause_allowed"] = True
+    no_watchdog = json.loads(json.dumps(legal))
+    no_watchdog["supervisor_watchdog"] = {
+        "present": False,
+        "kind": "none",
+        "crash_recorded_within_seconds": None,
+    }
+    soak_dut = json.loads(json.dumps(legal))
+    soak_dut["supervisor_watchdog"] = {
+        "present": True,
+        "kind": "stall_watchdog",
+        "crash_recorded_within_seconds": 5,
+    }
+    approval = {"approval_is_a_start": True, "start_registration_present": True}
+    specs = (
+        ("approval_is_not_a_start", approval, "supervision_policy"),
+        ("missing_condition", missing, "supervision_policy"),
+        ("local_only", local_only, "public_evidence"),
+        ("unknown_root_cause", unknown, "three_way_attribution"),
+        ("supervisor_without_watchdog", no_watchdog, "supervision_cadence_and_supervisor_watchdog"),
+        ("soak_dut_watchdog_substituted", soak_dut, "supervision_cadence_and_supervisor_watchdog"),
+    )
+    rows: list[dict[str, Any]] = []
+    shape_ok = True
+    expected_detail = {
+        "approval_is_not_a_start": "not_declared",
+        "missing_condition": "not_declared",
+        "local_only": "local_only_refused",
+        "unknown_root_cause": "unknown_root_cause_refused",
+        "supervisor_without_watchdog": "supervisor_watchdog_missing",
+        "soak_dut_watchdog_substituted": "soak_dut_watchdog_is_not_supervisor_watchdog",
+    }
+    for label, claim, condition_id in specs:
+        try:
+            assessed = l2.assess_founder_start(claim)
+        except Exception:
+            return [], False
+        if not isinstance(assessed, dict):
+            return [], False
+        row = _founder_probe_row(label, assessed, condition_id)
+        detail = expected_detail[label]
+        lie = (
+            row["approval_is_a_start"] is not False
+            or row["conditions_satisfied"] is not False
+            or row["counts_as_start"] is not False
+            or row["counts_as_pass"] is not False
+            or row["can_start_clock"] is not False
+            or row["local_only_counts_as_public_evidence"] is not False
+            or row["unknown_root_cause_allowed"] is not False
+            or row["soak_dut_watchdog_counts_as_supervisor_watchdog"] is not False
+            or row["start_registration_present"] is not False
+            or row["l2_2_status"] != "NOT_STARTED"
+            or row["clock_state"] != "NOT_STARTED"
+            or row["production_7x24"] != "NOT_ACCEPTED"
+            or row["condition_detail"] != detail
+            or assessed.get("approval_is_a_start") is not False
+            or assessed.get("can_start_clock") is not False
+            or assessed.get("a_72h_pass_is_production_readiness") is not False
+        )
+        if label == "approval_is_not_a_start":
+            lie = lie or row["approval_claimed_as_start"] is not True or row["start_registration_claimed"] is not True
+            lie = lie or row["missing_conditions"] != list(l2.FOUNDER_CONDITION_IDS)
+        elif label == "missing_condition":
+            lie = lie or row["missing_conditions"] != ["supervision_policy"]
+        elif label == "local_only":
+            lie = lie or row["local_only_refused"] is not True or "public_evidence" not in row["missing_conditions"]
+        elif label == "unknown_root_cause":
+            lie = lie or row["unknown_root_cause_refused"] is not True
+        elif label in {"supervisor_without_watchdog", "soak_dut_watchdog_substituted"}:
+            lie = lie or row["supervisor_watchdog_refused"] is not True
+        if lie:
+            shape_ok = False
+        rows.append(row)
+    return rows, shape_ok
+
+
+def _scorer_refuses_founder_report(l2: Any, root: Path) -> bool:
+    """True when a forged report cannot relabel the approval as a start or a PASS."""
+    fixture = root / FIXTURE_RELATIVE
+    if not fixture.is_file():
+        return False
+    try:
+        honest = l2.score(l2.load_capture(fixture))
+    except Exception:
+        return False
+    if not isinstance(honest, dict) or not isinstance(honest.get("founder_start_conditions"), dict):
+        return False
+    if honest["founder_start_conditions"].get("conditions_satisfied") is not False:
+        return False
+    if honest["founder_start_conditions"].get("approval_is_a_start") is not False:
+        return False
+
+    def names_for(**edits: Any) -> set[str]:
+        forged = json.loads(json.dumps(honest))
+        block = forged["founder_start_conditions"]
+        for key, value in edits.items():
+            if key == "l2_2_status":
+                forged["l2_2_status"] = value
+            elif key == "production_7x24":
+                forged["production_7x24"] = value
+            elif key in GATE_KEYS:
+                forged["gates"][key] = value
+            elif key.startswith("condition:"):
+                condition_id, field = key.split(":", 2)[1:]
+                for item in block["conditions"]:
+                    if item.get("id") == condition_id:
+                        item[field] = value
+            else:
+                block[key] = value
+        return set(l2.validate_report(forged))
+
+    approval = names_for(
+        approval_is_a_start=True,
+        conditions_satisfied=True,
+        l2_2_status="PASS",
+        production_7x24="ACCEPTED",
+        can_start_clock=True,
+    )
+    if not {
+        "approval_is_not_a_start",
+        "founder_conditions_missing",
+        "forged_pass",
+        "production_claim",
+        "forged_clock_start",
+    } <= approval:
+        return False
+    missing = names_for(conditions_satisfied=True, can_accept_l2_2=True)
+    if "founder_conditions_missing" not in missing or "forged_accept" not in missing:
+        return False
+    local_only = names_for(
+        **{
+            "local_only_counts_as_public_evidence": True,
+            "conditions_satisfied": True,
+            "condition:public_evidence:satisfied": True,
+            "condition:public_evidence:detail": "local_only_refused",
+        }
+    )
+    if "local_only_refused" not in local_only:
+        return False
+    unknown = names_for(
+        **{
+            "unknown_root_cause_allowed": True,
+            "conditions_satisfied": True,
+            "condition:three_way_attribution:satisfied": True,
+            "condition:three_way_attribution:detail": "unknown_root_cause_refused",
+        }
+    )
+    if "unknown_root_cause_refused" not in unknown:
+        return False
+    watchdog = names_for(
+        **{
+            "soak_dut_watchdog_counts_as_supervisor_watchdog": True,
+            "conditions_satisfied": True,
+            "condition:supervision_cadence_and_supervisor_watchdog:satisfied": True,
+            "condition:supervision_cadence_and_supervisor_watchdog:detail": "soak_dut_watchdog_is_not_supervisor_watchdog",
+        }
+    )
+    return "supervisor_watchdog_required" in watchdog
+
+
+def _blank_templates(
+    root: Path,
+    *,
+    decision_path: Path | None = None,
+    checklist_path: Path | None = None,
+) -> tuple[str, bool, bool]:
+    """Return (detail or empty, templates_unfilled, bands_documented).
+
+    A filled start line is not this pass posting a start. The placeholder
+    shape in the blank template does not count as a registration.
+    """
+    decision_path = decision_path or (root / DECISION_RELATIVE)
+    checklist_path = checklist_path or (root / CHECKLIST_RELATIVE)
+    if not decision_path.is_file() or not checklist_path.is_file():
+        return "templates_missing", False, False
+    try:
+        decision = decision_path.read_text(encoding="utf-8")
+        checklist = checklist_path.read_text(encoding="utf-8")
+    except OSError:
+        return "templates_missing", False, False
+    bands = "13s through 300s" in checklist and "> 300" in checklist
+    try:
+        import l2_2_score as l2
+    except Exception:
+        l2 = None
+    posted = False
+    if l2 is not None and (
+        l2.start_registration_line_present(decision) or l2.start_registration_line_present(checklist)
+    ):
+        posted = True
+    if posted:
+        return "start_registration_is_not_this_pass", False, bands
+    decision_blank = classify_start_decision(decision).get("ok") is True
+    checklist_blank = classify_r2(checklist).get("ok") is True
+    if decision_blank and checklist_blank:
+        return "", True, bands
+    return "templates_not_blank", False, bands
+
+
+def _closed_founder(detail: str, **extra: Any) -> dict[str, Any]:
+    """Founder-condition row. The approval is recorded and is not a start."""
+    try:
+        import l2_2_score as l2
+
+        base = l2.assess_founder_start(None)
+    except Exception:
+        base = {
+            "rule": "five_founder_conditions_before_start",
+            "approval_exists": True,
+            "approval_conditional": True,
+            "approval_issue": 9,
+            "approval_comment_id": 6761044915,
+            "approval_utc": "2026-11-10T06:50:14Z",
+            "approval_target_pr": 12,
+            "approval_is_a_start": False,
+            "approval_is_a_pass": False,
+            "approval_claimed_as_start": False,
+            "approval_without_conditions_is_a_start": False,
+            "approval_without_start_registration_is_a_start": False,
+            "start_registration_present": False,
+            "start_registration_posted_to_issue_9": False,
+            "start_registration_claimed": False,
+            "conditions_satisfied": False,
+            "missing_conditions": [
+                "supervision_policy",
+                "supervision_cadence_and_supervisor_watchdog",
+                "public_evidence",
+                "three_way_attribution",
+                "not_production_7x24",
+            ],
+            "local_only_counts_as_public_evidence": False,
+            "local_only_refused": False,
+            "unknown_root_cause_allowed": False,
+            "unknown_root_cause_refused": False,
+            "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+            "supervisor_watchdog_refused": False,
+            "supervisor_watchdog_kind_required": "other_process",
+            "supervision_write_max_seconds": 600,
+            "supervisor_watchdog_max_seconds": 10,
+            "yellow_min_seconds": 13.0,
+            "yellow_max_seconds": 300.0,
+            "red_exclusive_min_seconds": 300.0,
+            "clock_required": "monotonic",
+            "a_72h_pass_is_production_readiness": False,
+            "production_7x24": "NOT_ACCEPTED",
+            "can_start_clock": False,
+            "can_accept_l2_2": False,
+            "can_close_l2_2": False,
+            "binds_clock_start": False,
+            "declarations_are_not_a_start": True,
+            "l2_2_status": "NOT_STARTED",
+            "clock_state": "NOT_STARTED",
+            "clock_effect": "none",
+            "conditions": [],
+        }
+    refused = extra.get("refused_claims")
+    if not isinstance(refused, list):
+        refused = []
+    base["ok"] = extra.get("ok") is True
+    base["tool"] = "scripts/l2_2_score.py"
+    base["templates_unfilled"] = extra.get("templates_unfilled") is True
+    base["blank_template_documents_bands"] = extra.get("blank_template_documents_bands") is True
+    base["soak_dut_watchdog_present"] = True
+    base["soak_dut_watchdog_tool"] = "scripts/stall_watchdog.py"
+    base["scaffold_sha256sums_is_soak_evidence"] = False
+    base["refused_claims"] = refused
+    base["approval_is_a_start"] = False
+    base["approval_is_a_pass"] = False
+    base["approval_without_conditions_is_a_start"] = False
+    base["approval_without_start_registration_is_a_start"] = False
+    base["start_registration_present"] = False
+    base["start_registration_posted_to_issue_9"] = False
+    base["conditions_satisfied"] = False
+    base["local_only_counts_as_public_evidence"] = False
+    base["unknown_root_cause_allowed"] = False
+    base["soak_dut_watchdog_counts_as_supervisor_watchdog"] = False
+    base["a_72h_pass_is_production_readiness"] = False
+    base["production_7x24"] = "NOT_ACCEPTED"
+    base["can_start_clock"] = False
+    base["can_accept_l2_2"] = False
+    base["can_close_l2_2"] = False
+    base["binds_clock_start"] = False
+    base["declarations_are_not_a_start"] = True
+    base["l2_2_status"] = "NOT_STARTED"
+    base["clock_state"] = "NOT_STARTED"
+    base["clock_effect"] = "none"
+    base["soak_launched"] = False
+    base["documented_soak_argv_executed"] = False
+    base["detail"] = detail if detail in FOUNDER_CLOSED_DETAILS else "probe_failed"
+    if base["conditions_satisfied"] is not False:
+        base["ok"] = False
+        base["detail"] = "probe_failed"
+    return base
+
+
+def _check_founder_start(
+    root: Path,
+    *,
+    decision_path: Path | None = None,
+    checklist_path: Path | None = None,
+) -> dict[str, Any]:
+    """Record the conditional approval and prove it is not a start.
+
+    The committed templates stay unfilled. This check does not post an
+    L2-2 START line and does not launch soak_2h.py.
+    """
+    template_detail, templates_unfilled, bands = _blank_templates(
+        root,
+        decision_path=decision_path,
+        checklist_path=checklist_path,
+    )
+    try:
+        import l2_2_score as l2
+    except Exception:
+        return _closed_founder(
+            "scorer_import",
+            templates_unfilled=False,
+            blank_template_documents_bands=False,
+            refused_claims=[],
+        )
+    if not callable(getattr(l2, "assess_founder_start", None)) or not callable(getattr(l2, "validate_report", None)):
+        return _closed_founder("scorer_import", refused_claims=[])
+    refused, probes_ok = _founder_probes(l2)
+    forged_ok = _scorer_refuses_founder_report(l2, root) if probes_ok else False
+    if not probes_ok:
+        detail = "probe_failed"
+    elif template_detail:
+        detail = template_detail
+    elif not forged_ok:
+        detail = "forged_founder_not_refused"
+    else:
+        detail = "approval_recorded_not_a_start"
+    return _closed_founder(
+        detail,
+        ok=detail == "approval_recorded_not_a_start",
+        templates_unfilled=templates_unfilled,
+        blank_template_documents_bands=bands,
+        refused_claims=refused,
+    )
+
+
+def _founder_preflight_violations(row: Any) -> list[str]:
+    """Reject a preflight row that treats the approval as a start or a PASS."""
+    violations: list[str] = []
+    if not isinstance(row, dict):
+        return ["founder_start_conditions"]
+    if row.get("tool") != "scripts/l2_2_score.py":
+        violations.append("founder_start_conditions")
+    if row.get("approval_is_a_start") is not False or row.get("approval_is_a_pass") is not False:
+        violations.append("approval_is_not_a_start")
+    if row.get("approval_without_conditions_is_a_start") is not False:
+        violations.append("approval_is_not_a_start")
+    if row.get("approval_without_start_registration_is_a_start") is not False:
+        violations.append("approval_is_not_a_start")
+    if row.get("start_registration_present") is not False or row.get("start_registration_posted_to_issue_9") is not False:
+        violations.append("approval_is_not_a_start")
+    if row.get("conditions_satisfied") is not False:
+        violations.append("founder_conditions_missing")
+    if row.get("local_only_counts_as_public_evidence") is not False or row.get("local_only_refused") is not False:
+        violations.append("local_only_refused")
+    if row.get("unknown_root_cause_allowed") is not False or row.get("unknown_root_cause_refused") is not False:
+        violations.append("unknown_root_cause_refused")
+    if row.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is not False:
+        violations.append("supervisor_watchdog_required")
+    if row.get("supervisor_watchdog_refused") is not False:
+        violations.append("supervisor_watchdog_required")
+    if row.get("a_72h_pass_is_production_readiness") is not False or row.get("production_7x24") != "NOT_ACCEPTED":
+        violations.append("production_claim")
+    if row.get("binds_clock_start") is not False or row.get("soak_launched") is not False:
+        violations.append("approval_is_not_a_start")
+    if row.get("documented_soak_argv_executed") is not False:
+        violations.append("argv_executed")
+    if row.get("clock_effect") != "none":
+        violations.append("clock_effect")
+    if row.get("l2_2_status") != "NOT_STARTED":
+        violations.append("status")
+    if row.get("clock_state") != "NOT_STARTED":
+        violations.append("clock_state")
+    if row.get("declarations_are_not_a_start") is not True:
+        violations.append("approval_is_not_a_start")
+    if row.get("scaffold_sha256sums_is_soak_evidence") is not False:
+        violations.append("local_only_refused")
+    if row.get("soak_dut_watchdog_tool") != "scripts/stall_watchdog.py" or row.get("soak_dut_watchdog_present") is not True:
+        violations.append("supervisor_watchdog_required")
+    for key in GATE_KEYS:
+        if row.get(key) is not False:
+            violations.append("forged_" + key)
+    missing = row.get("missing_conditions")
+    if missing != [
+        "supervision_policy",
+        "supervision_cadence_and_supervisor_watchdog",
+        "public_evidence",
+        "three_way_attribution",
+        "not_production_7x24",
+    ]:
+        violations.append("founder_conditions_missing")
+    conditions = row.get("conditions")
+    if not isinstance(conditions, list):
+        violations.append("founder_start_conditions")
+    else:
+        ids = [item.get("id") if isinstance(item, dict) else None for item in conditions]
+        if ids != [
+            "supervision_policy",
+            "supervision_cadence_and_supervisor_watchdog",
+            "public_evidence",
+            "three_way_attribution",
+            "not_production_7x24",
+        ]:
+            violations.append("founder_start_conditions")
+        else:
+            for item in conditions:
+                if item.get("satisfied") is not False or item.get("declared") is not False or item.get("detail") != "not_declared":
+                    violations.append("founder_conditions_missing")
+    claims = row.get("refused_claims")
+    if not isinstance(claims, list):
+        violations.append("founder_start_conditions")
+    else:
+        labels = [item.get("label") if isinstance(item, dict) else None for item in claims]
+        if row.get("detail") != "scorer_import" and labels != list(FOUNDER_PROBE_LABELS):
+            violations.append("founder_start_conditions")
+        elif row.get("detail") == "scorer_import" and claims:
+            violations.append("founder_start_conditions")
+        else:
+            expected_detail = {
+                "approval_is_not_a_start": "not_declared",
+                "missing_condition": "not_declared",
+                "local_only": "local_only_refused",
+                "unknown_root_cause": "unknown_root_cause_refused",
+                "supervisor_without_watchdog": "supervisor_watchdog_missing",
+                "soak_dut_watchdog_substituted": "soak_dut_watchdog_is_not_supervisor_watchdog",
+            }
+            for item in claims:
+                if (
+                    item.get("approval_is_a_start") is not False
+                    or item.get("conditions_satisfied") is not False
+                    or item.get("counts_as_start") is not False
+                    or item.get("counts_as_pass") is not False
+                    or item.get("can_start_clock") is not False
+                    or item.get("local_only_counts_as_public_evidence") is not False
+                    or item.get("unknown_root_cause_allowed") is not False
+                    or item.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is not False
+                    or item.get("start_registration_present") is not False
+                    or item.get("l2_2_status") != "NOT_STARTED"
+                    or item.get("clock_state") != "NOT_STARTED"
+                    or item.get("production_7x24") != "NOT_ACCEPTED"
+                    or item.get("a_72h_pass_is_production_readiness") is not False
+                    or item.get("condition_detail") != expected_detail.get(item.get("label"))
+                ):
+                    violations.append("founder_conditions_missing")
+                if item.get("label") == "local_only" and item.get("local_only_refused") is not True:
+                    violations.append("local_only_refused")
+                if item.get("label") == "unknown_root_cause" and item.get("unknown_root_cause_refused") is not True:
+                    violations.append("unknown_root_cause_refused")
+                if item.get("label") in {"supervisor_without_watchdog", "soak_dut_watchdog_substituted"} and (
+                    item.get("supervisor_watchdog_refused") is not True
+                ):
+                    violations.append("supervisor_watchdog_required")
+                if item.get("label") == "approval_is_not_a_start" and item.get("approval_claimed_as_start") is not True:
+                    violations.append("approval_is_not_a_start")
+    if row.get("detail") not in FOUNDER_CLOSED_DETAILS:
+        violations.append("founder_start_conditions")
+    if row.get("ok") is True and row.get("detail") != "approval_recorded_not_a_start":
+        violations.append("founder_start_conditions")
+    if row.get("ok") is True and row.get("templates_unfilled") is not True:
+        violations.append("founder_start_conditions")
+    if not isinstance(row.get("ok"), bool):
+        violations.append("founder_start_conditions")
+    try:
+        import l2_2_score as l2
+
+        violations.extend(l2._founder_block_violations(row))
+    except Exception:
+        violations.append("founder_start_conditions")
+    return violations
+
+
 def _refuses_forged(validate, report: dict[str, Any], **edits: Any) -> bool:
     forged = json.loads(json.dumps(report))
     for key, value in edits.items():
@@ -1664,6 +2239,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "ubuntu_24h_specimen": checks["ubuntu_24h_specimen"],
         "non_additivity": checks["non_additivity"],
         "process_continuity": checks["process_continuity"],
+        "founder_start_conditions": checks["founder_start_conditions"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -1711,6 +2287,11 @@ def preflight(
             "ubuntu_24h_specimen": _check_ubuntu_specimen(metrics),
             "non_additivity": _check_non_additivity(repo),
             "process_continuity": _check_process_continuity(repo),
+            "founder_start_conditions": _check_founder_start(
+                repo,
+                decision_path=decision,
+                checklist_path=checklist,
+            ),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -1864,6 +2445,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_process_continuity_violations(top_continuity))
     if continuity != top_continuity:
         violations.append("process_continuity_mismatch")
+    founder = checks.get("founder_start_conditions")
+    top_founder = report.get("founder_start_conditions")
+    violations.extend(_founder_preflight_violations(founder))
+    violations.extend(_founder_preflight_violations(top_founder))
+    if founder != top_founder:
+        violations.append("founder_start_conditions_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

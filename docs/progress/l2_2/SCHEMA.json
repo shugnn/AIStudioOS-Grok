@@ -15,6 +15,30 @@
   "business_verdict": "UNSCORED",
   "product_l2_task_split": "NOT_STARTED",
   "interactive_registration": "founder_gated_out_of_scope",
+  "founder_start_conditions": {
+    "approval_issue": 9,
+    "approval_comment_id": 6761044915,
+    "approval_utc": "2026-11-10T06:50:14Z",
+    "approval_target_pr": 12,
+    "approval_is_a_start": false,
+    "approval_conditional": true,
+    "conditions_satisfied": false,
+    "can_start_clock": false,
+    "start_registration_present": false,
+    "local_only_counts_as_public_evidence": false,
+    "unknown_root_cause_allowed": false,
+    "soak_dut_watchdog_counts_as_supervisor_watchdog": false,
+    "a_72h_pass_is_production_readiness": false,
+    "supervision_write_max_seconds": 600,
+    "supervisor_watchdog_max_seconds": 10,
+    "condition_ids": [
+      "supervision_policy",
+      "supervision_cadence_and_supervisor_watchdog",
+      "public_evidence",
+      "three_way_attribution",
+      "not_production_7x24"
+    ]
+  },
   "allowed_runner_kinds": ["soak_2h_via_l1", "existing_local_loop"],
   "forbidden_runner_kinds": ["interactive_schtasks", "logon_schtasks", "schtasks_new"],
   "watch_target": {
@@ -48,6 +72,7 @@
     "docs/progress/soak_2h/metrics.json (Ubuntu-24H, wall 86400.001s) is a historical SHORT specimen. scripts/l2_2_preflight.py records that it is below 259200, that it does not count toward the 72h gate, and that it is not the stall DUT. The L2-2 clock stays NOT_STARTED. The file is not a started capture.",
     "72h is one continuous monotonic wall on a single live soak. Ended SHORT walls are not additive. A sum of 24h walls, including 86400.001 plus 86400 and 86400 times 3, does not count toward 259200 and is not a started, PASS, or ACCEPTED capture. No Windows D1 metrics file is bound from this tree.",
     "72h is one live soak process. Stitching, chaining, or concatenating sequential or restarted invocations does not count, even back-to-back on the same host and even when the stitched duration or calendar span reaches 259200. Different start timestamps, different process ids, or a wall that resets or goes backwards are not a started, PASS, or ACCEPTED capture. This process-boundary continuity gate does not start the clock.",
+    "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. It is not a start, not a PASS, and it does not set can_start_clock. The five conditions (supervision policy, supervision cadence plus a watchdog of the supervisor, public evidence, three-way failure attribution, and no production 7x24 claim) stay unsatisfied in this scaffold. LOCAL_ONLY does not count as public evidence. Unknown root cause is not a terminal attribution. scripts/stall_watchdog.py watches a soak DUT and is not a watchdog of the supervisor. A 72h result is not production readiness. This scaffold does not post the L2-2 START line.",
     "The scorer never starts the clock and never registers Interactive console scheduled tasks.",
     "Registering Interactive duty is a founder major gate and is out of scope for the L2-2 scaffold.",
     "Lighting every informational bar still leaves can_accept_l2_2 false.",

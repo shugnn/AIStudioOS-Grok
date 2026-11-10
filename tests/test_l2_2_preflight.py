@@ -628,7 +628,7 @@ def test_committed_ubuntu_24h_is_a_short_specimen_not_the_72h_gate(monkeypatch: 
     monkeypatch.setattr(l2, "score", wrapped)
     report = pre.preflight()
     _assert_not_a_start(report)
-    assert seen == ["scaffold", "scaffold", "scaffold"]
+    assert seen == ["scaffold", "scaffold", "scaffold", "scaffold"]
     specimen = report["ubuntu_24h_specimen"]
     assert specimen == report["checks"]["ubuntu_24h_specimen"]
     assert specimen["ok"] is True
@@ -966,3 +966,157 @@ def test_forged_stitch_preflight_fails_closed():
     assert report["process_continuity"]["sequential_soaks_are_continuous"] is False
     assert report["process_continuity"]["stitched_processes_count_toward_gate"] is False
     assert report["documented_soak_argv_executed"] is False
+
+
+def test_founder_approval_is_recorded_and_is_not_a_start():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is True
+    row = report["founder_start_conditions"]
+    assert row == report["checks"]["founder_start_conditions"]
+    assert row["ok"] is True
+    assert row["detail"] == "approval_recorded_not_a_start"
+    assert row["rule"] == "five_founder_conditions_before_start"
+    assert row["approval_exists"] is True
+    assert row["approval_conditional"] is True
+    assert row["approval_issue"] == 9
+    assert row["approval_comment_id"] == 6761044915
+    assert row["approval_utc"] == "2026-11-10T06:50:14Z"
+    assert row["approval_target_pr"] == 12
+    assert row["approval_is_a_start"] is False
+    assert row["approval_is_a_pass"] is False
+    assert row["approval_without_conditions_is_a_start"] is False
+    assert row["approval_without_start_registration_is_a_start"] is False
+    assert row["start_registration_present"] is False
+    assert row["start_registration_posted_to_issue_9"] is False
+    assert row["conditions_satisfied"] is False
+    assert row["missing_conditions"] == list(l2.FOUNDER_CONDITION_IDS)
+    assert row["templates_unfilled"] is True
+    assert row["blank_template_documents_bands"] is True
+    assert row["local_only_counts_as_public_evidence"] is False
+    assert row["unknown_root_cause_allowed"] is False
+    assert row["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    assert row["soak_dut_watchdog_tool"] == "scripts/stall_watchdog.py"
+    assert row["a_72h_pass_is_production_readiness"] is False
+    assert row["declarations_are_not_a_start"] is True
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["clock_effect"] == "none"
+    assert row["soak_launched"] is False
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "approval_is_not_a_start",
+        "missing_condition",
+        "local_only",
+        "unknown_root_cause",
+        "supervisor_without_watchdog",
+        "soak_dut_watchdog_substituted",
+    ]
+    by_label = {item["label"]: item for item in row["refused_claims"]}
+    assert by_label["approval_is_not_a_start"]["approval_claimed_as_start"] is True
+    assert by_label["approval_is_not_a_start"]["approval_is_a_start"] is False
+    assert by_label["approval_is_not_a_start"]["conditions_satisfied"] is False
+    assert by_label["approval_is_not_a_start"]["counts_as_start"] is False
+    assert by_label["missing_condition"]["missing_conditions"] == ["supervision_policy"]
+    assert by_label["missing_condition"]["conditions_satisfied"] is False
+    assert by_label["local_only"]["local_only_refused"] is True
+    assert by_label["local_only"]["local_only_counts_as_public_evidence"] is False
+    assert by_label["local_only"]["condition_detail"] == "local_only_refused"
+    assert by_label["unknown_root_cause"]["unknown_root_cause_refused"] is True
+    assert by_label["unknown_root_cause"]["unknown_root_cause_allowed"] is False
+    assert by_label["supervisor_without_watchdog"]["condition_detail"] == "supervisor_watchdog_missing"
+    assert by_label["supervisor_without_watchdog"]["supervisor_watchdog_refused"] is True
+    assert by_label["soak_dut_watchdog_substituted"]["condition_detail"] == "soak_dut_watchdog_is_not_supervisor_watchdog"
+    assert by_label["soak_dut_watchdog_substituted"]["soak_dut_watchdog_counts_as_supervisor_watchdog"] is False
+    for item in row["refused_claims"]:
+        assert item["can_start_clock"] is False
+        assert item["counts_as_start"] is False
+        assert item["counts_as_pass"] is False
+        assert item["l2_2_status"] == "NOT_STARTED"
+        assert item["production_7x24"] == "NOT_ACCEPTED"
+    decision = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+    checklist = (ROOT / "docs" / "progress" / "l2_2" / "R2_CHECKLIST.md").read_text(encoding="utf-8")
+    readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
+    assert "6761044915" in decision
+    assert "6761044915" in checklist
+    assert "6761044915" in readme
+    assert "not a start" in decision.lower() or "is not a start" in decision
+    assert pre.classify_start_decision(decision)["start_decision"] == "not_given"
+    assert pre.classify_start_decision(decision)["ok"] is True
+    assert pre.classify_r2(checklist)["start_decision"] == "not_given"
+    assert l2.start_registration_line_present(decision) is False
+    assert l2.start_registration_line_present(checklist) is False
+    assert "LOCAL_ONLY does not count" in decision
+    assert "Unknown root cause is not a terminal attribution" in decision
+    assert "stall_watchdog.py" in decision
+    blob = json.dumps(report)
+    assert '"approval_is_a_start": true' not in blob
+    assert '"conditions_satisfied": true' not in blob
+    assert '"can_start_clock": true' not in blob
+    assert '"l2_2_status": "PASS"' not in blob
+    assert '"production_7x24": "ACCEPTED"' not in blob
+    assert "conditional founder approval" in report["operator_note"]
+    assert any("6761044915" in step and "not a start" in step for step in report["next_steps"])
+
+
+def test_forged_founder_preflight_fails_closed():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    forged = json.loads(json.dumps(report))
+    forged["founder_start_conditions"]["approval_is_a_start"] = True
+    forged["founder_start_conditions"]["conditions_satisfied"] = True
+    forged["founder_start_conditions"]["start_registration_present"] = True
+    forged["founder_start_conditions"]["local_only_counts_as_public_evidence"] = True
+    forged["founder_start_conditions"]["unknown_root_cause_allowed"] = True
+    forged["founder_start_conditions"]["soak_dut_watchdog_counts_as_supervisor_watchdog"] = True
+    forged["founder_start_conditions"]["a_72h_pass_is_production_readiness"] = True
+    forged["founder_start_conditions"]["can_start_clock"] = True
+    forged["founder_start_conditions"]["l2_2_status"] = "PASS"
+    forged["founder_start_conditions"]["clock_state"] = "STARTED"
+    forged["founder_start_conditions"]["production_7x24"] = "ACCEPTED"
+    forged["checks"]["founder_start_conditions"] = json.loads(json.dumps(forged["founder_start_conditions"]))
+    names = set(pre.validate_report(forged))
+    assert "approval_is_not_a_start" in names
+    assert "founder_conditions_missing" in names
+    assert "local_only_refused" in names
+    assert "unknown_root_cause_refused" in names
+    assert "supervisor_watchdog_required" in names
+    assert "production_claim" in names
+    assert "status" in names
+    assert "forged_can_start_clock" in names
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["founder_start_conditions"]["approval_is_a_start"] is False
+    assert report["founder_start_conditions"]["conditions_satisfied"] is False
+    assert report["documented_soak_argv_executed"] is False
+
+
+def test_filled_start_registration_line_is_not_this_pass(tmp_path: Path):
+    original = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+    path = tmp_path / "START_DECISION.md"
+    line = (
+        "L2-2 START: utc=2026-02-01T00:00:00Z "
+        "sha=0123456789abcdef0123456789abcdef01234567 "
+        "host=example max_wall_seconds=259200\n"
+    )
+    path.write_text(original + "\n" + line, encoding="utf-8")
+    assert l2.start_registration_line_present(path.read_text(encoding="utf-8")) is True
+    assert l2.start_registration_line_present(original) is False
+    report = pre.preflight(start_decision_path=path)
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is False
+    founder = report["checks"]["founder_start_conditions"]
+    assert founder["ok"] is False
+    assert founder["detail"] == "start_registration_is_not_this_pass"
+    assert founder["start_registration_present"] is False
+    assert founder["start_registration_posted_to_issue_9"] is False
+    assert founder["approval_is_a_start"] is False
+    assert founder["conditions_satisfied"] is False
+    assert founder["can_start_clock"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert "founder_start_conditions:start_registration_is_not_this_pass" in report["failures"]
+    assert original == (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")

@@ -29,3 +29,24 @@ The intended command is the existing non-Interactive local soak. This template d
 - Exit 0 from those checks is an honest NOT STARTED report. The three gates stay false. Production 7×24 stays **NOT ACCEPTED**.
 - The offline non-additivity gate is not a start.
 - The offline process-boundary continuity gate is not a start.
+- The conditional founder approval on Issue #9 is not a start.
+- Recording the five unfilled conditions is not a start.
+
+## Conditional founder approval (not a start)
+
+Issue #9 comment `6761044915` at `2026-11-10T06:50:14Z` records a conditional founder approval for the 72h long test on PR #12. That approval is real. It is not a start. It does not set `can_start_clock`. Approval without the five conditions below, and without a later explicit start registration, is not a start. This file does not post that registration.
+
+| Condition | This template |
+|-----------|----------------|
+| Supervision policy | Unfilled. Yellow is 13s through 300s. Red is above 300s. The clock is monotonic. Writing the bands here is not a declaration before a launch |
+| Supervision cadence and supervisor watchdog | Unfilled. A future supervision writer would have to record at least once every 10 minutes. The supervisor itself would need another process to record a crash within 10s. `scripts/stall_watchdog.py` watches a soak DUT. It is not that supervisor watchdog |
+| Public evidence | Unfilled. Final metrics, a log summary, and a SHA list would have to be committed in public. LOCAL_ONLY does not count |
+| Failure attribution | Unfilled. A failure would have to name business, host, or supervision. Unknown root cause is not a terminal attribution |
+| Production 7×24 | Stays **NOT ACCEPTED**. A 72h result is not production readiness |
+
+The later registration line is not in this file. Its shape, which this template does not fill, is:
+
+    L2-2 START: utc=<T0> sha=<full SHA> host=<host> max_wall_seconds=259200
+    supervision: yellow=13s-300s red=>300s watchdog=<mechanism>
+
+Copying that shape is not a launch.

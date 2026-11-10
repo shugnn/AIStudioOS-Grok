@@ -6,6 +6,10 @@ honest report. This tool does not start a clock, does not register scheduled
 tasks, and never emits L2-2 PASS or production 7x24 acceptance. A sum of ended
 SHORT walls does not count. Stitching sequential or restarted soak invocations
 into one capture does not count, even when the stitched span reaches 259200.
+The Issue #9 conditional founder approval is not a start. A report cannot
+pretend the five start conditions are satisfied, pretend that approval started
+the clock, treat LOCAL_ONLY as public evidence, end on an unknown root cause,
+or treat the soak-DUT stall watchdog as a watchdog of the supervisor.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -16,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -99,6 +104,64 @@ HOST_STOPS = {
 YELLOW_MIN_SECONDS = gaplog.YELLOW_MIN_SECONDS
 RED_MIN_SECONDS = gaplog.RED_MIN_SECONDS  # gap > 5 min is red; 300s exactly stays yellow
 
+# Conditional founder approval on Issue #9. Recording it is not a start.
+FOUNDER_APPROVAL_ISSUE = 9
+FOUNDER_APPROVAL_COMMENT_ID = 6761044915
+FOUNDER_APPROVAL_UTC = "2026-11-10T06:50:14Z"
+FOUNDER_APPROVAL_PR = 12
+SUPERVISION_WRITE_MAX_SECONDS = 600  # at least once every 10 minutes
+SUPERVISOR_WATCHDOG_MAX_SECONDS = 10
+FOUNDER_CONDITION_IDS = (
+    "supervision_policy",
+    "supervision_cadence_and_supervisor_watchdog",
+    "public_evidence",
+    "three_way_attribution",
+    "not_production_7x24",
+)
+FOUNDER_CONDITION_DETAILS = frozenset(
+    {
+        "not_declared",
+        "satisfied",
+        "band_mismatch",
+        "clock_not_monotonic",
+        "write_gap_too_wide",
+        "supervisor_watchdog_missing",
+        "soak_dut_watchdog_is_not_supervisor_watchdog",
+        "crash_record_too_slow",
+        "local_only_refused",
+        "public_parts_missing",
+        "unknown_root_cause_refused",
+        "ways_incomplete",
+        "production_claim_refused",
+        "pass_claimed_as_readiness",
+    }
+)
+WATCHDOG_REFUSAL_DETAILS = frozenset(
+    {
+        "supervisor_watchdog_missing",
+        "soak_dut_watchdog_is_not_supervisor_watchdog",
+        "crash_record_too_slow",
+    }
+)
+SOAK_DUT_WATCHDOG_KINDS = frozenset(
+    {
+        "soak_dut",
+        "soak_dut_stall_watchdog",
+        "stall_watchdog",
+        "soak_summary",
+        "soak_summary_live",
+    }
+)
+SUPERVISOR_WATCHDOG_KIND = "other_process"
+ATTRIBUTION_WAYS = frozenset({"business", "host", "supervision"})
+ATTRIBUTION_TERMINALS = frozenset({"none", "business", "host", "supervision"})
+UNKNOWN_ROOT_TOKENS = frozenset({"unknown", "unknown_root_cause"})
+LOCAL_ONLY_TOKEN = "local_only"
+# A posted start line has a 40-hex sha. The placeholder shape does not match.
+START_REGISTRATION_RE = re.compile(
+    r"(?m)^[ \t]*L2-2 START:[ \t]+utc=\S+[ \t]+sha=[0-9a-fA-F]{40}[ \t]+host=\S+[ \t]+max_wall_seconds=259200[ \t]*$"
+)
+
 PERMANENT_BLOCKERS = (
     "tool_does_not_accept_l2_2",
     "tool_does_not_start_clock",
@@ -119,6 +182,7 @@ NEXT_STEPS = (
     "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
     "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
     "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate.",
+    "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. That approval is not a start, not a PASS, and it does not set can_start_clock. The five conditions stay unsatisfied until a later explicit declaration: supervision policy (yellow 13s through 300s, red above 300s, monotonic clock), supervision writes at least once every 10 minutes and a separate process records a supervisor crash within 10s (the soak-DUT stall watchdog is not that watchdog), public evidence of final metrics plus a log summary plus a SHA list (LOCAL_ONLY does not count), three-way failure attribution (business, host, supervision; unknown root cause is not a terminal attribution), and no production 7x24 claim. A 72h result is not production readiness. This scorer does not post the L2-2 START line.",
 )
 
 
@@ -273,6 +337,8 @@ def validate_capture(doc: dict[str, Any]) -> None:
     for field in ("claimed_l2_2_status", "claimed_production_7x24"):
         if field in doc and doc[field] is not None and not isinstance(doc[field], str):
             raise CaptureError(f"{field} must be a string or null")
+    if "founder_start" in doc:
+        _validate_founder_start(doc.get("founder_start"))
 
     if evidence == "scaffold":
         _reject_scaffold_incident_dates(doc)
@@ -848,6 +914,348 @@ def standing_process_continuity(
     return base
 
 
+def _norm_token(value: Any) -> str:
+    return str(value or "").strip().lower().replace("-", " ").replace("_", " ")
+
+
+def _token_key(value: Any) -> str:
+    return "_".join(_norm_token(value).split())
+
+
+def start_registration_line_present(text: str) -> bool:
+    """True only for a filled L2-2 START line with a 40-hex sha.
+
+    The placeholder shape (sha=<full SHA>) does not match. Finding the line
+    in a template is still not this tool posting it, and it is not a start.
+    """
+    return START_REGISTRATION_RE.search(text) is not None
+
+
+def legal_founder_declaration() -> dict[str, Any]:
+    """In-memory declaration that meets the five conditions. Not a start."""
+    return {
+        "approval_is_a_start": False,
+        "start_registration_present": False,
+        "supervision_policy": {
+            "declared_before_start": True,
+            "yellow_min_seconds": YELLOW_MIN_SECONDS,
+            "yellow_max_seconds": RED_MIN_SECONDS,
+            "red_exclusive_min_seconds": RED_MIN_SECONDS,
+            "clock": "monotonic",
+        },
+        "supervision_writes": {
+            "declared": True,
+            "max_gap_seconds": SUPERVISION_WRITE_MAX_SECONDS,
+        },
+        "supervisor_watchdog": {
+            "present": True,
+            "kind": SUPERVISOR_WATCHDOG_KIND,
+            "crash_recorded_within_seconds": SUPERVISOR_WATCHDOG_MAX_SECONDS,
+        },
+        "evidence": {
+            "publication": "public",
+            "final_metrics": True,
+            "log_summary": True,
+            "sha_list": True,
+        },
+        "failure_attribution": {
+            "ways": ["business", "host", "supervision"],
+            "terminal": "none",
+            "unknown_root_cause_allowed": False,
+        },
+        "production": {
+            "claimed": "NOT_ACCEPTED",
+            "pass_is_production_readiness": False,
+        },
+    }
+
+
+def _founder_condition(condition_id: str, *, declared: bool, satisfied: bool, detail: str) -> dict[str, Any]:
+    return {
+        "id": condition_id,
+        "required": True,
+        "declared": declared,
+        "satisfied": satisfied,
+        "detail": detail,
+    }
+
+
+def _open_condition(condition_id: str, detail: str) -> dict[str, Any]:
+    declared = detail != "not_declared"
+    return _founder_condition(condition_id, declared=declared, satisfied=False, detail=detail)
+
+
+def _closed_condition(condition_id: str) -> dict[str, Any]:
+    return _founder_condition(condition_id, declared=True, satisfied=True, detail="satisfied")
+
+
+def _assess_supervision_policy(raw: Any) -> dict[str, Any]:
+    condition_id = "supervision_policy"
+    if not isinstance(raw, dict):
+        return _open_condition(condition_id, "not_declared")
+    if raw.get("declared_before_start") is not True:
+        return _open_condition(condition_id, "not_declared")
+    yellow_min = raw.get("yellow_min_seconds")
+    yellow_max = raw.get("yellow_max_seconds")
+    red_min = raw.get("red_exclusive_min_seconds")
+    numbers_ok = (
+        _is_number(yellow_min)
+        and float(yellow_min) == YELLOW_MIN_SECONDS
+        and _is_number(yellow_max)
+        and float(yellow_max) == RED_MIN_SECONDS
+        and _is_number(red_min)
+        and float(red_min) == RED_MIN_SECONDS
+    )
+    clock_ok = _token_key(raw.get("clock")) == "monotonic"
+    if not numbers_ok:
+        return _open_condition(condition_id, "band_mismatch")
+    if not clock_ok:
+        return _open_condition(condition_id, "clock_not_monotonic")
+    return _closed_condition(condition_id)
+
+
+def _assess_supervisor_watchdog(raw: Any) -> str:
+    """Return a condition detail for the supervisor-watchdog half."""
+    if not isinstance(raw, dict):
+        return "supervisor_watchdog_missing"
+    kind = _token_key(raw.get("kind"))
+    if kind in SOAK_DUT_WATCHDOG_KINDS:
+        return "soak_dut_watchdog_is_not_supervisor_watchdog"
+    seconds = raw.get("crash_recorded_within_seconds")
+    present = raw.get("present") is True and kind == SUPERVISOR_WATCHDOG_KIND
+    if not present:
+        return "supervisor_watchdog_missing"
+    if not _is_number(seconds) or float(seconds) < 0 or float(seconds) > SUPERVISOR_WATCHDOG_MAX_SECONDS:
+        return "crash_record_too_slow"
+    return "satisfied"
+
+
+def _assess_cadence_and_watchdog(writes: Any, watchdog: Any) -> dict[str, Any]:
+    condition_id = "supervision_cadence_and_supervisor_watchdog"
+    if writes is None and watchdog is None:
+        return _open_condition(condition_id, "not_declared")
+    if not isinstance(writes, dict) or writes.get("declared") is not True:
+        cadence = "write_gap_too_wide" if isinstance(writes, dict) else "not_declared"
+    else:
+        gap = writes.get("max_gap_seconds")
+        cadence = "satisfied" if _is_number(gap) and 0 < float(gap) <= SUPERVISION_WRITE_MAX_SECONDS else "write_gap_too_wide"
+    watch = _assess_supervisor_watchdog(watchdog)
+    if cadence == "satisfied" and watch == "satisfied":
+        return _closed_condition(condition_id)
+    if watch != "satisfied":
+        return _open_condition(condition_id, watch)
+    return _open_condition(condition_id, cadence)
+
+
+def _assess_public_evidence(raw: Any) -> dict[str, Any]:
+    condition_id = "public_evidence"
+    if not isinstance(raw, dict):
+        return _open_condition(condition_id, "not_declared")
+    publication = _token_key(raw.get("publication"))
+    parts = all(raw.get(key) is True for key in ("final_metrics", "log_summary", "sha_list"))
+    if publication == LOCAL_ONLY_TOKEN:
+        return _open_condition(condition_id, "local_only_refused")
+    if publication != "public":
+        return _open_condition(condition_id, "not_declared")
+    if not parts:
+        return _open_condition(condition_id, "public_parts_missing")
+    return _closed_condition(condition_id)
+
+
+def _assess_attribution(raw: Any) -> dict[str, Any]:
+    condition_id = "three_way_attribution"
+    if not isinstance(raw, dict):
+        return _open_condition(condition_id, "not_declared")
+    ways = raw.get("ways")
+    ways_ok = (
+        isinstance(ways, list)
+        and len(ways) == 3
+        and {_token_key(item) for item in ways} == ATTRIBUTION_WAYS
+        and all(isinstance(item, str) for item in ways)
+    )
+    terminal = _token_key(raw.get("terminal") or "none")
+    allowed = raw.get("unknown_root_cause_allowed") is True
+    if allowed or terminal in UNKNOWN_ROOT_TOKENS or terminal not in ATTRIBUTION_TERMINALS:
+        return _open_condition(condition_id, "unknown_root_cause_refused")
+    if not ways_ok:
+        return _open_condition(condition_id, "ways_incomplete")
+    return _closed_condition(condition_id)
+
+
+def _assess_production(raw: Any) -> dict[str, Any]:
+    condition_id = "not_production_7x24"
+    if not isinstance(raw, dict):
+        return _open_condition(condition_id, "not_declared")
+    claimed = _token_key(raw.get("claimed"))
+    if raw.get("pass_is_production_readiness") is True:
+        return _open_condition(condition_id, "pass_claimed_as_readiness")
+    if claimed in {"accepted", "pass", "production_accepted"}:
+        return _open_condition(condition_id, "production_claim_refused")
+    if claimed != "not_accepted":
+        return _open_condition(condition_id, "not_declared")
+    return _closed_condition(condition_id)
+
+
+def _founder_shell(conditions: list[dict[str, Any]], **flags: Any) -> dict[str, Any]:
+    missing = [item["id"] for item in conditions if item.get("satisfied") is not True]
+    satisfied = not missing and len(conditions) == len(FOUNDER_CONDITION_IDS)
+    block: dict[str, Any] = {
+        "rule": "five_founder_conditions_before_start",
+        "approval_exists": True,
+        "approval_conditional": True,
+        "approval_issue": FOUNDER_APPROVAL_ISSUE,
+        "approval_comment_id": FOUNDER_APPROVAL_COMMENT_ID,
+        "approval_utc": FOUNDER_APPROVAL_UTC,
+        "approval_target_pr": FOUNDER_APPROVAL_PR,
+        "approval_is_a_start": False,
+        "approval_is_a_pass": False,
+        "approval_claimed_as_start": False,
+        "approval_without_conditions_is_a_start": False,
+        "approval_without_start_registration_is_a_start": False,
+        "start_registration_present": False,
+        "start_registration_posted_to_issue_9": False,
+        "start_registration_claimed": False,
+        "conditions_satisfied": satisfied,
+        "missing_conditions": missing,
+        "local_only_counts_as_public_evidence": False,
+        "local_only_refused": False,
+        "unknown_root_cause_allowed": False,
+        "unknown_root_cause_refused": False,
+        "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+        "supervisor_watchdog_refused": False,
+        "supervisor_watchdog_kind_required": SUPERVISOR_WATCHDOG_KIND,
+        "supervision_write_max_seconds": SUPERVISION_WRITE_MAX_SECONDS,
+        "supervisor_watchdog_max_seconds": SUPERVISOR_WATCHDOG_MAX_SECONDS,
+        "yellow_min_seconds": YELLOW_MIN_SECONDS,
+        "yellow_max_seconds": RED_MIN_SECONDS,
+        "red_exclusive_min_seconds": RED_MIN_SECONDS,
+        "clock_required": "monotonic",
+        "a_72h_pass_is_production_readiness": False,
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "binds_clock_start": False,
+        "declarations_are_not_a_start": True,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "conditions": conditions,
+    }
+    for key, value in flags.items():
+        if key in block and key not in {
+            "approval_is_a_start",
+            "approval_is_a_pass",
+            "approval_without_conditions_is_a_start",
+            "approval_without_start_registration_is_a_start",
+            "start_registration_present",
+            "start_registration_posted_to_issue_9",
+            "local_only_counts_as_public_evidence",
+            "unknown_root_cause_allowed",
+            "soak_dut_watchdog_counts_as_supervisor_watchdog",
+            "a_72h_pass_is_production_readiness",
+            "production_7x24",
+            "can_start_clock",
+            "can_accept_l2_2",
+            "can_close_l2_2",
+            "binds_clock_start",
+            "declarations_are_not_a_start",
+            "l2_2_status",
+            "clock_state",
+            "clock_effect",
+            "conditions_satisfied",
+            "missing_conditions",
+            "rule",
+        }:
+            block[key] = value
+    by_id = {item["id"]: item for item in conditions}
+    block["local_only_refused"] = by_id.get("public_evidence", {}).get("detail") == "local_only_refused"
+    block["unknown_root_cause_refused"] = by_id.get("three_way_attribution", {}).get("detail") == "unknown_root_cause_refused"
+    block["supervisor_watchdog_refused"] = (
+        by_id.get("supervision_cadence_and_supervisor_watchdog", {}).get("detail") in WATCHDOG_REFUSAL_DETAILS
+    )
+    block["conditions_satisfied"] = satisfied
+    block["missing_conditions"] = missing
+    return block
+
+
+def assess_founder_start(claim: dict[str, Any] | None) -> dict[str, Any]:
+    """Score a founder-start claim. The approval is not a start.
+
+    conditions_satisfied is true only when all five declarations are legal.
+    That flag does not start the clock, does not emit PASS, and does not
+    accept production 7x24. LOCAL_ONLY is not public evidence. An unknown
+    root cause is not a terminal attribution. The soak-DUT stall watchdog
+    is not a watchdog of the supervisor.
+    """
+    if claim is None:
+        claim = {}
+    if not isinstance(claim, dict):
+        claim = {}
+    conditions = [
+        _assess_supervision_policy(claim.get("supervision_policy")),
+        _assess_cadence_and_watchdog(claim.get("supervision_writes"), claim.get("supervisor_watchdog")),
+        _assess_public_evidence(claim.get("evidence")),
+        _assess_attribution(claim.get("failure_attribution")),
+        _assess_production(claim.get("production")),
+    ]
+    return _founder_shell(
+        conditions,
+        approval_claimed_as_start=claim.get("approval_is_a_start") is True,
+        start_registration_claimed=claim.get("start_registration_present") is True,
+    )
+
+
+def _validate_founder_start(raw: Any) -> None:
+    if raw is None:
+        return
+    if not isinstance(raw, dict):
+        raise CaptureError("founder_start must be an object")
+    for key in ("approval_is_a_start", "start_registration_present"):
+        if key in raw and not isinstance(raw[key], bool):
+            raise CaptureError(f"founder_start.{key} must be a bool")
+    for key in (
+        "supervision_policy",
+        "supervision_writes",
+        "supervisor_watchdog",
+        "evidence",
+        "failure_attribution",
+        "production",
+    ):
+        if key in raw and raw[key] is not None and not isinstance(raw[key], dict):
+            raise CaptureError(f"founder_start.{key} must be an object or null")
+    policy = raw.get("supervision_policy")
+    if isinstance(policy, dict) and "declared_before_start" in policy and not isinstance(
+        policy.get("declared_before_start"), bool
+    ):
+        raise CaptureError("founder_start.supervision_policy.declared_before_start must be a bool")
+    evidence = raw.get("evidence")
+    if isinstance(evidence, dict):
+        for key in ("final_metrics", "log_summary", "sha_list"):
+            if key in evidence and not isinstance(evidence.get(key), bool):
+                raise CaptureError(f"founder_start.evidence.{key} must be a bool")
+    attribution = raw.get("failure_attribution")
+    if isinstance(attribution, dict):
+        if "ways" in attribution and not isinstance(attribution.get("ways"), list):
+            raise CaptureError("founder_start.failure_attribution.ways must be a list")
+        if "unknown_root_cause_allowed" in attribution and not isinstance(
+            attribution.get("unknown_root_cause_allowed"), bool
+        ):
+            raise CaptureError("founder_start.failure_attribution.unknown_root_cause_allowed must be a bool")
+    production = raw.get("production")
+    if isinstance(production, dict) and "pass_is_production_readiness" in production and not isinstance(
+        production.get("pass_is_production_readiness"), bool
+    ):
+        raise CaptureError("founder_start.production.pass_is_production_readiness must be a bool")
+
+
+def _forged_production_claim(doc: dict[str, Any]) -> bool:
+    production = str(doc.get("claimed_production_7x24") or "").strip().upper().replace(" ", "_")
+    if production in {"", "NOT_ACCEPTED", "NOT_STARTED", "INCOMPLETE", "UNSCORED"}:
+        return False
+    return production in {"ACCEPTED", "PASS", "PRODUCTION_ACCEPTED"} or "ACCEPTED" in production
+
+
 def _forged_claim(doc: dict[str, Any]) -> bool:
     status = str(doc.get("claimed_l2_2_status") or "").strip().upper().replace(" ", "_")
     production = str(doc.get("claimed_production_7x24") or "").strip().upper().replace(" ", "_")
@@ -1080,6 +1488,24 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     if _forged_claim(doc):
         blockers.append("forged_claim_ignored")
 
+    founder_claim = doc.get("founder_start") if isinstance(doc.get("founder_start"), dict) else None
+    if founder_claim is not None and _forged_production_claim(doc):
+        production = dict(founder_claim.get("production") or {})
+        production["claimed"] = "ACCEPTED"
+        founder_claim = dict(founder_claim)
+        founder_claim["production"] = production
+    founder = assess_founder_start(founder_claim if "founder_start" in doc else None)
+    if not founder["conditions_satisfied"]:
+        blockers.append("founder_start_conditions_unsatisfied")
+    if founder["approval_claimed_as_start"] or founder["start_registration_claimed"]:
+        blockers.append("approval_is_not_a_start")
+    if founder["local_only_refused"]:
+        blockers.append("local_only_evidence_refused")
+    if founder["unknown_root_cause_refused"]:
+        blockers.append("unknown_root_cause_refused")
+    if founder["supervisor_watchdog_refused"]:
+        blockers.append("supervisor_watchdog_required")
+
     stopped = metrics.get("stopped_early") if isinstance(metrics, dict) else None
     supervision_fault = bool(ended_watch or red_gaps or (started and not r2))
     if started and not watch_live and not runner_bad and not ended_watch:
@@ -1117,7 +1543,12 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
                 "Stitching sequential or restarted invocations is not that wall, "
                 "even when the stitched duration or calendar span reaches 259200. "
                 "A wall that resets or goes backwards is not that wall. "
-                "cycles x interval is not the wall. cycles_exit0 is process success only."
+                "cycles x interval is not the wall. cycles_exit0 is process success only. "
+                "The Issue #9 conditional approval is not a start. "
+                "LOCAL_ONLY evidence does not count. "
+                "Unknown root cause is not a terminal attribution. "
+                "A soak-DUT stall watchdog is not a watchdog of the supervisor. "
+                "A 72h result is not production readiness."
             ),
         },
         "bars": bars,
@@ -1133,6 +1564,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         },
         "non_additivity": non_additivity,
         "process_continuity": continuity,
+        "founder_start_conditions": founder,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -1258,6 +1690,149 @@ def _process_continuity_violations(report: dict[str, Any]) -> list[str]:
     return violations
 
 
+def _founder_block_violations(block: Any) -> list[str]:
+    """Reject a report that pretends the founder approval started or satisfied the gate."""
+    violations: list[str] = []
+    if not isinstance(block, dict):
+        return ["founder_start_conditions"]
+    if block.get("rule") != "five_founder_conditions_before_start":
+        violations.append("founder_start_conditions")
+    constants = {
+        "approval_exists": True,
+        "approval_conditional": True,
+        "approval_issue": FOUNDER_APPROVAL_ISSUE,
+        "approval_comment_id": FOUNDER_APPROVAL_COMMENT_ID,
+        "approval_utc": FOUNDER_APPROVAL_UTC,
+        "approval_target_pr": FOUNDER_APPROVAL_PR,
+        "approval_is_a_start": False,
+        "approval_is_a_pass": False,
+        "approval_without_conditions_is_a_start": False,
+        "approval_without_start_registration_is_a_start": False,
+        "start_registration_present": False,
+        "start_registration_posted_to_issue_9": False,
+        "local_only_counts_as_public_evidence": False,
+        "unknown_root_cause_allowed": False,
+        "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+        "supervisor_watchdog_kind_required": SUPERVISOR_WATCHDOG_KIND,
+        "supervision_write_max_seconds": SUPERVISION_WRITE_MAX_SECONDS,
+        "supervisor_watchdog_max_seconds": SUPERVISOR_WATCHDOG_MAX_SECONDS,
+        "yellow_min_seconds": YELLOW_MIN_SECONDS,
+        "yellow_max_seconds": RED_MIN_SECONDS,
+        "red_exclusive_min_seconds": RED_MIN_SECONDS,
+        "clock_required": "monotonic",
+        "a_72h_pass_is_production_readiness": False,
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "binds_clock_start": False,
+        "declarations_are_not_a_start": True,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+    }
+    for key, expected in constants.items():
+        if block.get(key) != expected:
+            if key == "approval_is_a_start" or key in {
+                "approval_is_a_pass",
+                "approval_without_conditions_is_a_start",
+                "approval_without_start_registration_is_a_start",
+                "start_registration_present",
+                "start_registration_posted_to_issue_9",
+            }:
+                violations.append("approval_is_not_a_start")
+            elif key == "local_only_counts_as_public_evidence":
+                violations.append("local_only_refused")
+            elif key == "unknown_root_cause_allowed":
+                violations.append("unknown_root_cause_refused")
+            elif key == "soak_dut_watchdog_counts_as_supervisor_watchdog":
+                violations.append("supervisor_watchdog_required")
+            elif key in {"a_72h_pass_is_production_readiness", "production_7x24"}:
+                violations.append("production_claim")
+            elif key in {"can_start_clock", "binds_clock_start"}:
+                violations.append("forged_clock_start")
+            elif key == "can_accept_l2_2":
+                violations.append("forged_accept")
+            elif key == "can_close_l2_2":
+                violations.append("forged_close")
+            elif key == "l2_2_status":
+                violations.append("status")
+            elif key == "clock_state" or key == "clock_effect":
+                violations.append("clock_state")
+            else:
+                violations.append("founder_start_conditions")
+    if not isinstance(block.get("approval_claimed_as_start"), bool):
+        violations.append("founder_start_conditions")
+    if not isinstance(block.get("start_registration_claimed"), bool):
+        violations.append("founder_start_conditions")
+    if block.get("approval_claimed_as_start") is True and block.get("approval_is_a_start") is not False:
+        violations.append("approval_is_not_a_start")
+    conditions = block.get("conditions")
+    if not isinstance(conditions, list) or [item.get("id") if isinstance(item, dict) else None for item in conditions] != list(
+        FOUNDER_CONDITION_IDS
+    ):
+        violations.append("founder_start_conditions")
+        return violations
+    missing_expected: list[str] = []
+    for item in conditions:
+        if item.get("required") is not True or not isinstance(item.get("declared"), bool) or not isinstance(item.get("satisfied"), bool):
+            violations.append("founder_start_conditions")
+            continue
+        detail = item.get("detail")
+        if detail not in FOUNDER_CONDITION_DETAILS:
+            violations.append("founder_start_conditions")
+            continue
+        if detail == "not_declared" and (item.get("declared") is not False or item.get("satisfied") is not False):
+            violations.append("founder_conditions_missing")
+        elif detail == "satisfied" and (item.get("declared") is not True or item.get("satisfied") is not True):
+            violations.append("founder_conditions_missing")
+        elif detail not in {"not_declared", "satisfied"} and (
+            item.get("declared") is not True or item.get("satisfied") is not False
+        ):
+            violations.append("founder_conditions_missing")
+        if item.get("satisfied") is not True:
+            missing_expected.append(item["id"])
+        if detail == "local_only_refused" and item.get("satisfied") is True:
+            violations.append("local_only_refused")
+        if detail == "unknown_root_cause_refused" and item.get("satisfied") is True:
+            violations.append("unknown_root_cause_refused")
+        if detail in WATCHDOG_REFUSAL_DETAILS and item.get("satisfied") is True:
+            violations.append("supervisor_watchdog_required")
+    by_id = {item["id"]: item for item in conditions}
+    if block.get("local_only_refused") is not (by_id["public_evidence"].get("detail") == "local_only_refused"):
+        violations.append("local_only_refused")
+    if block.get("local_only_counts_as_public_evidence") is True or (
+        by_id["public_evidence"].get("detail") == "local_only_refused" and by_id["public_evidence"].get("satisfied") is True
+    ):
+        violations.append("local_only_refused")
+    if block.get("unknown_root_cause_refused") is not (
+        by_id["three_way_attribution"].get("detail") == "unknown_root_cause_refused"
+    ):
+        violations.append("unknown_root_cause_refused")
+    if block.get("unknown_root_cause_allowed") is True or (
+        by_id["three_way_attribution"].get("detail") == "unknown_root_cause_refused"
+        and by_id["three_way_attribution"].get("satisfied") is True
+    ):
+        violations.append("unknown_root_cause_refused")
+    watchdog_detail = by_id["supervision_cadence_and_supervisor_watchdog"].get("detail")
+    if block.get("supervisor_watchdog_refused") is not (watchdog_detail in WATCHDOG_REFUSAL_DETAILS):
+        violations.append("supervisor_watchdog_required")
+    if block.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is True or (
+        watchdog_detail == "soak_dut_watchdog_is_not_supervisor_watchdog"
+        and by_id["supervision_cadence_and_supervisor_watchdog"].get("satisfied") is True
+    ):
+        violations.append("supervisor_watchdog_required")
+    if block.get("missing_conditions") != missing_expected:
+        violations.append("founder_conditions_missing")
+    if block.get("conditions_satisfied") is not (missing_expected == []):
+        violations.append("founder_conditions_missing")
+    if block.get("conditions_satisfied") is True and missing_expected:
+        violations.append("founder_conditions_missing")
+    if block.get("conditions_satisfied") is True and any(item.get("detail") != "satisfied" for item in conditions):
+        violations.append("founder_conditions_missing")
+    return violations
+
+
 def validate_report(report: dict[str, Any]) -> list[str]:
     """Reject forged acceptance. Empty list means the report does not over-claim."""
     violations: list[str] = []
@@ -1294,6 +1869,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         violations.append("scaffold_cannot_accept")
     violations.extend(_non_additivity_violations(report))
     violations.extend(_process_continuity_violations(report))
+    violations.extend(_founder_block_violations(report.get("founder_start_conditions")))
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

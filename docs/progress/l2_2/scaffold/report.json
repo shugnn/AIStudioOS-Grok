@@ -17,7 +17,7 @@
     "driver": "scripts/soak_2h.py --via-l1 --max-wall-seconds 259200",
     "exit0_is_business": false,
     "interactive_schtasks": "out_of_scope",
-    "note": "72h means one continuous monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200 on a single live soak process. A sum of ended SHORT walls is not that wall. Stitching sequential or restarted invocations is not that wall, even when the stitched duration or calendar span reaches 259200. A wall that resets or goes backwards is not that wall. cycles x interval is not the wall. cycles_exit0 is process success only."
+    "note": "72h means one continuous monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200 on a single live soak process. A sum of ended SHORT walls is not that wall. Stitching sequential or restarted invocations is not that wall, even when the stitched duration or calendar span reaches 259200. A wall that resets or goes backwards is not that wall. cycles x interval is not the wall. cycles_exit0 is process success only. The Issue #9 conditional approval is not a start. LOCAL_ONLY evidence does not count. Unknown root cause is not a terminal attribution. A soak-DUT stall watchdog is not a watchdog of the supervisor. A 72h result is not production readiness."
   },
   "bars": {
     "host_evidence": false,
@@ -69,6 +69,91 @@
     "calendar_span_reaches_259200": false,
     "counts_toward_gate": false
   },
+  "founder_start_conditions": {
+    "rule": "five_founder_conditions_before_start",
+    "approval_exists": true,
+    "approval_conditional": true,
+    "approval_issue": 9,
+    "approval_comment_id": 6761044915,
+    "approval_utc": "2026-11-10T06:50:14Z",
+    "approval_target_pr": 12,
+    "approval_is_a_start": false,
+    "approval_is_a_pass": false,
+    "approval_claimed_as_start": false,
+    "approval_without_conditions_is_a_start": false,
+    "approval_without_start_registration_is_a_start": false,
+    "start_registration_present": false,
+    "start_registration_posted_to_issue_9": false,
+    "start_registration_claimed": false,
+    "conditions_satisfied": false,
+    "missing_conditions": [
+      "supervision_policy",
+      "supervision_cadence_and_supervisor_watchdog",
+      "public_evidence",
+      "three_way_attribution",
+      "not_production_7x24"
+    ],
+    "local_only_counts_as_public_evidence": false,
+    "local_only_refused": false,
+    "unknown_root_cause_allowed": false,
+    "unknown_root_cause_refused": false,
+    "soak_dut_watchdog_counts_as_supervisor_watchdog": false,
+    "supervisor_watchdog_refused": false,
+    "supervisor_watchdog_kind_required": "other_process",
+    "supervision_write_max_seconds": 600,
+    "supervisor_watchdog_max_seconds": 10,
+    "yellow_min_seconds": 13.0,
+    "yellow_max_seconds": 300.0,
+    "red_exclusive_min_seconds": 300.0,
+    "clock_required": "monotonic",
+    "a_72h_pass_is_production_readiness": false,
+    "production_7x24": "NOT_ACCEPTED",
+    "can_start_clock": false,
+    "can_accept_l2_2": false,
+    "can_close_l2_2": false,
+    "binds_clock_start": false,
+    "declarations_are_not_a_start": true,
+    "l2_2_status": "NOT_STARTED",
+    "clock_state": "NOT_STARTED",
+    "clock_effect": "none",
+    "conditions": [
+      {
+        "id": "supervision_policy",
+        "required": true,
+        "declared": false,
+        "satisfied": false,
+        "detail": "not_declared"
+      },
+      {
+        "id": "supervision_cadence_and_supervisor_watchdog",
+        "required": true,
+        "declared": false,
+        "satisfied": false,
+        "detail": "not_declared"
+      },
+      {
+        "id": "public_evidence",
+        "required": true,
+        "declared": false,
+        "satisfied": false,
+        "detail": "not_declared"
+      },
+      {
+        "id": "three_way_attribution",
+        "required": true,
+        "declared": false,
+        "satisfied": false,
+        "detail": "not_declared"
+      },
+      {
+        "id": "not_production_7x24",
+        "required": true,
+        "declared": false,
+        "satisfied": false,
+        "detail": "not_declared"
+      }
+    ]
+  },
   "reconciliation": {
     "status": "not_applicable",
     "mismatches": []
@@ -105,7 +190,8 @@
       "interactive_registration_founder_gated_out_of_scope",
       "observation_track_has_not_accepted",
       "scaffold_fixture_not_host_evidence",
-      "clock_not_started"
+      "clock_not_started",
+      "founder_start_conditions_unsatisfied"
     ]
   },
   "l2_4": {
@@ -126,7 +212,8 @@
     "Sequential or restarted soak invocations are not one live process. A back-to-back pair of 86400s soaks, three sequential 86400s soaks covering 72h of calendar time, or a wall that resets or goes backwards, is not this 72h gate.",
     "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
     "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
-    "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate."
+    "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate.",
+    "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. That approval is not a start, not a PASS, and it does not set can_start_clock. The five conditions stay unsatisfied until a later explicit declaration: supervision policy (yellow 13s through 300s, red above 300s, monotonic clock), supervision writes at least once every 10 minutes and a separate process records a supervisor crash within 10s (the soak-DUT stall watchdog is not that watchdog), public evidence of final metrics plus a log summary plus a SHA list (LOCAL_ONLY does not count), three-way failure attribution (business, host, supervision; unknown root cause is not a terminal attribution), and no production 7x24 claim. A 72h result is not production readiness. This scorer does not post the L2-2 START line."
   ],
   "source": {
     "synthetic": true,

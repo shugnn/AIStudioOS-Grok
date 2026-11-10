@@ -11,7 +11,11 @@ stall DUT. Ended SHORT walls are not additive: a sum of 24h walls, including
 restarted soak invocations is not one live process, even back-to-back on the
 same host and even when the stitched span reaches 259200. The hook is not a
 start and not L2-2 acceptance. The non-additivity gate is not a start. The
-process-boundary continuity gate is not a start.
+process-boundary continuity gate is not a start. The Issue #9 conditional
+founder approval is recorded and is not a start. The five start conditions
+stay unsatisfied. LOCAL_ONLY is not public evidence. Unknown root cause is
+not a terminal attribution. The soak-DUT stall watchdog is not a watchdog of
+the supervisor.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -227,6 +231,24 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
         decision = node.get("start_decision")
         if isinstance(decision, str) and decision.strip().lower() in START_DECISIONS:
             _add(violations, "forged_start_decision")
+        if node.get("approval_is_a_start") is True or node.get("approval_is_a_pass") is True:
+            _add(violations, "approval_is_not_a_start")
+        if node.get("approval_without_conditions_is_a_start") is True:
+            _add(violations, "approval_is_not_a_start")
+        if node.get("approval_without_start_registration_is_a_start") is True:
+            _add(violations, "approval_is_not_a_start")
+        if node.get("start_registration_present") is True or node.get("start_registration_posted_to_issue_9") is True:
+            _add(violations, "approval_is_not_a_start")
+        if node.get("conditions_satisfied") is True:
+            _add(violations, "founder_conditions_missing")
+        if node.get("local_only_counts_as_public_evidence") is True:
+            _add(violations, "local_only_refused")
+        if node.get("unknown_root_cause_allowed") is True:
+            _add(violations, "unknown_root_cause_refused")
+        if node.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is True:
+            _add(violations, "supervisor_watchdog_required")
+        if node.get("a_72h_pass_is_production_readiness") is True:
+            _add(violations, "forged_production_accepted")
         for key in GATE_KEYS:
             if node.get(key) is True:
                 _add(violations, "forged_" + key)
@@ -388,6 +410,13 @@ def assess_l2_2_offline(
                 "stitch_as_start",
                 "process_continuity",
                 "process_continuity_mismatch",
+                "founder_start_conditions",
+                "founder_start_conditions_mismatch",
+                "founder_conditions_missing",
+                "approval_is_not_a_start",
+                "local_only_refused",
+                "unknown_root_cause_refused",
+                "supervisor_watchdog_required",
             }:
                 _add(violations, name)
             else:
@@ -518,6 +547,56 @@ def assess_l2_2_offline(
                 )
                 if reaches and item.get("counts_toward_gate") is not False:
                     _add(violations, "stitched_process_boundaries")
+        founder = checks.get("founder_start_conditions")
+        top_founder = preflight_report.get("founder_start_conditions")
+        if founder != top_founder:
+            _add(violations, "founder_start_conditions_mismatch")
+        if (
+            not isinstance(founder, dict)
+            or founder.get("ok") is not True
+            or founder.get("detail") != "approval_recorded_not_a_start"
+            or founder.get("rule") != "five_founder_conditions_before_start"
+            or founder.get("approval_exists") is not True
+            or founder.get("approval_conditional") is not True
+            or founder.get("approval_comment_id") != 6761044915
+            or founder.get("approval_utc") != "2026-11-10T06:50:14Z"
+            or founder.get("approval_is_a_start") is not False
+            or founder.get("approval_is_a_pass") is not False
+            or founder.get("conditions_satisfied") is not False
+            or founder.get("start_registration_present") is not False
+            or founder.get("start_registration_posted_to_issue_9") is not False
+            or founder.get("templates_unfilled") is not True
+            or founder.get("local_only_counts_as_public_evidence") is not False
+            or founder.get("unknown_root_cause_allowed") is not False
+            or founder.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is not False
+            or founder.get("a_72h_pass_is_production_readiness") is not False
+            or founder.get("declarations_are_not_a_start") is not True
+            or founder.get("l2_2_status") != "NOT_STARTED"
+            or founder.get("clock_state") != "NOT_STARTED"
+            or founder.get("clock_effect") != "none"
+            or founder.get("soak_launched") is not False
+            or founder.get("production_7x24") != "NOT_ACCEPTED"
+            or any(founder.get(key) is not False for key in GATE_KEYS)
+        ):
+            _add(violations, "founder_start_conditions")
+        claims = founder.get("refused_claims") if isinstance(founder, dict) else None
+        if not isinstance(claims, list) or not claims:
+            _add(violations, "founder_start_conditions")
+        else:
+            for item in claims:
+                if not isinstance(item, dict):
+                    _add(violations, "founder_conditions_missing")
+                    continue
+                if item.get("conditions_satisfied") is not False or item.get("approval_is_a_start") is not False:
+                    _add(violations, "founder_conditions_missing")
+                if item.get("counts_as_start") is not False or item.get("can_start_clock") is not False:
+                    _add(violations, "approval_is_not_a_start")
+                if item.get("local_only_counts_as_public_evidence") is not False:
+                    _add(violations, "local_only_refused")
+                if item.get("unknown_root_cause_allowed") is not False:
+                    _add(violations, "unknown_root_cause_refused")
+                if item.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is not False:
+                    _add(violations, "supervisor_watchdog_required")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -558,6 +637,26 @@ def assess_l2_2_offline(
                 or continuity.get("rule") != "one_live_soak_process"
             ):
                 _add(violations, "stitched_process_boundaries")
+        founder = score_report.get("founder_start_conditions")
+        if not isinstance(founder, dict):
+            _add(violations, "founder_start_conditions")
+        else:
+            if (
+                founder.get("approval_is_a_start") is not False
+                or founder.get("approval_claimed_as_start") is not False
+                or founder.get("conditions_satisfied") is not False
+                or founder.get("start_registration_present") is not False
+                or founder.get("local_only_counts_as_public_evidence") is not False
+                or founder.get("unknown_root_cause_allowed") is not False
+                or founder.get("soak_dut_watchdog_counts_as_supervisor_watchdog") is not False
+                or founder.get("a_72h_pass_is_production_readiness") is not False
+                or founder.get("can_start_clock") is not False
+                or founder.get("l2_2_status") != "NOT_STARTED"
+                or founder.get("clock_state") != "NOT_STARTED"
+                or founder.get("production_7x24") != "NOT_ACCEPTED"
+                or founder.get("rule") != "five_founder_conditions_before_start"
+            ):
+                _add(violations, "founder_start_conditions")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -576,6 +675,13 @@ def assess_l2_2_offline(
                 "non_additivity",
                 "stitched_process_boundaries",
                 "process_continuity",
+                "founder_start_conditions",
+                "founder_conditions_missing",
+                "approval_is_not_a_start",
+                "local_only_refused",
+                "local_only_evidence_refused",
+                "unknown_root_cause_refused",
+                "supervisor_watchdog_required",
             }:
                 _add(violations, name)
             else:
@@ -638,6 +744,13 @@ def assess_l2_2_offline(
         "sum_of_shorts_counts_toward_gate": False,
         "sequential_soaks_are_continuous": False,
         "stitched_processes_count_toward_gate": False,
+        "founder_approval_is_a_start": False,
+        "founder_conditions_satisfied": False,
+        "founder_start_registration_present": False,
+        "local_only_counts_as_public_evidence": False,
+        "unknown_root_cause_allowed": False,
+        "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+        "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
@@ -689,6 +802,13 @@ def l2_2_offline_step() -> dict:
         sum_of_shorts_counts_toward_gate=False,
         sequential_soaks_are_continuous=False,
         stitched_processes_count_toward_gate=False,
+        founder_approval_is_a_start=False,
+        founder_conditions_satisfied=False,
+        founder_start_registration_present=False,
+        local_only_counts_as_public_evidence=False,
+        unknown_root_cause_allowed=False,
+        soak_dut_watchdog_counts_as_supervisor_watchdog=False,
+        a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
         stall_hook_is_l2_2_acceptance=False,
         gate_result="NOT_A_GATE",
@@ -779,6 +899,13 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "sum_of_shorts_counts_toward_gate": False,
         "sequential_soaks_are_continuous": False,
         "stitched_processes_count_toward_gate": False,
+        "founder_approval_is_a_start": False,
+        "founder_conditions_satisfied": False,
+        "founder_start_registration_present": False,
+        "local_only_counts_as_public_evidence": False,
+        "unknown_root_cause_allowed": False,
+        "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+        "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",

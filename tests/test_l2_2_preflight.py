@@ -26,6 +26,7 @@ RUNTIME_PATHS = (
     ROOT / "docs" / "progress" / "soak_2h" / "metrics.json",
     ROOT / "docs" / "progress" / "soak_2h" / "summary.jsonl",
     ROOT / "docs" / "progress" / "l2_2" / "R2_CHECKLIST.md",
+    ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md",
     ROOT / "docs" / "progress" / "STALL_ALERT.json",
 )
 
@@ -81,6 +82,12 @@ def test_real_repo_preflight_is_not_started_and_intact():
     assert report["checks"]["soak_flags"]["max_wall_seconds"] == 259200
     assert report["checks"]["r2_checklist"]["unfilled"] is True
     assert report["checks"]["r2_checklist"]["start_decision"] == "not_given"
+    decision = report["checks"]["start_decision"]
+    assert decision["ok"] is True
+    assert decision["unfilled"] is True
+    assert decision["start_decision"] == "not_given"
+    assert decision["detail"] == "blank_template"
+    assert decision["binds_clock_start"] is False
     assert report["checks"]["emergency_stop"]["flag_present"] is False
     assert report["checks"]["emergency_stop"]["path"] == "docs/progress/EMERGENCY_STOP"
     assert report["checks"]["gap_logger"]["sample_band"] == "yellow"
@@ -307,13 +314,20 @@ def test_preflight_source_does_not_launch_soak_or_register_tasks():
 def test_operator_notes_say_running_is_not_a_start():
     readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
     checklist = (ROOT / "docs" / "progress" / "l2_2" / "R2_CHECKLIST.md").read_text(encoding="utf-8")
+    decision = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
     schema = json.loads((ROOT / "docs" / "progress" / "l2_2" / "SCHEMA.json").read_text(encoding="utf-8"))
     assert "scripts/l2_2_preflight.py" in readme
     assert "not a start decision" in readme
+    assert "START_DECISION.md" in readme
     assert "--idle-policy reseed --max-wall-seconds 259200" in readme
     assert "not a start decision" in checklist
     assert "The copy in git is unfilled." in checklist
     assert pre.classify_r2(checklist)["start_decision"] == "not_given"
+    assert "The copy in git is unfilled." in decision
+    assert "Filling this file alone does not start the soak" in decision
+    assert pre.INTENDED_COMMAND in decision
+    assert pre.classify_start_decision(decision)["start_decision"] == "not_given"
+    assert pre.classify_start_decision(decision)["ok"] is True
     assert schema["preflight_schema"] == pre.SCHEMA
     assert schema["can_start_clock"] is False
     assert "PASS" not in schema["l2_2_status_emitted"]
@@ -324,6 +338,8 @@ def test_evidence_package_indexes_preflight_and_sums_as_not_started():
     text = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")
     section = text.split("## L2-2", 1)[1].split("\n## ", 1)[0]
     assert "scripts/l2_2_preflight.py" in section
+    assert "START_DECISION.md" in section
+    assert "Filling this file alone does not start the soak" in section or "not a start" in section
     assert "scaffold/preflight.json" in section
     assert "SHA256SUMS.json" in section
     assert "scripts/evidence_sha256sums.py" in section
@@ -397,3 +413,85 @@ def test_sums_overclaim_cannot_flip_gates(tmp_path: Path):
     forged = json.loads(json.dumps(pre.preflight()))
     forged["checks"]["evidence_sums"]["binds_clock_start"] = True
     assert "sums_imply_start" in pre.validate_report(forged)
+
+
+def test_blank_start_decision_is_accepted_and_is_not_a_start():
+    path = ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md"
+    text = path.read_text(encoding="utf-8")
+    classified = pre.classify_start_decision(text)
+    assert classified["ok"] is True
+    assert classified["unfilled"] is True
+    assert classified["start_decision"] == "not_given"
+    assert classified["detail"] == "blank_template"
+    assert classified["binds_clock_start"] is False
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is True
+    assert report["checks"]["start_decision"] == classified
+    assert "Filling START_DECISION.md is not a start decision." in report["operator_note"]
+    assert any("START_DECISION.md" in step and "does not start" in step for step in report["next_steps"])
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "clock_state: STARTED",
+        "l2_2_status: PASS",
+        "production_7x24: ACCEPTED",
+        "can_start_clock: true",
+        "can_start_clock true",
+        "can_accept_l2_2: true",
+        "can_close_l2_2: true",
+    ],
+)
+def test_forged_start_decision_language_fails_closed(tmp_path: Path, snippet: str):
+    original = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+    path = tmp_path / "START_DECISION.md"
+    path.write_text(original + "\n" + snippet + "\n", encoding="utf-8")
+    report = pre.preflight(start_decision_path=path)
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is False
+    check = report["checks"]["start_decision"]
+    assert check["ok"] is False
+    assert check["detail"] == "forged_claim"
+    assert check["start_decision"] == "forge_refused"
+    assert check["binds_clock_start"] is False
+    assert check["start_decision"] not in {"given", "started", "approved"}
+    assert "start_decision:forged_claim" in report["failures"]
+    dumped = json.dumps(report)
+    assert '"can_start_clock": true' not in dumped
+    assert '"l2_2_status": "PASS"' not in dumped
+    assert '"production_7x24": "ACCEPTED"' not in dumped
+    assert '"clock_state": "STARTED"' not in dumped
+    assert original == (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+
+
+def test_removing_not_given_honesty_is_not_a_start(tmp_path: Path):
+    original = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+    path = tmp_path / "START_DECISION.md"
+    path.write_text(original.replace("**Not given**", "**Ada**", 1), encoding="utf-8")
+    report = pre.preflight(start_decision_path=path)
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is False
+    check = report["checks"]["start_decision"]
+    assert check["ok"] is False
+    assert check["detail"] == "not_blank"
+    assert check["start_decision"] == "blank_template_changed"
+    assert check["start_decision"] != "given"
+    assert report["gates"]["can_start_clock"] is False
+    assert "**Not given**" in original
+
+
+def test_start_decision_field_cannot_imply_a_start():
+    forged = json.loads(json.dumps(pre.preflight()))
+    forged["checks"]["start_decision"]["start_decision"] = "started"
+    assert "start_decision_implies_start" in pre.validate_report(forged)
+    forged = json.loads(json.dumps(pre.preflight()))
+    forged["checks"]["start_decision"]["binds_clock_start"] = True
+    assert "start_decision_implies_start" in pre.validate_report(forged)
+    forged = json.loads(json.dumps(pre.preflight()))
+    forged["checks"]["start_decision"]["ok"] = True
+    forged["checks"]["start_decision"]["detail"] = "forged_claim"
+    assert "start_decision_implies_start" in pre.validate_report(forged)
+    refused = pre.validate_report(pre.preflight())
+    assert refused == []

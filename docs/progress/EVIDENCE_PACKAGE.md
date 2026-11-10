@@ -57,6 +57,7 @@ Clock **NOT STARTED**. L2-2 gate **NOT ACCEPTED**. Production 7×24 **NOT ACCEPT
 | `tests/fixtures/l2_2/` | Synthetic **2026-02-01** captures |
 | `scripts/coverage_gap_log.py` | Runtime gap lines only. A line is not soak completeness |
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank pre-start note. Clock stays **NOT STARTED** |
+| `docs/progress/l2_2/START_DECISION.md` | Blank start-decision template. Decision status **Not given**. Filling this file alone does not start the soak |
 
 `cycles_exit0` and the Ubuntu-24H wall (86400.001s) do not accept this gate. L2-4 historical reconstruction for 2026-11-03..06 stays **INCOMPLETE** on [PR #11](https://github.com/shugnn/AIStudioOS-Grok/pull/11) (tip `931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6`, `task_runs=0`, WT Error 1000 count 0). This package does not recapture that window. Host captures stay on that PR.
 

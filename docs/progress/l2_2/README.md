@@ -34,6 +34,7 @@ The committed Ubuntu-24H file `docs/progress/soak_2h/metrics.json` is wall **864
 | `docs/progress/l2_2/scaffold/report.json` | Score of the not-started fixture. Label `scaffold` |
 | `scripts/l2_2_preflight.py` | Offline readiness check. Emits `NOT_STARTED`. Does not launch soak. `can_start_clock` stays false |
 | `scripts/health_check.py` | One-shot local check. Re-runs this preflight and scores the not-started fixture. Does not launch soak. Exit 0 is `overall_ok`, not a gate PASS and not a start. A pytest step in that command is the unit suite, not L2-2 acceptance |
+| `docs/progress/l2_2/START_DECISION.md` | Blank start-decision template. Decision status **Not given**. Filling or committing it does not start the soak |
 | `docs/progress/l2_2/scaffold/preflight.json` | Committed output of that check. Label `scaffold`. Not a start decision |
 | `docs/progress/l2_2/SHA256SUMS.json` | Byte binding from `scripts/evidence_sha256sums.py`. Not a start, not a PASS, not production acceptance |
 | `scripts/coverage_gap_log.py` | Append-only yellow/red/ok gap line. Does not start the clock |
@@ -52,9 +53,9 @@ python scripts/evidence_sha256sums.py docs/progress/l2_2 --glob "**/*"
 
 The sums command rewrites `SHA256SUMS.json` for the files in this directory. It does not launch the soak. A matching file is not a gate PASS and does not set `can_start_clock`. The preflight checks those bytes, except the digest of `scaffold/preflight.json` itself, which the tests recompute.
 
-Exit 0 from the preflight means the not-started scaffold still matches this repo: the pieces are present, the documented soak flags parse, `R2_CHECKLIST.md` is still unfilled, `docs/progress/EMERGENCY_STOP` is absent, and the scorer still refuses PASS / start / accept / close. Exit 0 is an honest NOT STARTED report. It does **not** mean L2-2 passed, it does **not** set `can_start_clock`, and it does **not** launch `soak_2h.py`. Running the preflight is not a start decision. Filling the checklist is not a start decision.
+Exit 0 from the preflight means the not-started scaffold still matches this repo: the pieces are present, the documented soak flags parse, `R2_CHECKLIST.md` is still unfilled, `START_DECISION.md` is still the blank template with decision **Not given**, `docs/progress/EMERGENCY_STOP` is absent, and the scorer still refuses PASS / start / accept / close. Exit 0 is an honest NOT STARTED report. It does **not** mean L2-2 passed, it does **not** set `can_start_clock`, and it does **not** launch `soak_2h.py`. Running the preflight is not a start decision. Filling the checklist is not a start decision. Filling `START_DECISION.md` is not a start decision.
 
-`scripts/health_check.py` runs that same preflight and scores `tests/fixtures/l2_2/scaffold_clock_not_started.json`, then keeps the older local checks. Exit 0 there is `overall_ok` for those checks: `l2_2_status` / `clock_state` stay `NOT_STARTED`, the soak was not launched, the three gates stay false, production 7×24 stays **NOT ACCEPTED**, and `R2_CHECKLIST.md` is still the blank template. A pytest run inside that command is the unit suite. It is not L2-2 acceptance and it is not a start decision. The check fails closed if a report flips a gate or smuggles PASS, ACCEPTED, or a start.
+`scripts/health_check.py` runs that same preflight and scores `tests/fixtures/l2_2/scaffold_clock_not_started.json`, then keeps the older local checks. Exit 0 there is `overall_ok` for those checks: `l2_2_status` / `clock_state` stay `NOT_STARTED`, the soak was not launched, the three gates stay false, production 7×24 stays **NOT ACCEPTED**, `R2_CHECKLIST.md` is still the blank template, and `START_DECISION.md` is still **Not given**. A pytest run inside that command is the unit suite. It is not L2-2 acceptance and it is not a start decision. The check fails closed if a report flips a gate, or if `START_DECISION.md` smuggles a start, PASS, ACCEPTED, or `can_start_clock` true. Writing that file is not a start.
 
 Exit 0 from the scorer means the report is an honest NOT STARTED or INCOMPLETE document. It does **not** mean L2-2 passed and it does **not** start a clock.
 
@@ -70,7 +71,7 @@ The clock stays **NOT STARTED** until a founder or worker explicitly decides to 
 
 1. Leave L2-4 on PR #11. Do not re-capture 2026-11-03..06 in order to start L2-2.
 2. Do not register Interactive console tasks.
-3. Fill `docs/progress/l2_2/R2_CHECKLIST.md` before any process starts. The logger is `scripts/coverage_gap_log.py` (`band`: ok below 13s, yellow 13s–5min, red above 5min). Use `--live-dut` only for the live watch file. The checklist is not a start decision, and a gap line does not complete the soak. `scripts/l2_2_preflight.py` can be run at any time before that decision; running it is not the decision.
+3. Fill `docs/progress/l2_2/R2_CHECKLIST.md` before any process starts. The logger is `scripts/coverage_gap_log.py` (`band`: ok below 13s, yellow 13s–5min, red above 5min). Use `--live-dut` only for the live watch file. The checklist is not a start decision, and a gap line does not complete the soak. `docs/progress/l2_2/START_DECISION.md` stays **Not given** until a separate explicit decision. Filling that file alone does not start the soak. `scripts/l2_2_preflight.py` and `scripts/health_check.py` can be run at any time before that decision; running them is not the decision.
 4. Only after that explicit start decision, on a host already allowed to run the local soak (the same free `soak_2h.py` path used for the 24h wall, not a new scheduled task):
 
 ```bash

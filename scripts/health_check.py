@@ -28,6 +28,7 @@ NOT_STARTED_FIXTURE = (
     Path("tests") / "fixtures" / "l2_2" / "scaffold_clock_not_started.json"
 )
 R2_RELATIVE = Path("docs") / "progress" / "l2_2" / "R2_CHECKLIST.md"
+START_DECISION_RELATIVE = Path("docs") / "progress" / "l2_2" / "START_DECISION.md"
 GATE_KEYS = ("can_start_clock", "can_accept_l2_2", "can_close_l2_2")
 START_DECISIONS = {"given", "started", "approved"}
 
@@ -150,6 +151,13 @@ def _run_json(cmd: list[str]) -> tuple[int, Any]:
         return proc.returncode if proc.returncode else 1, None
 
 
+def _read_repo_text(root: Path, relative: Path) -> str:
+    path = root / relative
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
 def assess_l2_2_offline(
     preflight_report: Any,
     score_report: Any,
@@ -157,13 +165,19 @@ def assess_l2_2_offline(
     r2_text: str,
     preflight_exit: int,
     score_exit: int,
+    start_decision_text: str | None = None,
 ) -> dict[str, Any]:
     """Honest NOT_STARTED check. Gates in the result stay false.
 
     A scorer exit 0 on a started or INCOMPLETE bundle is not acceptance.
+    Filling START_DECISION.md is not a start. A forged claim in that file
+    fails this check and does not open can_start_clock.
     """
     violations: list[str] = []
     r2_unfilled = False
+    start_decision_unfilled = False
+    if start_decision_text is None:
+        start_decision_text = _read_repo_text(ROOT, START_DECISION_RELATIVE)
     try:
         preflight_mod, score_mod = _l2_modules()
     except Exception as exc:
@@ -202,6 +216,16 @@ def assess_l2_2_offline(
         report_unfilled = r2_row.get("unfilled") is True and r2_row.get("start_decision") == "not_given"
         if not report_unfilled:
             _add(violations, "r2_report_not_blank")
+        sd_row = checks.get("start_decision") if isinstance(checks.get("start_decision"), dict) else {}
+        report_sd_unfilled = (
+            sd_row.get("unfilled") is True
+            and sd_row.get("start_decision") == "not_given"
+            and sd_row.get("ok") is True
+        )
+        if not report_sd_unfilled:
+            _add(violations, "start_decision_report_not_blank")
+        if sd_row.get("detail") == "forged_claim" or sd_row.get("binds_clock_start") is True:
+            _add(violations, "start_decision_forged")
         for name in preflight_mod.validate_report(preflight_report):
             if name in {"forged_can_start_clock", "forged_can_accept_l2_2", "forged_can_close_l2_2"}:
                 _add(violations, name)
@@ -215,7 +239,7 @@ def assess_l2_2_offline(
                 _add(violations, "forged_production_accepted")
             elif name in {"exit_0_claim", "gate_result"}:
                 _add(violations, "forged_pass")
-            elif name == "r2_implies_start":
+            elif name in {"r2_implies_start", "start_decision_implies_start"}:
                 _add(violations, "forged_start_decision")
             else:
                 _add(violations, "preflight:" + name)
@@ -268,6 +292,26 @@ def assess_l2_2_offline(
             report_unfilled = r2_row.get("unfilled") is True and r2_row.get("start_decision") == "not_given"
             if r2_unfilled != report_unfilled:
                 _add(violations, "r2_disagrees")
+        classified_sd = preflight_mod.classify_start_decision(start_decision_text)
+        start_decision_unfilled = (
+            classified_sd.get("unfilled") is True
+            and classified_sd.get("start_decision") == "not_given"
+            and classified_sd.get("ok") is True
+        )
+        if classified_sd.get("detail") == "forged_claim":
+            _add(violations, "start_decision_forged")
+        if not start_decision_unfilled:
+            _add(violations, "start_decision_not_blank")
+        if isinstance(preflight_report, dict):
+            checks = preflight_report.get("checks") if isinstance(preflight_report.get("checks"), dict) else {}
+            sd_row = checks.get("start_decision") if isinstance(checks.get("start_decision"), dict) else {}
+            report_sd_unfilled = (
+                sd_row.get("unfilled") is True
+                and sd_row.get("start_decision") == "not_given"
+                and sd_row.get("ok") is True
+            )
+            if start_decision_unfilled != report_sd_unfilled:
+                _add(violations, "start_decision_disagrees")
 
     ok = not violations
     return {
@@ -281,6 +325,7 @@ def assess_l2_2_offline(
         "can_accept_l2_2": False,
         "can_close_l2_2": False,
         "r2_unfilled": r2_unfilled,
+        "start_decision_unfilled": start_decision_unfilled,
         "gate_result": "NOT_A_GATE",
         "exit_0_is_gate_pass": False,
         "pytest_is_l2_2_acceptance": False,
@@ -295,12 +340,15 @@ def run_l2_2_assessment(root: Path | None = None) -> dict[str, Any]:
     score_exit, score_report = _run_json(commands[1])
     checklist = repo / R2_RELATIVE
     r2_text = checklist.read_text(encoding="utf-8") if checklist.is_file() else ""
+    decision = repo / START_DECISION_RELATIVE
+    start_decision_text = decision.read_text(encoding="utf-8") if decision.is_file() else ""
     return assess_l2_2_offline(
         preflight_report,
         score_report,
         r2_text=r2_text,
         preflight_exit=preflight_exit,
         score_exit=score_exit,
+        start_decision_text=start_decision_text,
     )
 
 
@@ -319,6 +367,7 @@ def l2_2_offline_step() -> dict:
         can_accept_l2_2=False,
         can_close_l2_2=False,
         r2_unfilled=assessment["r2_unfilled"],
+        start_decision_unfilled=assessment["start_decision_unfilled"],
         gate_result="NOT_A_GATE",
         exit_0_is_gate_pass=False,
         violations=assessment["violations"],
@@ -371,12 +420,19 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
     """This process never grants a start, an accept, or a close."""
     l2 = next((row for row in results if row.get("step") == "l2_2_offline"), None)
     if l2 is None:
-        status, clock, checked, r2_unfilled = "NOT_STARTED", "NOT_STARTED", False, None
+        status, clock, checked, r2_unfilled, start_unfilled = (
+            "NOT_STARTED",
+            "NOT_STARTED",
+            False,
+            None,
+            None,
+        )
     else:
         status = l2.get("l2_2_status", "WITHHELD")
         clock = l2.get("clock_state", "WITHHELD")
         checked = l2.get("ok") is True
         r2_unfilled = l2.get("r2_unfilled")
+        start_unfilled = l2.get("start_decision_unfilled")
     return {
         "overall_ok": overall,
         "l2_2_status": status,
@@ -388,6 +444,7 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "can_accept_l2_2": False,
         "can_close_l2_2": False,
         "r2_unfilled": r2_unfilled,
+        "start_decision_unfilled": start_unfilled,
         "gate_result": "NOT_A_GATE",
         "exit_0_is_gate_pass": False,
         "pytest_is_l2_2_acceptance": False,

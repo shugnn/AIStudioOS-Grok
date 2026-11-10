@@ -9,7 +9,8 @@ Exit 2: an honest NOT_STARTED report whose checks did not all hold, or a report
 that would have over-claimed and was refused.
 
 Exit 0 is not a gate PASS. can_start_clock, can_accept_l2_2, and can_close_l2_2
-stay false. Running this tool is not a start decision.
+stay false. Running this tool is not a start decision. Filling
+START_DECISION.md is not a start decision.
 
 docs/progress/l2_2/SHA256SUMS.json is a byte binding written by
 scripts/evidence_sha256sums.py. A match is not a start, an accept, or a close.
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,7 @@ SCHEMA = "aistudioos-grok.l2-2.preflight.v1"
 ROOT = Path(__file__).resolve().parents[1]
 STOP_RELATIVE = Path("docs") / "progress" / "EMERGENCY_STOP"
 CHECKLIST_RELATIVE = Path("docs") / "progress" / "l2_2" / "R2_CHECKLIST.md"
+DECISION_RELATIVE = Path("docs") / "progress" / "l2_2" / "START_DECISION.md"
 SCHEMA_RELATIVE = Path("docs") / "progress" / "l2_2" / "SCHEMA.json"
 SUMS_RELATIVE = Path("docs") / "progress" / "l2_2" / "SHA256SUMS.json"
 SELF_REPORT = "docs/progress/l2_2/scaffold/preflight.json"
@@ -41,6 +44,7 @@ BOUND_SOURCES = (
     "docs/progress/l2_2/README.md",
     "docs/progress/l2_2/R2_CHECKLIST.md",
     "docs/progress/l2_2/SCHEMA.json",
+    "docs/progress/l2_2/START_DECISION.md",
     "docs/progress/l2_2/scaffold/preflight.json",
     "docs/progress/l2_2/scaffold/report.json",
 )
@@ -67,6 +71,7 @@ REQUIRED_PATHS = (
     "scripts/supervision_monitor.py",
     "scripts/soak_2h.py",
     "docs/progress/l2_2/R2_CHECKLIST.md",
+    "docs/progress/l2_2/START_DECISION.md",
     "docs/progress/l2_2/SCHEMA.json",
     "docs/progress/l2_2/README.md",
     "docs/progress/l2_2/scaffold/report.json",
@@ -88,6 +93,7 @@ CHECK_ORDER = (
     "contract",
     "soak_flags",
     "r2_checklist",
+    "start_decision",
     "emergency_stop",
     "gap_logger",
     "supervision_monitor",
@@ -102,14 +108,27 @@ OPERATOR_PREFIX = "Who decided"
 OPERATOR_NOTE = (
     "Running this preflight is not a start decision. "
     "Filling R2_CHECKLIST.md is not a start decision. "
+    "Filling START_DECISION.md is not a start decision. "
     "A matching SHA256SUMS.json is not a start decision. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
+)
+
+# The documented command recorded in START_DECISION.md. Parsed nowhere. Never executed.
+INTENDED_COMMAND = "soak_2h.py --via-l1 --idle-policy reseed --max-wall-seconds 259200"
+_NOT_STARTED_RE = re.compile(r"not[\s_\-]*started", re.IGNORECASE)
+_NOT_ACCEPTED_RE = re.compile(r"not[\s_\-]*accepted", re.IGNORECASE)
+_NOT_GIVEN_RE = re.compile(r"not[\s_\-]*given", re.IGNORECASE)
+_BAD_WORD_RE = re.compile(r"\b(?:started|accepted|pass|given|approved)\b", re.IGNORECASE)
+_GATE_TRUE_RE = re.compile(
+    r"""can_(?:start_clock|accept_l2_2|close_l2_2)[`"' \t\r\n:=*]{0,40}true\b""",
+    re.IGNORECASE,
 )
 
 NEXT_STEPS = (
     "This preflight did not start the 72h clock and did not launch soak_2h.py.",
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS and not permission to start.",
     "Leave R2_CHECKLIST.md unfilled until a separate explicit start decision. Filling the checklist is not that decision.",
+    "Leave START_DECISION.md unfilled with decision Not given. Filling that file does not start the soak.",
     "Do not register, create, or enable Interactive console scheduled tasks.",
     "Leave the 2026-11-03..06 L2-4 reconstruction INCOMPLETE on PR #11. Do not re-capture that window.",
     "SHA256SUMS.json binds scaffold bytes only. It is not permission to start.",
@@ -128,17 +147,32 @@ def _display(path: Path, root: Path) -> str:
         return "outside_root"
 
 
-def _start_row(text: str) -> tuple[str, str] | None:
+def _table_cells(text: str, label: str) -> list[str] | None:
+    want = label.lower()
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped.startswith("|"):
             continue
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-        if cells and cells[0].lower() == "start decision":
-            template = cells[1] if len(cells) > 1 else ""
-            operator = cells[2] if len(cells) > 2 else ""
-            return template, operator
+        if cells and cells[0].lower() == want:
+            return cells
     return None
+
+
+def _table_cell(text: str, label: str) -> str | None:
+    cells = _table_cells(text, label)
+    if cells is None:
+        return None
+    return cells[1] if len(cells) > 1 else ""
+
+
+def _start_row(text: str) -> tuple[str, str] | None:
+    cells = _table_cells(text, "start decision")
+    if cells is None:
+        return None
+    template = cells[1] if len(cells) > 1 else ""
+    operator = cells[2] if len(cells) > 2 else ""
+    return template, operator
 
 
 def classify_r2(text: str) -> dict[str, Any]:
@@ -176,6 +210,87 @@ def classify_r2(text: str) -> dict[str, Any]:
         "unfilled": False,
         "start_decision": decision,
         "detail": "checklist_not_blank",
+    }
+
+
+def _start_decision_forged(text: str) -> bool:
+    """True when the template claims a start, PASS, ACCEPTED, or an open gate.
+
+    Honest negations (NOT STARTED, NOT ACCEPTED, Not given) are not claims.
+    The matched wording is not copied into the report.
+    """
+    for line in text.splitlines():
+        low = line.lower()
+        if re.search(r"\btrue\b", low) and any(
+            key in low for key in ("can_start_clock", "can_accept_l2_2", "can_close_l2_2")
+        ):
+            return True
+    if _GATE_TRUE_RE.search(text):
+        return True
+    scrubbed = _NOT_STARTED_RE.sub(" ", text)
+    scrubbed = _NOT_ACCEPTED_RE.sub(" ", scrubbed)
+    scrubbed = _NOT_GIVEN_RE.sub(" ", scrubbed)
+    return _BAD_WORD_RE.search(scrubbed) is not None
+
+
+def _start_decision_blank(text: str) -> bool:
+    decision = _table_cell(text, "Decision status")
+    who = _table_cell(text, "Who")
+    utc = _table_cell(text, "UTC time")
+    host = _table_cell(text, "Host")
+    command = _table_cell(text, "Intended command")
+    if decision != START_TEMPLATE:
+        return False
+    if who != "unfilled" or utc != "unfilled" or host != "unfilled":
+        return False
+    if command is None or INTENDED_COMMAND not in command:
+        return False
+    required = (
+        UNFILLED_MARK,
+        "NOT STARTED",
+        "NOT ACCEPTED",
+        "can_start_clock",
+        "stay false",
+        "Filling this file alone does not start the soak",
+        "259200",
+        "out of scope",
+        "founder",
+        "Interactive",
+    )
+    return all(mark in text for mark in required)
+
+
+def classify_start_decision(text: str) -> dict[str, Any]:
+    """Blank start-decision check. A forged claim is still not a clock start."""
+    forged = _start_decision_forged(text)
+    decision_cell = _table_cell(text, "Decision status")
+    base = {
+        "present": True,
+        "binds_clock_start": False,
+    }
+    if forged:
+        return {
+            **base,
+            "ok": False,
+            "unfilled": False,
+            "start_decision": "forge_refused",
+            "detail": "forged_claim",
+        }
+    if _start_decision_blank(text):
+        return {
+            **base,
+            "ok": True,
+            "unfilled": True,
+            "start_decision": "not_given",
+            "detail": "blank_template",
+        }
+    decision = "not_given" if decision_cell == START_TEMPLATE else "blank_template_changed"
+    return {
+        **base,
+        "ok": False,
+        "unfilled": False,
+        "start_decision": decision,
+        "detail": "not_blank",
     }
 
 
@@ -435,6 +550,19 @@ def _check_r2(path: Path) -> dict[str, Any]:
     return classify_r2(path.read_text(encoding="utf-8"))
 
 
+def _check_start_decision(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {
+            "ok": False,
+            "present": False,
+            "unfilled": False,
+            "start_decision": "absent",
+            "binds_clock_start": False,
+            "detail": "missing",
+        }
+    return classify_start_decision(path.read_text(encoding="utf-8"))
+
+
 def _check_stop(path: Path, root: Path) -> dict[str, Any]:
     present = path.is_file()
     return {
@@ -631,10 +759,12 @@ def preflight(
     checklist_path: Path | None = None,
     stop_path: Path | None = None,
     sums_path: Path | None = None,
+    start_decision_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an honest NOT_STARTED report. Does not launch soak or write the stop file."""
     repo = (root or ROOT).resolve()
     checklist = checklist_path or (repo / CHECKLIST_RELATIVE)
+    decision = start_decision_path or (repo / DECISION_RELATIVE)
     stop = stop_path or default_stop_path(repo)
     sums = sums_path or (repo / SUMS_RELATIVE)
     try:
@@ -644,6 +774,7 @@ def preflight(
             "contract": _check_contract(repo),
             "soak_flags": _check_soak_flags(),
             "r2_checklist": _check_r2(checklist),
+            "start_decision": _check_start_decision(decision),
             "emergency_stop": _check_stop(stop, repo),
             "gap_logger": _check_gap_logger(),
             "supervision_monitor": _check_monitor(),
@@ -735,6 +866,15 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         violations.append("sums_imply_start")
     if decision in {"given", "started", "approved"}:
         violations.append("r2_implies_start")
+    decided = checks.get("start_decision") if isinstance(checks.get("start_decision"), dict) else {}
+    if isinstance(decided, dict):
+        decided_value = str(decided.get("start_decision") or "")
+        if decided_value in {"given", "started", "approved"}:
+            violations.append("start_decision_implies_start")
+        if decided.get("binds_clock_start") is True:
+            violations.append("start_decision_implies_start")
+        if decided.get("detail") == "forged_claim" and decided.get("ok") is True:
+            violations.append("start_decision_implies_start")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

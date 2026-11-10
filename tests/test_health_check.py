@@ -16,6 +16,7 @@ import l2_2_preflight as pre  # noqa: E402
 import l2_2_score as l2  # noqa: E402
 
 CHECKLIST = ROOT / "docs" / "progress" / "l2_2" / "R2_CHECKLIST.md"
+START_DECISION = ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md"
 PREFLIGHT_JSON = ROOT / "docs" / "progress" / "l2_2" / "scaffold" / "preflight.json"
 STOP = ROOT / "docs" / "progress" / "EMERGENCY_STOP"
 NOT_STARTED = ROOT / "tests" / "fixtures" / "l2_2" / "scaffold_clock_not_started.json"
@@ -37,6 +38,7 @@ def _assess(preflight_report: dict, scored: dict, r2_text: str, **kwargs) -> dic
         r2_text=r2_text,
         preflight_exit=kwargs.get("preflight_exit", 0),
         score_exit=kwargs.get("score_exit", 0),
+        start_decision_text=kwargs.get("start_decision_text"),
     )
 
 
@@ -64,12 +66,14 @@ def test_healthy_not_started_scaffold_keeps_gates_false():
     assert result["l2_2_status"] == "NOT_STARTED"
     assert result["clock_state"] == "NOT_STARTED"
     assert result["r2_unfilled"] is True
+    assert result["start_decision_unfilled"] is True
     _assert_gates_closed(result)
 
 
 def test_subprocess_preflight_and_score_stay_not_started():
     before = {
         CHECKLIST: CHECKLIST.read_bytes(),
+        START_DECISION: START_DECISION.read_bytes(),
         PREFLIGHT_JSON: PREFLIGHT_JSON.read_bytes(),
         STOP: STOP.read_bytes() if STOP.exists() else None,
     }
@@ -79,9 +83,11 @@ def test_subprocess_preflight_and_score_stay_not_started():
     assert result["l2_2_status"] == "NOT_STARTED"
     assert result["clock_state"] == "NOT_STARTED"
     assert result["r2_unfilled"] is True
+    assert result["start_decision_unfilled"] is True
     _assert_gates_closed(result)
     after = {
         CHECKLIST: CHECKLIST.read_bytes(),
+        START_DECISION: START_DECISION.read_bytes(),
         PREFLIGHT_JSON: PREFLIGHT_JSON.read_bytes(),
         STOP: STOP.read_bytes() if STOP.exists() else None,
     }
@@ -298,6 +304,7 @@ def test_summary_never_grants_gates():
     assert summary["clock_state"] == "NOT_STARTED"
     assert summary["l2_2_checked"] is True
     assert summary["r2_unfilled"] is True
+    assert summary["start_decision_unfilled"] is None
     assert summary["soak_launched"] is False
     assert summary["production_7x24"] == "NOT_ACCEPTED"
     assert summary["can_start_clock"] is False
@@ -331,9 +338,63 @@ def test_docs_call_health_check_a_not_started_check():
     readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
     package = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")
     section = package.split("## L2-2", 1)[1].split("\n## ", 1)[0]
+    decision = START_DECISION.read_text(encoding="utf-8")
     assert "scripts/health_check.py" in readme
     assert "not a start decision" in readme
+    assert "START_DECISION.md" in readme
     assert "scripts/health_check.py" in section
+    assert "START_DECISION.md" in section
     assert "NOT STARTED" in section
     assert "NOT ACCEPTED" in section
     assert "The copy in git is unfilled." in CHECKLIST.read_text(encoding="utf-8")
+    assert "The copy in git is unfilled." in decision
+    assert "**Not given**" in decision
+    assert "Filling this file alone does not start the soak" in decision
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "clock_state: STARTED",
+        "l2_2_status: PASS",
+        "production_7x24: ACCEPTED",
+        "can_start_clock: true",
+    ],
+)
+def test_forged_start_decision_text_keeps_gates_false(snippet: str):
+    preflight_report, scored, r2_text = _honest()
+    before = START_DECISION.read_bytes()
+    forged = before.decode("utf-8") + "\n" + snippet + "\n"
+    result = _assess(preflight_report, scored, r2_text, start_decision_text=forged)
+    assert result["ok"] is False
+    assert "start_decision_forged" in result["violations"]
+    assert "start_decision_not_blank" in result["violations"]
+    assert result["start_decision_unfilled"] is False
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    _assert_gates_closed(result)
+    assert START_DECISION.read_bytes() == before
+
+
+def test_preflight_of_forged_start_decision_does_not_open_gates(tmp_path: Path):
+    original = START_DECISION.read_text(encoding="utf-8")
+    forged_path = tmp_path / "START_DECISION.md"
+    forged_path.write_text(original + "\ncan_start_clock: true\n", encoding="utf-8")
+    forged_report = pre.preflight(start_decision_path=forged_path)
+    _, scored, r2_text = _honest()
+    assert forged_report["l2_2_status"] == "NOT_STARTED"
+    assert forged_report["gates"]["can_start_clock"] is False
+    assert forged_report["not_started_scaffold_intact"] is False
+    result = _assess(
+        forged_report,
+        scored,
+        r2_text,
+        start_decision_text=forged_path.read_text(encoding="utf-8"),
+        preflight_exit=2,
+    )
+    assert result["ok"] is False
+    assert "start_decision_forged" in result["violations"]
+    assert "scaffold_not_intact" in result["violations"]
+    assert "preflight_exit" in result["violations"]
+    _assert_gates_closed(result)
+    assert START_DECISION.read_text(encoding="utf-8") == original

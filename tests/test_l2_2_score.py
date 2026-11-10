@@ -63,6 +63,14 @@ def test_schema_ids_match_contract():
     assert founder["a_72h_pass_is_production_readiness"] is False
     assert founder["approval_comment_id"] == l2.FOUNDER_APPROVAL_COMMENT_ID
     assert founder["condition_ids"] == list(l2.FOUNDER_CONDITION_IDS)
+    watchdog = doc["supervisor_watchdog_honesty"]
+    assert watchdog["condition_2_satisfied"] is False
+    assert watchdog["offline_probe_is_supervisor_watchdog"] is False
+    assert watchdog["offline_probe_is_a_start"] is False
+    assert watchdog["soak_dut_stall_watchdog_is_supervisor_watchdog"] is False
+    assert watchdog["can_start_clock"] is False
+    assert watchdog["l2_2_status"] == "NOT_STARTED"
+    assert watchdog["production_7x24"] == "NOT_ACCEPTED"
 
 
 def test_scaffold_fixtures_stay_away_from_the_incident_window():
@@ -103,6 +111,7 @@ def test_clock_not_started_is_the_canonical_report():
         "scaffold_fixture_not_host_evidence",
         "clock_not_started",
         "founder_start_conditions_unsatisfied",
+        "supervisor_watchdog_offline_probe_is_not_condition_2",
     ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -1083,3 +1092,163 @@ def test_forged_founder_report_fails_closed():
     assert honest["founder_start_conditions"]["approval_is_a_start"] is False
     assert honest["founder_start_conditions"]["conditions_satisfied"] is False
     assert honest["gates"]["can_start_clock"] is False
+
+
+def _assert_probe_closed(block: dict) -> None:
+    assert block["ok"] is True
+    assert block["detail"] == "synthetic_alive_vs_crash_unrecorded"
+    assert block["action"] == "synthetic_supervisor_files"
+    assert block["dut"] == "synthetic_temp_supervisor"
+    assert block["tool"] == "scripts/l2_2_score.py"
+    assert block["soak_dut_watchdog_tool"] == "scripts/stall_watchdog.py"
+    assert block["condition_2_satisfied"] is False
+    assert block["offline_probe_satisfies_condition_2"] is False
+    assert block["offline_probe_is_supervisor_watchdog"] is False
+    assert block["offline_probe_is_a_start"] is False
+    assert block["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert block["soak_dut_stall_watchdog_is_supervisor_watchdog"] is False
+    assert block["is_a_start"] is False
+    assert block["live_supervisor_process"] is False
+    assert block["live_soak_process"] is False
+    assert block["soak_launched"] is False
+    assert block["can_start_clock"] is False
+    assert block["can_accept_l2_2"] is False
+    assert block["can_close_l2_2"] is False
+    assert block["l2_2_status"] == "NOT_STARTED"
+    assert block["clock_state"] == "NOT_STARTED"
+    assert block["production_7x24"] == "NOT_ACCEPTED"
+    assert block["binds_clock_start"] is False
+    labels = [item["label"] for item in block["cases"]]
+    assert labels == [
+        "supervisor_alive",
+        "supervisor_crash_unrecorded",
+        "supervisor_crash_record_too_slow",
+    ]
+    classes = [item["classification"] for item in block["cases"]]
+    assert classes == [
+        "supervisor_alive",
+        "supervisor_crash_unrecorded",
+        "supervisor_crash_unrecorded",
+    ]
+    assert block["cases"][1]["other_process_record_present"] is False
+    assert block["cases"][2]["crash_recorded_within_seconds"] == 11
+    assert block["cases"][2]["record_within_max_seconds"] is False
+    for item in block["cases"]:
+        assert item["condition_2_satisfied"] is False
+        assert item["live_process"] is False
+        assert item["is_a_start"] is False
+        assert item["counts_as_supervisor_watchdog"] is False
+    assert "does not satisfy founder condition 2" in block["note"]
+    assert "not a start" in block["note"]
+    assert "stall_watchdog.py" in block["note"]
+
+
+def test_offline_supervisor_probe_is_not_condition_2_and_not_a_start():
+    block = l2.offline_supervisor_watchdog_probe()
+    _assert_probe_closed(block)
+    assert block["stall_watchdog_claimed_as_supervisor_watchdog"] is False
+    assert block["offline_probe_claimed_as_supervisor_watchdog"] is False
+    assert block["condition_2_claimed_satisfied"] is False
+    assert block["pass_or_start_claimed"] is False
+    report = l2.score(_load("scaffold_clock_not_started.json"))
+    assert report["supervisor_watchdog_honesty"]["cases"] == block["cases"]
+    assert "supervisor_watchdog_offline_probe_is_not_condition_2" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+
+
+def test_supervisor_watchdog_pretenses_fail_closed():
+    stall = l2.offline_supervisor_watchdog_probe(
+        {
+            "tool": "scripts/stall_watchdog.py",
+            "kind": "stall_watchdog",
+            "stall_watchdog_is_supervisor_watchdog": True,
+        }
+    )
+    _assert_probe_closed(stall)
+    assert stall["stall_watchdog_claimed_as_supervisor_watchdog"] is True
+    assert stall["condition_2_satisfied"] is False
+    offline = l2.offline_supervisor_watchdog_probe(
+        {
+            "kind": "offline_synthetic_probe",
+            "offline_probe_is_supervisor_watchdog": True,
+            "offline_probe_satisfies_condition_2": True,
+        }
+    )
+    _assert_probe_closed(offline)
+    assert offline["offline_probe_claimed_as_supervisor_watchdog"] is True
+    assert offline["condition_2_claimed_satisfied"] is True
+    assert offline["offline_probe_is_supervisor_watchdog"] is False
+    passed = l2.offline_supervisor_watchdog_probe(
+        {
+            "condition_2_satisfied": True,
+            "l2_2_status": "PASS",
+            "clock_state": "STARTED",
+            "production_7x24": "ACCEPTED",
+            "can_start_clock": True,
+            "is_a_start": True,
+        }
+    )
+    _assert_probe_closed(passed)
+    assert passed["condition_2_claimed_satisfied"] is True
+    assert passed["pass_or_start_claimed"] is True
+    assert passed["l2_2_status"] == "NOT_STARTED"
+    assert passed["production_7x24"] == "NOT_ACCEPTED"
+    assert passed["can_start_clock"] is False
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    forged = json.loads(json.dumps(honest))
+    forged["supervisor_watchdog_honesty"]["soak_dut_stall_watchdog_is_supervisor_watchdog"] = True
+    forged["supervisor_watchdog_honesty"]["tool"] = "scripts/stall_watchdog.py"
+    forged["supervisor_watchdog_honesty"]["condition_2_satisfied"] = True
+    forged["supervisor_watchdog_honesty"]["offline_probe_is_supervisor_watchdog"] = True
+    forged["supervisor_watchdog_honesty"]["offline_probe_satisfies_condition_2"] = True
+    forged["supervisor_watchdog_honesty"]["l2_2_status"] = "PASS"
+    forged["supervisor_watchdog_honesty"]["clock_state"] = "STARTED"
+    forged["supervisor_watchdog_honesty"]["production_7x24"] = "ACCEPTED"
+    forged["supervisor_watchdog_honesty"]["can_start_clock"] = True
+    forged["supervisor_watchdog_honesty"]["is_a_start"] = True
+    names = set(l2.validate_report(forged))
+    assert "supervisor_watchdog_required" in names
+    assert "condition_2_unsatisfied" in names
+    assert "offline_probe_is_not_supervisor_watchdog" in names
+    assert "forged_pass" in names
+    assert "production_claim" in names
+    assert "forged_clock_start" in names
+    assert "offline_probe_is_not_a_start" in names
+    assert "clock_state" in names
+    assert honest["l2_2_status"] == "NOT_STARTED"
+    assert honest["gates"]["can_start_clock"] is False
+    assert honest["production_7x24"] == "NOT_ACCEPTED"
+
+
+def test_status_docs_match_issue_9_product_facts():
+    root_docs = ROOT / "docs" / "progress"
+    p0 = (root_docs / "P0_STATUS.md").read_text(encoding="utf-8")
+    readme = (root_docs / "l2_2" / "README.md").read_text(encoding="utf-8")
+    tier = (root_docs / "L2_NEXT_TIER.md").read_text(encoding="utf-8")
+    package = (root_docs / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")
+    for text in (p0, readme, tier):
+        assert "No T2 card" not in text
+        assert "DS-T2-20261110" in text
+        assert "6765608469" in text
+        assert "CONDITIONAL" in text
+        assert "9cac002" in text
+        assert "738b47a" in text
+        assert "6767990189" in text
+        assert "a07ec9f" in text
+    assert "ACCEPTED" in p0
+    assert "not granted" in p0
+    assert "NOT STARTED" in p0
+    assert "NOT ACCEPTED" in p0
+    assert "INCOMPLETE" in p0
+    assert not list((ROOT / "task_inbox").glob("DS-T3-*"))
+    assert "Product L2 (task split / worker) stays **NOT STARTED**" not in readme
+    assert "Product L2 (task split / worker) remains **NOT STARTED**" not in readme
+    assert "which stays NOT STARTED" not in (root_docs / "l2_2" / "SCHEMA.json").read_text(encoding="utf-8")
+    assert "not a T3 run" in p0
+    assert "DS-T2-20261110" in package
+    assert "does not grant product L2" in package
+    assert "not granted" in package
+    decision = (root_docs / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+    assert "**Not given**" in decision
+    assert "founder condition 2" in decision
+    assert "The copy in git is unfilled." in decision

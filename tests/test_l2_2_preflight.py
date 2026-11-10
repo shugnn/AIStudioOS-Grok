@@ -628,7 +628,7 @@ def test_committed_ubuntu_24h_is_a_short_specimen_not_the_72h_gate(monkeypatch: 
     monkeypatch.setattr(l2, "score", wrapped)
     report = pre.preflight()
     _assert_not_a_start(report)
-    assert seen == ["scaffold", "scaffold", "scaffold", "scaffold"]
+    assert seen == ["scaffold", "scaffold", "scaffold", "scaffold", "scaffold"]
     specimen = report["ubuntu_24h_specimen"]
     assert specimen == report["checks"]["ubuntu_24h_specimen"]
     assert specimen["ok"] is True
@@ -1120,3 +1120,91 @@ def test_filled_start_registration_line_is_not_this_pass(tmp_path: Path):
     assert report["clock_state"] == "NOT_STARTED"
     assert "founder_start_conditions:start_registration_is_not_this_pass" in report["failures"]
     assert original == (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+
+
+def test_supervisor_watchdog_probe_is_recorded_and_is_not_a_start():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is True
+    row = report["supervisor_watchdog_honesty"]
+    assert row == report["checks"]["supervisor_watchdog_honesty"]
+    assert row["ok"] is True
+    assert row["detail"] == "synthetic_alive_vs_crash_unrecorded"
+    assert row["dut"] == "synthetic_temp_supervisor"
+    assert row["tool"] == "scripts/l2_2_score.py"
+    assert row["soak_dut_watchdog_tool"] == "scripts/stall_watchdog.py"
+    assert row["condition_2_satisfied"] is False
+    assert row["offline_probe_satisfies_condition_2"] is False
+    assert row["offline_probe_is_supervisor_watchdog"] is False
+    assert row["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert row["soak_dut_stall_watchdog_is_supervisor_watchdog"] is False
+    assert row["is_a_start"] is False
+    assert row["live_supervisor_process"] is False
+    assert row["live_soak_process"] is False
+    assert row["soak_launched"] is False
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    labels = [item["label"] for item in row["cases"]]
+    assert labels == [
+        "supervisor_alive",
+        "supervisor_crash_unrecorded",
+        "supervisor_crash_record_too_slow",
+    ]
+    claim_labels = [item["label"] for item in row["refused_claims"]]
+    assert claim_labels == [
+        "soak_dut_stall_watchdog_substituted",
+        "offline_probe_substituted",
+        "condition_2_and_pass_claimed",
+    ]
+    by_label = {item["label"]: item for item in row["refused_claims"]}
+    assert by_label["soak_dut_stall_watchdog_substituted"]["stall_watchdog_claimed_as_supervisor_watchdog"] is True
+    assert by_label["soak_dut_stall_watchdog_substituted"]["condition_2_satisfied"] is False
+    assert by_label["offline_probe_substituted"]["offline_probe_claimed_as_supervisor_watchdog"] is True
+    assert by_label["offline_probe_substituted"]["offline_probe_is_supervisor_watchdog"] is False
+    assert by_label["condition_2_and_pass_claimed"]["condition_2_claimed_satisfied"] is True
+    assert by_label["condition_2_and_pass_claimed"]["pass_or_start_claimed"] is True
+    assert by_label["condition_2_and_pass_claimed"]["l2_2_status"] == "NOT_STARTED"
+    assert by_label["condition_2_and_pass_claimed"]["production_7x24"] == "NOT_ACCEPTED"
+    for item in row["refused_claims"]:
+        assert item["can_start_clock"] is False
+        assert item["is_a_start"] is False
+        assert item["condition_2_satisfied"] is False
+    assert "does not satisfy founder condition 2" in report["operator_note"]
+    assert any("founder condition 2" in step and "not a start" in step for step in report["next_steps"])
+    blob = json.dumps(report)
+    assert '"condition_2_satisfied": true' not in blob
+    assert '"offline_probe_is_supervisor_watchdog": true' not in blob
+    assert '"can_start_clock": true' not in blob
+    assert '"l2_2_status": "PASS"' not in blob
+    assert '"production_7x24": "ACCEPTED"' not in blob
+
+
+def test_forged_supervisor_watchdog_preflight_fails_closed():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    forged = json.loads(json.dumps(report))
+    forged["supervisor_watchdog_honesty"]["condition_2_satisfied"] = True
+    forged["supervisor_watchdog_honesty"]["offline_probe_satisfies_condition_2"] = True
+    forged["supervisor_watchdog_honesty"]["offline_probe_is_supervisor_watchdog"] = True
+    forged["supervisor_watchdog_honesty"]["soak_dut_stall_watchdog_is_supervisor_watchdog"] = True
+    forged["supervisor_watchdog_honesty"]["tool"] = "scripts/stall_watchdog.py"
+    forged["supervisor_watchdog_honesty"]["l2_2_status"] = "PASS"
+    forged["supervisor_watchdog_honesty"]["clock_state"] = "STARTED"
+    forged["supervisor_watchdog_honesty"]["production_7x24"] = "ACCEPTED"
+    forged["supervisor_watchdog_honesty"]["can_start_clock"] = True
+    forged["supervisor_watchdog_honesty"]["is_a_start"] = True
+    forged["checks"]["supervisor_watchdog_honesty"] = json.loads(json.dumps(forged["supervisor_watchdog_honesty"]))
+    names = set(pre.validate_report(forged))
+    assert "condition_2_unsatisfied" in names
+    assert "offline_probe_is_not_supervisor_watchdog" in names
+    assert "supervisor_watchdog_required" in names
+    assert "forged_pass" in names
+    assert "production_claim" in names
+    assert "forged_can_start_clock" in names
+    assert "offline_probe_is_not_a_start" in names
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["supervisor_watchdog_honesty"]["condition_2_satisfied"] is False
+    assert report["documented_soak_argv_executed"] is False

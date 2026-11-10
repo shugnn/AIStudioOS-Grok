@@ -31,6 +31,7 @@ The intended command is the existing non-Interactive local soak. This template d
 - The offline process-boundary continuity gate is not a start.
 - The conditional founder approval on Issue #9 is not a start.
 - Recording the five unfilled conditions is not a start.
+- The offline supervisor-watchdog probe is not a start. It classifies synthetic files only. It does not satisfy founder condition 2 and it is not a watchdog of a live supervisor. `scripts/stall_watchdog.py` is not that watchdog.
 
 ## Conditional founder approval (not a start)
 

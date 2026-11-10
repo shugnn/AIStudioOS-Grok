@@ -14,6 +14,11 @@ Records the Issue #9 conditional founder approval and refuses a report that
 treats that approval as a start, pretends the five start conditions are
 satisfied, counts LOCAL_ONLY as public evidence, ends on an unknown root
 cause, or treats the soak-DUT stall watchdog as a watchdog of the supervisor.
+Classifies synthetic supervisor-alive and supervisor-crash-unrecorded temp files.
+That offline probe does not satisfy founder condition 2, is not a watchdog of a
+live supervisor, and is not a start. A report that treats the probe or the
+soak-DUT stall hook as that watchdog, or that claims condition 2, PASS,
+started, ACCEPTED, or production 7x24, fails closed.
 Does not launch soak_2h.py, does not point the stall hook at the committed
 Ubuntu-24H soak files, does not start the 72h clock, does not post an L2-2
 START line, and does not register scheduled tasks.
@@ -205,6 +210,7 @@ CHECK_ORDER = (
     "non_additivity",
     "process_continuity",
     "founder_start_conditions",
+    "supervisor_watchdog_honesty",
     "scorer_refuses",
 )
 
@@ -223,6 +229,7 @@ OPERATOR_NOTE = (
     "Historical SHORT walls are not additive toward 259200. A sum of ended 24h walls does not start the 72h clock and does not count toward the gate. "
     "Sequential or restarted soak invocations are not one continuous 72h wall. Stitching them, even back-to-back on the same host, does not start the 72h clock and does not count toward the gate. "
     "The Issue #9 conditional founder approval is not a start decision. The five start conditions are unfilled. LOCAL_ONLY is not public evidence. Unknown root cause is not a terminal attribution. The soak-DUT stall watchdog is not a watchdog of the supervisor. "
+    "The offline supervisor-watchdog probe is not a start and does not satisfy founder condition 2. It is not a watchdog of a live supervisor. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -250,6 +257,7 @@ NEXT_STEPS = (
     "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not a started L2-2 capture. This gate is not a start.",
     "Sequential or restarted soak invocations are not one live process. A back-to-back 86400s pair, three sequential 86400s soaks covering 72h of calendar time, or a wall that resets, is not a started L2-2 capture. This continuity gate is not a start.",
     "Issue #9 comment 6761044915 is a conditional founder approval, not a start and not a PASS. The five conditions stay unfilled in the committed templates. This preflight does not post an L2-2 START line and does not set can_start_clock.",
+    "The offline supervisor-watchdog probe classifies synthetic supervisor-alive and supervisor-crash-unrecorded temp files only. It does not satisfy founder condition 2, it is not a watchdog of a live supervisor, and it is not a start. scripts/stall_watchdog.py watches a soak DUT and is not that watchdog. A report that treats either one as the required supervisor watchdog, or that claims condition 2 is satisfied, or that claims PASS, started, ACCEPTED, or production 7x24, fails closed.",
     "Production 7x24 stays NOT ACCEPTED. A 72h result is not production readiness. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -638,7 +646,24 @@ def _check_contract(root: Path) -> dict[str, Any]:
         and founder.get("supervision_write_max_seconds") == l2_contract.SUPERVISION_WRITE_MAX_SECONDS
         and founder.get("supervisor_watchdog_max_seconds") == l2_contract.SUPERVISOR_WATCHDOG_MAX_SECONDS
     )
-    ok = ok and founder_ok
+    watchdog = doc.get("supervisor_watchdog_honesty") if isinstance(doc.get("supervisor_watchdog_honesty"), dict) else {}
+    watchdog_ok = (
+        l2_contract is not None
+        and watchdog.get("rule") == l2_contract.SUPERVISOR_PROBE_RULE
+        and watchdog.get("tool") == l2_contract.SUPERVISOR_PROBE_TOOL
+        and watchdog.get("dut") == l2_contract.SUPERVISOR_PROBE_DUT
+        and watchdog.get("condition_2_satisfied") is False
+        and watchdog.get("offline_probe_satisfies_condition_2") is False
+        and watchdog.get("offline_probe_is_supervisor_watchdog") is False
+        and watchdog.get("offline_probe_is_a_start") is False
+        and watchdog.get("soak_dut_stall_watchdog_is_supervisor_watchdog") is False
+        and watchdog.get("is_supervisor_watchdog_of_live_supervisor") is False
+        and watchdog.get("can_start_clock") is False
+        and watchdog.get("production_7x24") == "NOT_ACCEPTED"
+        and watchdog.get("l2_2_status") == "NOT_STARTED"
+        and watchdog.get("clock_state") == "NOT_STARTED"
+    )
+    ok = ok and founder_ok and watchdog_ok
     return {
         "ok": ok,
         "preflight_schema": doc.get("preflight_schema") if doc.get("preflight_schema") == SCHEMA else "mismatch",
@@ -2209,6 +2234,356 @@ def _gates() -> dict[str, Any]:
     }
 
 
+SUPERVISOR_CLAIM_LABELS = (
+    "soak_dut_stall_watchdog_substituted",
+    "offline_probe_substituted",
+    "condition_2_and_pass_claimed",
+)
+
+
+def _supervisor_claim_specs() -> tuple[tuple[str, dict[str, Any]], ...]:
+    return (
+        (
+            "soak_dut_stall_watchdog_substituted",
+            {
+                "tool": "scripts/stall_watchdog.py",
+                "kind": "stall_watchdog",
+                "stall_watchdog_is_supervisor_watchdog": True,
+            },
+        ),
+        (
+            "offline_probe_substituted",
+            {
+                "kind": "offline_synthetic_probe",
+                "offline_probe_is_supervisor_watchdog": True,
+                "offline_probe_satisfies_condition_2": True,
+            },
+        ),
+        (
+            "condition_2_and_pass_claimed",
+            {
+                "condition_2_satisfied": True,
+                "satisfies_founder_condition_2": True,
+                "l2_2_status": "PASS",
+                "clock_state": "STARTED",
+                "production_7x24": "ACCEPTED",
+                "can_start_clock": True,
+                "is_a_start": True,
+            },
+        ),
+    )
+
+
+def _slim_supervisor_claim(label: str, assessed: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "label": label,
+        "stall_watchdog_claimed_as_supervisor_watchdog": assessed.get("stall_watchdog_claimed_as_supervisor_watchdog") is True,
+        "offline_probe_claimed_as_supervisor_watchdog": assessed.get("offline_probe_claimed_as_supervisor_watchdog") is True,
+        "condition_2_claimed_satisfied": assessed.get("condition_2_claimed_satisfied") is True,
+        "pass_or_start_claimed": assessed.get("pass_or_start_claimed") is True,
+        "condition_2_satisfied": False,
+        "offline_probe_satisfies_condition_2": False,
+        "offline_probe_is_supervisor_watchdog": False,
+        "soak_dut_stall_watchdog_is_supervisor_watchdog": False,
+        "is_supervisor_watchdog_of_live_supervisor": False,
+        "is_a_start": False,
+        "counts_as_start": False,
+        "counts_as_pass": False,
+        "can_start_clock": False,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "production_7x24": "NOT_ACCEPTED",
+        "live_supervisor_process": False,
+        "live_soak_process": False,
+        "soak_launched": False,
+    }
+
+
+def _supervisor_claim_shape_ok(label: str, row: dict[str, Any]) -> bool:
+    expected = {
+        "soak_dut_stall_watchdog_substituted": (True, False, False, False),
+        "offline_probe_substituted": (False, True, True, False),
+        "condition_2_and_pass_claimed": (False, False, True, True),
+    }
+    got = (
+        row.get("stall_watchdog_claimed_as_supervisor_watchdog") is True,
+        row.get("offline_probe_claimed_as_supervisor_watchdog") is True,
+        row.get("condition_2_claimed_satisfied") is True,
+        row.get("pass_or_start_claimed") is True,
+    )
+    closed = (
+        row.get("condition_2_satisfied") is False
+        and row.get("offline_probe_is_supervisor_watchdog") is False
+        and row.get("offline_probe_satisfies_condition_2") is False
+        and row.get("soak_dut_stall_watchdog_is_supervisor_watchdog") is False
+        and row.get("is_a_start") is False
+        and row.get("can_start_clock") is False
+        and row.get("l2_2_status") == "NOT_STARTED"
+        and row.get("clock_state") == "NOT_STARTED"
+        and row.get("production_7x24") == "NOT_ACCEPTED"
+        and row.get("live_supervisor_process") is False
+        and row.get("soak_launched") is False
+    )
+    return got == expected[label] and closed
+
+
+def _assessed_supervisor_stays_closed(assessed: dict[str, Any]) -> bool:
+    return (
+        assessed.get("condition_2_satisfied") is False
+        and assessed.get("offline_probe_satisfies_condition_2") is False
+        and assessed.get("offline_probe_is_supervisor_watchdog") is False
+        and assessed.get("offline_probe_is_a_start") is False
+        and assessed.get("is_supervisor_watchdog_of_live_supervisor") is False
+        and assessed.get("soak_dut_stall_watchdog_is_supervisor_watchdog") is False
+        and assessed.get("is_a_start") is False
+        and assessed.get("can_start_clock") is False
+        and assessed.get("can_accept_l2_2") is False
+        and assessed.get("can_close_l2_2") is False
+        and assessed.get("l2_2_status") == "NOT_STARTED"
+        and assessed.get("clock_state") == "NOT_STARTED"
+        and assessed.get("production_7x24") == "NOT_ACCEPTED"
+        and assessed.get("live_supervisor_process") is False
+        and assessed.get("live_soak_process") is False
+        and assessed.get("soak_launched") is False
+    )
+
+
+def _supervisor_claim_rows(l2: Any) -> tuple[list[dict[str, Any]], bool]:
+    rows: list[dict[str, Any]] = []
+    for label, claim in _supervisor_claim_specs():
+        try:
+            assessed = l2.offline_supervisor_watchdog_probe(claim)
+        except Exception:
+            return [], False
+        if not isinstance(assessed, dict) or not _assessed_supervisor_stays_closed(assessed):
+            return [], False
+        row = _slim_supervisor_claim(label, assessed)
+        if not _supervisor_claim_shape_ok(label, row):
+            return [], False
+        rows.append(row)
+    return rows, True
+
+
+def _scorer_refuses_supervisor_report(l2: Any, root: Path) -> bool:
+    fixture = root / FIXTURE_RELATIVE
+    if not fixture.is_file():
+        return False
+    try:
+        honest = l2.score(l2.load_capture(fixture))
+    except Exception:
+        return False
+    block = honest.get("supervisor_watchdog_honesty") if isinstance(honest, dict) else None
+    if not isinstance(block, dict) or block.get("ok") is not True or block.get("condition_2_satisfied") is not False:
+        return False
+    if block.get("offline_probe_is_supervisor_watchdog") is not False or block.get("is_a_start") is not False:
+        return False
+
+    def names(block_edits: dict[str, Any], **top: Any) -> set[str]:
+        forged = json.loads(json.dumps(honest))
+        forged["supervisor_watchdog_honesty"].update(block_edits)
+        for key, value in top.items():
+            if key in GATE_KEYS:
+                forged["gates"][key] = value
+            else:
+                forged[key] = value
+        return set(l2.validate_report(forged))
+
+    stall = names(
+        {
+            "soak_dut_stall_watchdog_is_supervisor_watchdog": True,
+            "tool": "scripts/stall_watchdog.py",
+            "condition_2_satisfied": True,
+        }
+    )
+    if "supervisor_watchdog_required" not in stall or "condition_2_unsatisfied" not in stall:
+        return False
+    offline = names(
+        {
+            "offline_probe_is_supervisor_watchdog": True,
+            "offline_probe_satisfies_condition_2": True,
+        }
+    )
+    if "offline_probe_is_not_supervisor_watchdog" not in offline or "condition_2_unsatisfied" not in offline:
+        return False
+    passed = names(
+        {
+            "l2_2_status": "PASS",
+            "clock_state": "STARTED",
+            "production_7x24": "ACCEPTED",
+            "can_start_clock": True,
+            "is_a_start": True,
+        },
+        l2_2_status="PASS",
+        production_7x24="ACCEPTED",
+        can_start_clock=True,
+    )
+    return {
+        "forged_pass",
+        "production_claim",
+        "clock_state",
+        "forged_clock_start",
+        "offline_probe_is_not_a_start",
+    } <= passed
+
+
+def _closed_supervisor(detail: str) -> dict[str, Any]:
+    try:
+        import l2_2_score as l2
+
+        base = l2.offline_supervisor_watchdog_probe()
+    except Exception:
+        base = {
+            "rule": "other_process_records_supervisor_crash_within_10s",
+            "tool": "scripts/l2_2_score.py",
+            "action": "synthetic_supervisor_files",
+            "dut": "synthetic_temp_supervisor",
+            "soak_dut_watchdog_tool": "scripts/stall_watchdog.py",
+            "required_watchdog_kind": "other_process",
+            "supervisor_watchdog_max_seconds": 10,
+            "supervision_write_max_seconds": 600,
+            "founder_condition_id": "supervision_cadence_and_supervisor_watchdog",
+            "founder_condition_2": (
+                "supervision_write_at_least_once_every_10_minutes_and_"
+                "another_process_records_a_supervisor_crash_within_10s"
+            ),
+            "hole": "offline_probe_is_not_a_live_supervisor_watchdog",
+            "note": (
+                "This offline probe classifies synthetic temp files only. "
+                "It does not satisfy founder condition 2. "
+                "It is not a supervisor watchdog of a live supervisor. "
+                "It is not a start. "
+                "scripts/stall_watchdog.py watches a soak DUT and is not this watchdog."
+            ),
+            "cases": [],
+            "stall_watchdog_claimed_as_supervisor_watchdog": False,
+            "offline_probe_claimed_as_supervisor_watchdog": False,
+            "condition_2_claimed_satisfied": False,
+            "pass_or_start_claimed": False,
+        }
+    if detail != "synthetic_alive_vs_crash_unrecorded":
+        base["cases"] = []
+    base["ok"] = False
+    base["detail"] = detail if detail in {
+        "synthetic_alive_vs_crash_unrecorded",
+        "classification_failed",
+        "probe_failed",
+        "probe_in_repo",
+        "probe_io",
+        "scorer_import",
+        "forged_supervisor_watchdog_not_refused",
+    } else "probe_failed"
+    base["refused_claims"] = []
+    for key, value in {
+        "condition_2_satisfied": False,
+        "offline_probe_satisfies_condition_2": False,
+        "offline_probe_is_supervisor_watchdog": False,
+        "offline_probe_is_a_start": False,
+        "is_supervisor_watchdog_of_live_supervisor": False,
+        "is_a_start": False,
+        "counts_as_start": False,
+        "counts_as_pass": False,
+        "soak_dut_stall_watchdog_is_supervisor_watchdog": False,
+        "soak_dut_watchdog_counts_as_supervisor_watchdog": False,
+        "live_supervisor_process": False,
+        "live_soak_process": False,
+        "live_watchdog_process": False,
+        "binds_clock_start": False,
+        "implies_l2_2_pass": False,
+        "implies_l2_2_acceptance": False,
+        "a_72h_pass_is_production_readiness": False,
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "soak_launched": False,
+        "documented_soak_argv_executed": False,
+        "declarations_are_not_a_start": True,
+    }.items():
+        base[key] = value
+    return base
+
+
+def _check_supervisor_watchdog_honesty(root: Path) -> dict[str, Any]:
+    """Classify synthetic supervisor files. The probe is not condition 2 and not a start."""
+    try:
+        import l2_2_score as l2
+    except Exception:
+        return _closed_supervisor("scorer_import")
+    if not callable(getattr(l2, "offline_supervisor_watchdog_probe", None)):
+        return _closed_supervisor("scorer_import")
+    try:
+        row = l2.offline_supervisor_watchdog_probe()
+    except Exception:
+        return _closed_supervisor("probe_failed")
+    if not isinstance(row, dict):
+        return _closed_supervisor("probe_failed")
+    claims, claims_ok = _supervisor_claim_rows(l2) if row.get("ok") is True else ([], False)
+    forged_ok = _scorer_refuses_supervisor_report(l2, root) if claims_ok else False
+    if row.get("ok") is not True or row.get("detail") != l2.SUPERVISOR_PROBE_DETAIL:
+        detail = row.get("detail") if row.get("detail") in l2.SUPERVISOR_PROBE_DETAILS else "probe_failed"
+        if detail == l2.SUPERVISOR_PROBE_DETAIL:
+            detail = "classification_failed"
+    elif not claims_ok:
+        detail = "probe_failed"
+    elif not forged_ok:
+        detail = "forged_supervisor_watchdog_not_refused"
+    else:
+        detail = l2.SUPERVISOR_PROBE_DETAIL
+    if detail != l2.SUPERVISOR_PROBE_DETAIL:
+        row = _closed_supervisor(detail)
+        if detail == "forged_supervisor_watchdog_not_refused":
+            row["cases"] = list(l2._canonical_supervisor_cases())
+        return row
+    row["refused_claims"] = claims
+    row["ok"] = True
+    row["detail"] = detail
+    row.update(l2._supervisor_closed_flags())
+    return row
+
+
+def _supervisor_preflight_violations(row: Any) -> list[str]:
+    violations: list[str] = []
+    if not isinstance(row, dict):
+        return ["supervisor_watchdog_honesty"]
+    try:
+        import l2_2_score as l2
+
+        violations.extend(l2._supervisor_watchdog_honesty_violations(row, require_success=False))
+        success = l2.SUPERVISOR_PROBE_DETAIL
+    except Exception:
+        return ["supervisor_watchdog_honesty"]
+    claims = row.get("refused_claims")
+    if not isinstance(claims, list):
+        violations.append("supervisor_watchdog_honesty")
+    elif row.get("ok") is True:
+        labels = [item.get("label") if isinstance(item, dict) else None for item in claims]
+        if labels != list(SUPERVISOR_CLAIM_LABELS):
+            violations.append("supervisor_watchdog_honesty")
+        else:
+            for item in claims:
+                if not _supervisor_claim_shape_ok(item["label"], item):
+                    violations.append("condition_2_unsatisfied")
+    elif claims:
+        violations.append("supervisor_watchdog_honesty")
+    if row.get("ok") is True and row.get("detail") != success:
+        violations.append("supervisor_watchdog_honesty")
+    if row.get("detail") not in {
+        success,
+        "classification_failed",
+        "probe_failed",
+        "probe_in_repo",
+        "probe_io",
+        "scorer_import",
+        "forged_supervisor_watchdog_not_refused",
+    }:
+        violations.append("supervisor_watchdog_honesty")
+    return violations
+
+
 def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
     failures = [
         f"{name}:{checks[name].get('detail', 'failed')}"
@@ -2240,6 +2615,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "non_additivity": checks["non_additivity"],
         "process_continuity": checks["process_continuity"],
         "founder_start_conditions": checks["founder_start_conditions"],
+        "supervisor_watchdog_honesty": checks["supervisor_watchdog_honesty"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -2292,6 +2668,7 @@ def preflight(
                 decision_path=decision,
                 checklist_path=checklist,
             ),
+            "supervisor_watchdog_honesty": _check_supervisor_watchdog_honesty(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -2451,6 +2828,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_founder_preflight_violations(top_founder))
     if founder != top_founder:
         violations.append("founder_start_conditions_mismatch")
+    watchdog = checks.get("supervisor_watchdog_honesty")
+    top_watchdog = report.get("supervisor_watchdog_honesty")
+    violations.extend(_supervisor_preflight_violations(watchdog))
+    violations.extend(_supervisor_preflight_violations(top_watchdog))
+    if watchdog != top_watchdog:
+        violations.append("supervisor_watchdog_honesty_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

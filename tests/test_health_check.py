@@ -753,6 +753,72 @@ def test_honest_preflight_records_the_founder_approval_as_not_a_start():
     _assert_gates_closed(result)
 
 
+def test_honest_preflight_records_the_supervisor_probe_as_not_condition_2():
+    preflight_report, scored, r2_text = _honest()
+    row = preflight_report["supervisor_watchdog_honesty"]
+    assert row["ok"] is True
+    assert row["detail"] == "synthetic_alive_vs_crash_unrecorded"
+    assert row["condition_2_satisfied"] is False
+    assert row["offline_probe_is_supervisor_watchdog"] is False
+    assert row["offline_probe_satisfies_condition_2"] is False
+    assert row["soak_dut_stall_watchdog_is_supervisor_watchdog"] is False
+    assert row["is_a_start"] is False
+    assert row["live_supervisor_process"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert scored["supervisor_watchdog_honesty"]["condition_2_satisfied"] is False
+    assert scored["supervisor_watchdog_honesty"]["offline_probe_is_supervisor_watchdog"] is False
+    assert "supervisor_watchdog_offline_probe_is_not_condition_2" in scored["gates"]["blockers"]
+    result = _assess(preflight_report, scored, r2_text)
+    assert result["ok"] is True, result["violations"]
+    assert result["condition_2_satisfied"] is False
+    assert result["offline_probe_satisfies_condition_2"] is False
+    assert result["offline_probe_is_supervisor_watchdog"] is False
+    assert result["offline_probe_is_a_start"] is False
+    assert result["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["production_7x24"] == "NOT_ACCEPTED"
+    _assert_gates_closed(result)
+
+
+def test_forged_supervisor_watchdog_claims_fail_closed_without_opening_gates():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    forged["supervisor_watchdog_honesty"]["condition_2_satisfied"] = True
+    forged["supervisor_watchdog_honesty"]["offline_probe_is_supervisor_watchdog"] = True
+    forged["supervisor_watchdog_honesty"]["offline_probe_satisfies_condition_2"] = True
+    forged["supervisor_watchdog_honesty"]["soak_dut_stall_watchdog_is_supervisor_watchdog"] = True
+    forged["supervisor_watchdog_honesty"]["is_a_start"] = True
+    forged["supervisor_watchdog_honesty"]["l2_2_status"] = "PASS"
+    forged["supervisor_watchdog_honesty"]["clock_state"] = "STARTED"
+    forged["supervisor_watchdog_honesty"]["production_7x24"] = "ACCEPTED"
+    forged["supervisor_watchdog_honesty"]["can_start_clock"] = True
+    forged["checks"]["supervisor_watchdog_honesty"] = json.loads(json.dumps(forged["supervisor_watchdog_honesty"]))
+    forged_score = json.loads(json.dumps(scored))
+    forged_score["supervisor_watchdog_honesty"]["condition_2_satisfied"] = True
+    forged_score["supervisor_watchdog_honesty"]["offline_probe_is_supervisor_watchdog"] = True
+    forged_score["l2_2_status"] = "PASS"
+    forged_score["production_7x24"] = "ACCEPTED"
+    forged_score["gates"]["can_start_clock"] = True
+    result = _assess(forged, forged_score, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "condition_2_unsatisfied",
+        "offline_probe_is_not_supervisor_watchdog",
+        "supervisor_watchdog_required",
+        "offline_probe_is_not_a_start",
+        "forged_pass",
+        "forged_can_start_clock",
+        "forged_production_accepted",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["condition_2_satisfied"] is False
+    assert result["offline_probe_is_supervisor_watchdog"] is False
+    assert result["offline_probe_is_a_start"] is False
+    assert result["is_supervisor_watchdog_of_live_supervisor"] is False
+    _assert_gates_closed(result)
+
+
 def test_forged_founder_claims_fail_closed_without_opening_gates():
     preflight_report, scored, r2_text = _honest()
     forged = json.loads(json.dumps(preflight_report))

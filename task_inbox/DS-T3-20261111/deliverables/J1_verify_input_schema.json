@@ -1,0 +1,30 @@
+{
+  "kind": "verify_input_schema",
+  "job_id": "J1",
+  "key": "loan_id",
+  "columns": [
+    "loan_id",
+    "book_id",
+    "member_id",
+    "borrowed_date",
+    "loan_days",
+    "returned_date",
+    "category"
+  ],
+  "header": [
+    "loan_id",
+    "book_id",
+    "member_id",
+    "borrowed_date",
+    "loan_days",
+    "returned_date",
+    "category"
+  ],
+  "header_match": true,
+  "rows": 4000,
+  "blank_keys": 0,
+  "duplicate_keys": [],
+  "sha256": "429b3287c37d07c350926e53bacc0f475f77dabd94dc1eb3bc1f703776ffdf51",
+  "bytes": 165090,
+  "problems": []
+}

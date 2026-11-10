@@ -169,8 +169,9 @@ def test_fixture_is_a_local_demo_and_not_an_observation_card():
     readme = (FIXTURE / "README.md").read_text(encoding="utf-8")
     assert "not an observation" in readme.lower()
     inbox = ROOT / "task_inbox"
-    assert [path.name for path in inbox.iterdir() if path.is_dir()] == ["DS-T1-20261108"]
-    assert not list(inbox.glob("DS-T3*"))
+    inbox_dirs = sorted(path.name for path in inbox.iterdir() if path.is_dir())
+    assert "DS-T1-20261108" in inbox_dirs
+    assert FIXTURE.name not in inbox_dirs
     assert not (ROOT / "task_inbox" / "DS-T2-20261110").exists()
 
 
@@ -305,7 +306,6 @@ def test_poisoned_dispatch_and_worker_jobs_are_not_used(tmp_path):
     assert "task_id" in dispatch["ignored_keys"]
     assert "fixture_name" in dispatch["ignored_keys"]
     assert [path.name for path in (ROOT / "task_inbox").iterdir()] == before_inbox
-    assert not list((ROOT / "task_inbox").glob("DS-T3*"))
 
 
 def test_month_and_week_sums_match_hand_checks_and_an_independent_pass(tmp_path):
@@ -791,7 +791,8 @@ def test_doc_keeps_the_claim_boundary_and_does_not_grant_l2():
         "not accepted",
         "NOT ACCEPTED",
         "NOT STARTED",
-        "not a T3 run",
+        "T3 run submitted for observation-track acceptance",
+        "Observation-track acceptance is not claimed",
         "derived_dispatch.json",
         "does not read a pre-written `dispatch.json`",
         "does not import `worker_jobs.py`",

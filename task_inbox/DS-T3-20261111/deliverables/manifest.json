@@ -1,0 +1,69 @@
+{
+  "task_id": "DS-T3-20261111",
+  "goal": "为图书馆借阅数据生成「借阅运营汇总 + 逾期清单 + 可独立核验的证据包」。",
+  "input": {
+    "name": "loans.csv",
+    "sha256": "429b3287c37d07c350926e53bacc0f475f77dabd94dc1eb3bc1f703776ffdf51",
+    "bytes": 165090,
+    "lines": 4001
+  },
+  "deliverables": {
+    "J1_verify_input_schema.json": {
+      "sha256": "c5436168c66d39cc25b62d89119752e5feb8e6bfa571752ac356a6a53bc90d36",
+      "bytes": 555
+    },
+    "J4_evidence_pack.json": {
+      "sha256": "2334b219270d11ba41d9cffae92fdc1288e6322d46bf95dc1122f45b06480f17",
+      "bytes": 1581
+    },
+    "derived_dispatch.json": {
+      "sha256": "5bef8eed3c172ba394664dfab7b25f2155362b1c8b0c05d914e61ad5dabe7960",
+      "bytes": 4050
+    },
+    "overdue.json": {
+      "sha256": "ad80809ae653a9a9b1a0634ad93bab4a7f94ffe4824526750ea10c3d0d2c193c",
+      "bytes": 55268
+    },
+    "plan.json": {
+      "sha256": "cf0691ecbc43a958bdf87a29e4f29809e3602e6c972647410c293fa4b7c4b36d",
+      "bytes": 1811
+    },
+    "report.md": {
+      "sha256": "6ba2b36e29816f43d67f0de8d4ce2b0519a4ef6634c873bc2397a84e8e5914db",
+      "bytes": 3484
+    },
+    "summary.json": {
+      "sha256": "7ee45eb40b7af9756a62176a6641f2d01dd19a0732f05772400f073ce278c439",
+      "bytes": 1012
+    }
+  },
+  "derivation": {
+    "produced_by": "control_plane.task_decomposer.TaskDecomposer.decompose",
+    "plan_projected_from_decompose": true,
+    "read_as_job_source": false,
+    "used_preauthored_dispatch": false,
+    "used_worker_jobs_py": false
+  },
+  "submission": {
+    "submitted_for_observation": true,
+    "observation_track_acceptance": false,
+    "l2_granted": false,
+    "l2_accepted": false,
+    "l2_status": "CONDITIONAL",
+    "production_7x24": "NOT ACCEPTED",
+    "l2_2_72h_clock": "NOT STARTED",
+    "comment_6761044915_is_not_a_start": true
+  },
+  "network": false,
+  "paid": false,
+  "claim_boundary": {
+    "l2_granted": false,
+    "l2_accepted": false,
+    "l2_status": "CONDITIONAL",
+    "production_7x24": "NOT ACCEPTED",
+    "l2_2_72h_clock": "NOT STARTED",
+    "observation_card": false,
+    "t3_run": false,
+    "t1_or_t2_rerun": false
+  }
+}

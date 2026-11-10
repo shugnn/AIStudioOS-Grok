@@ -1,0 +1,54 @@
+{
+  "goal": "为图书馆借阅数据生成「借阅运营汇总 + 逾期清单 + 可独立核验的证据包」。",
+  "derived_tasks": [
+    {
+      "task_id": "J1",
+      "purpose": "校验表头和主键 loan_id，并记录输入文件的 sha256 与字节数。",
+      "inputs": [
+        "loans.csv"
+      ],
+      "outputs": [
+        "J1_verify_input_schema.json"
+      ]
+    },
+    {
+      "task_id": "J2",
+      "purpose": "统计笔数、已还、未还和逾期，按 category 与 borrowed_date 的月份汇总，并列出 member_id 的前 10。",
+      "inputs": [
+        "loans.csv"
+      ],
+      "outputs": [
+        "summary.json"
+      ]
+    },
+    {
+      "task_id": "J3",
+      "purpose": "列出 returned_date 为空、且（2026-10-31 − borrowed_date）的天数大于 loan_days 的 loan_id。",
+      "inputs": [
+        "loans.csv"
+      ],
+      "outputs": [
+        "overdue.json"
+      ]
+    },
+    {
+      "task_id": "J4",
+      "purpose": "记录输入和各任务产物的 sha256 与字节数，形成可独立核验的证据包。",
+      "inputs": [
+        "loans.csv"
+      ],
+      "outputs": [
+        "J4_evidence_pack.json",
+        "report.md",
+        "manifest.json"
+      ]
+    }
+  ],
+  "why": "语句里有证据、逾期、汇总，列角色决定哪些规则成立，所以拆成 verify_input_schema、loan_operations_summary、overdue_list、evidence_pack，不按任务编号套固定清单。",
+  "alternatives_considered": [
+    "不按月或按周加总金额：语句有汇总，但没有月度或周度词。",
+    "不单列异常：语句没有异常意图。",
+    "不列时效违约：语句没有时效或违约意图，或没有成对的事件时间列。",
+    "不做账龄：语句没有积压或账龄意图，或没有事件时间列。"
+  ]
+}

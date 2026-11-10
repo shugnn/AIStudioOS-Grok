@@ -271,7 +271,7 @@ def test_no_rule_match_returns_empty_list():
     assert decomposer.decompose({"statement": "hello", "schema": {"columns": ["order_id"]}}) == []
     assert decomposer.decompose({"statement": "monthly summary"}) == []
     assert decomposer.decompose({
-        "statement": "月度经营汇总、异常清单和证据包",
+        "statement": "你好，只是打个招呼",
         "schema": {"columns": [dict(column) for column in CASE_A_COLUMNS]},
     }) == []
 

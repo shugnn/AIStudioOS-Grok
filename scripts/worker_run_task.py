@@ -6,7 +6,9 @@
 
 The card supplies a goal statement, an input schema, and an input file
 (``goal.json`` with ``statement``, ``schema``, and ``input``). Jobs come
-from ``TaskDecomposer.decompose()``. The derived list is written to
+from ``TaskDecomposer.decompose()``. Chinese phrases such as 汇总, 逾期,
+and 证据包 map onto that same closed intent set. Loan-shaped columns can
+add a count summary and an overdue list. The derived list is written to
 ``derived_dispatch.json`` in the output directory. That file is an output.
 
 This script does not read ``dispatch.json`` and does not import

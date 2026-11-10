@@ -1,0 +1,71 @@
+{
+  "kind": "evidence_pack",
+  "job_id": "J4",
+  "roles": [
+    "calendar_date",
+    "dimension",
+    "duration",
+    "identifier"
+  ],
+  "covers": [
+    "J1",
+    "J2",
+    "J3"
+  ],
+  "covered_jobs": [
+    {
+      "job_id": "J1",
+      "kind": "verify_input_schema",
+      "status": "DONE",
+      "output": "J1_verify_input_schema.json"
+    },
+    {
+      "job_id": "J2",
+      "kind": "loan_operations_summary",
+      "status": "DONE",
+      "output": "summary.json"
+    },
+    {
+      "job_id": "J3",
+      "kind": "overdue_list",
+      "status": "DONE",
+      "output": "overdue.json"
+    }
+  ],
+  "input": {
+    "name": "loans.csv",
+    "sha256": "429b3287c37d07c350926e53bacc0f475f77dabd94dc1eb3bc1f703776ffdf51",
+    "bytes": 165090
+  },
+  "outputs": {
+    "J1_verify_input_schema.json": {
+      "sha256": "c5436168c66d39cc25b62d89119752e5feb8e6bfa571752ac356a6a53bc90d36",
+      "bytes": 555
+    },
+    "overdue.json": {
+      "sha256": "ad80809ae653a9a9b1a0634ad93bab4a7f94ffe4824526750ea10c3d0d2c193c",
+      "bytes": 55268
+    },
+    "summary.json": {
+      "sha256": "7ee45eb40b7af9756a62176a6641f2d01dd19a0732f05772400f073ce278c439",
+      "bytes": 1012
+    }
+  },
+  "excludes": [
+    "derived_dispatch.json",
+    "worklog.json",
+    "J4_evidence_pack.json"
+  ],
+  "network": false,
+  "paid": false,
+  "claim_boundary": {
+    "l2_granted": false,
+    "l2_accepted": false,
+    "l2_status": "CONDITIONAL",
+    "production_7x24": "NOT ACCEPTED",
+    "l2_2_72h_clock": "NOT STARTED",
+    "observation_card": false,
+    "t3_run": false,
+    "t1_or_t2_rerun": false
+  }
+}

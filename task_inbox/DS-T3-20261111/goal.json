@@ -1,0 +1,19 @@
+{
+  "task_id": "DS-T3-20261111",
+  "statement": "为图书馆借阅数据生成「借阅运营汇总 + 逾期清单 + 可独立核验的证据包」。",
+  "schema": {
+    "columns": [
+      {"name": "loan_id"},
+      {"name": "book_id"},
+      {"name": "member_id"},
+      {"name": "borrowed_date"},
+      {"name": "loan_days"},
+      {"name": "returned_date"},
+      {"name": "category"}
+    ]
+  },
+  "input": "loans.csv",
+  "reference_date": "2026-10-31",
+  "observation_card": true,
+  "source": "Issue #9 comment 6775337980"
+}

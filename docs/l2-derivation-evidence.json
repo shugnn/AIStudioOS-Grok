@@ -26,10 +26,10 @@
     "note": "T1 and T2 share one frozen orders card: monthly operating summary, anomaly list, evidence pack. Both dispatch files list the same four titles. Those titles were written on the cards. decompose() did not produce them. This change does not edit those dispatch files and does not rerun T1 or T2."
   },
   "decision_rules": [
-    "Tokenize the statement on ASCII words. Map tokens onto a closed intent set: monthly, weekly, summary, anomaly, evidence, sla, aging, verify_input. Card ids, fixture names, and schema names are not read.",
-    "Classify each column, first match wins: *_id identifier; *_at event_time; *_date/_day/date calendar_date; known measure names measure; status/state status; priority/severity priority; a declared numeric type measure; otherwise dimension.",
+    "Tokenize ASCII words, and also match a closed set of Chinese phrases, onto intents: monthly, weekly, summary, anomaly, evidence, sla, aging, verify_input, overdue. Card ids, fixture names, and schema names are not read.",
+    "Classify each column, first match wins: *_id identifier; *_at event_time; *_date/_day/date calendar_date; duration or *_days duration; known measure names measure; status/state status; priority/severity priority; a declared numeric type measure; otherwise dimension.",
     "Emit a job only when its predicate is true. Titles are composed from the grain and the actual column names. An unseen schema cannot select a stored title list.",
-    "Emission order, which assigns J1..Jn: verify_input_schema, temporal_aggregate (month then week), anomaly_list, sla_breach_list, backlog_aging, evidence_pack.",
+    "Emission order, which assigns J1..Jn: verify_input_schema, temporal_aggregate (month then week), anomaly_list, sla_breach_list, backlog_aging, loan_operations_summary, overdue_list, evidence_pack. The two loan jobs fire only for a summary or overdue intent plus loan-shaped columns. reference_date is copied into those jobs and does not select them.",
     "verify_input_schema fires only when the statement asks to verify a frozen input or asks for evidence, and a schema is present. The key is the first identifier column.",
     "temporal_aggregate fires only for a summary at month and/or week grain when the schema has at least one measure and one time column. Calendar dates win over event times. Measures stay in schema order.",
     "anomaly_list fires only when anomalies are requested and a status column or a measure exists.",

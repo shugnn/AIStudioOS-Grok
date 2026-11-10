@@ -6,7 +6,9 @@ then the L2-2 not-started scaffold (offline preflight + not-started fixture scor
 The preflight classifies a synthetic fresh summary and a synthetic stale summary
 through the stall watchdog, and reads the committed Ubuntu-24H metrics file only
 as a historical SHORT specimen. That specimen is not the 72h gate and not the
-stall DUT. The hook is not a start and not L2-2 acceptance.
+stall DUT. Ended SHORT walls are not additive: a sum of 24h walls, including
+86400 times 3, is not one continuous 72h soak. The hook is not a start and
+not L2-2 acceptance. The non-additivity gate is not a start.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -375,6 +377,10 @@ def assess_l2_2_offline(
                 "ubuntu_24h_as_start",
                 "ubuntu_24h_specimen",
                 "ubuntu_24h_specimen_mismatch",
+                "additive_historical_shorts",
+                "additive_as_start",
+                "non_additivity",
+                "non_additivity_mismatch",
             }:
                 _add(violations, name)
             else:
@@ -425,6 +431,42 @@ def assess_l2_2_offline(
         _note_specimen(top_specimen, violations)
         if checks_specimen == top_specimen and checked_specimen["classification"] == "SHORT":
             specimen_view = checked_specimen
+        additive = checks.get("non_additivity")
+        top_additive = preflight_report.get("non_additivity")
+        if additive != top_additive:
+            _add(violations, "non_additivity_mismatch")
+        if (
+            not isinstance(additive, dict)
+            or additive.get("ok") is not True
+            or additive.get("detail") != "shorts_not_additive"
+            or additive.get("rule") != "one_continuous_monotonic_wall"
+            or additive.get("historical_shorts_are_additive") is not False
+            or additive.get("sum_of_shorts_counts_toward_gate") is not False
+            or additive.get("d1_windows_bound_as_specimen") is not False
+            or additive.get("d1_windows_metrics_file") is not None
+            or additive.get("l2_2_status") != "NOT_STARTED"
+            or additive.get("clock_state") != "NOT_STARTED"
+            or additive.get("clock_effect") != "none"
+            or additive.get("soak_launched") is not False
+            or additive.get("documented_soak_argv_executed") is not False
+            or additive.get("production_7x24") != "NOT_ACCEPTED"
+            or any(additive.get(key) is not False for key in GATE_KEYS)
+        ):
+            _add(violations, "non_additivity")
+        sums = additive.get("refused_sums") if isinstance(additive, dict) else None
+        if not isinstance(sums, list) or not sums:
+            _add(violations, "non_additivity")
+        else:
+            for item in sums:
+                if not isinstance(item, dict):
+                    _add(violations, "additive_historical_shorts")
+                    continue
+                if item.get("counts_toward_gate") is not False or item.get("historical_shorts_are_additive") is not False:
+                    _add(violations, "additive_historical_shorts")
+                if item.get("continuous_monotonic_wall") is not False or item.get("single_live_soak") is not False:
+                    _add(violations, "additive_historical_shorts")
+                if item.get("naive_sum_reaches_259200") is True and item.get("counts_toward_gate") is not False:
+                    _add(violations, "additive_historical_shorts")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -441,6 +483,18 @@ def assess_l2_2_offline(
             _add(violations, "score_not_offline")
         if source.get("synthetic") is not True:
             _add(violations, "not_scaffold_fixture")
+        block = score_report.get("non_additivity")
+        if not isinstance(block, dict):
+            _add(violations, "non_additivity")
+        else:
+            if (
+                block.get("historical_shorts_are_additive") is not False
+                or block.get("sum_of_shorts_counts_toward_gate") is not False
+                or block.get("counts_toward_gate") is not False
+                or block.get("additive_claim") is not False
+                or block.get("rule") != "one_continuous_monotonic_wall"
+            ):
+                _add(violations, "additive_historical_shorts")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -454,6 +508,8 @@ def assess_l2_2_offline(
                 _add(violations, "forged_production_accepted")
             elif name == "status":
                 _add(violations, "l2_2_status")
+            elif name in {"additive_historical_shorts", "non_additivity"}:
+                _add(violations, name)
             else:
                 _add(violations, "score:" + name)
         _walk_claims(score_report, violations)
@@ -510,6 +566,8 @@ def assess_l2_2_offline(
         "stall_dut": "synthetic_temp_summary" if ok else "withheld",
         "ubuntu_24h_used_as_dut": False,
         "ubuntu_24h_counts_as_72h": False,
+        "historical_shorts_are_additive": False,
+        "sum_of_shorts_counts_toward_gate": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
@@ -557,6 +615,8 @@ def l2_2_offline_step() -> dict:
         stall_dut=assessment["stall_dut"],
         ubuntu_24h_used_as_dut=False,
         ubuntu_24h_counts_as_72h=False,
+        historical_shorts_are_additive=False,
+        sum_of_shorts_counts_toward_gate=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
         stall_hook_is_l2_2_acceptance=False,
         gate_result="NOT_A_GATE",
@@ -643,6 +703,8 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "stall_dut": stall_dut,
         "ubuntu_24h_used_as_dut": False,
         "ubuntu_24h_counts_as_72h": False,
+        "historical_shorts_are_additive": False,
+        "sum_of_shorts_counts_toward_gate": False,
         "ubuntu_24h_specimen": specimen,
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",

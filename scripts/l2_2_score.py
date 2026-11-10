@@ -45,7 +45,25 @@ WATCH_FOR_KIND = {
     "existing_local_loop": "runner_glob_live",
 }
 ENDED_WATCH_TARGETS = {"ended_experiment", "stale_summary"}
-WALL_SOURCES = {"unset", "monotonic", "cycles_times_interval", "utc_span"}
+# Explicit sum/product sources. A capture may name them so the scorer can
+# refuse the claim. They are not one continuous monotonic soak.
+ADDITIVE_WALL_SOURCES = frozenset(
+    {
+        "sum",
+        "summed",
+        "additive",
+        "stacked",
+        "product",
+        "multiplied",
+        "historical_sum",
+        "hours_times_count",
+    }
+)
+WALL_SOURCES = {"unset", "monotonic", "cycles_times_interval", "utc_span"} | set(ADDITIVE_WALL_SOURCES)
+ADDITIVE_FLAGS = ("additive", "summed", "stacked")
+ADDITIVE_LIST_KEYS = ("components", "summed_from", "additive_walls", "historical_walls")
+ADDITIVE_COUNT_KEYS = ("sum_of_24h", "added_24h_count", "times_24h")
+SHORT_DAY_SECONDS = 86400.0
 HOST_STOPS = {
     "exception",
     "keyboard_interrupt",
@@ -71,6 +89,7 @@ NEXT_STEPS = (
     "Before that start, fill docs/progress/l2_2/R2_CHECKLIST.md. Watch the live soak summary.jsonl while soak_2h.py is the DUT (runner-*.json only when the DUT is L1 with no soak). scripts/coverage_gap_log.py appends timestamp, gap_seconds, band (ok below 13s, yellow 13s through 5min, red above 5min), and source. Yellow is not a business FAIL. A gap line does not start the clock or complete the soak.",
     "Only after that explicit start decision, on a host already allowed to run the local soak: PYTHONPATH=. python scripts/soak_2h.py --cycles 5000 --interval 60 --via-l1 --seed 300 --idle-policy reseed --max-wall-seconds 259200",
     "Cycles must be large enough that max-wall stops the process. cycles x interval is not the wall. cycles_exit0 is not business progress. A 86400s wall is not this 72h gate.",
+    "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not this 72h gate.",
     "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
     "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
     "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate.",
@@ -338,6 +357,106 @@ def _receipt_present(receipt: Any) -> bool:
     return False
 
 
+def _parse_component_list(value: Any, field: str) -> list[float]:
+    if not isinstance(value, list) or not value:
+        raise CaptureError(f"{field} must be a non-empty list of numbers")
+    parsed: list[float] = []
+    for index, item in enumerate(value):
+        raw = item
+        if isinstance(item, dict):
+            raw = item.get("wall_elapsed_s", item.get("elapsed_seconds", item.get("seconds")))
+        if not _is_number(raw) or float(raw) < 0:
+            raise CaptureError(f"{field}[{index}] must be a non-negative number")
+        parsed.append(round(float(raw), 3))
+    return parsed
+
+
+def claimed_additive_components(wall: dict[str, Any]) -> list[float] | None:
+    """Return ended-wall parts when a wall claims to be their sum. Else None.
+
+    A single monotonic elapsed_seconds is not a sum. 259200 on one live soak
+    stays a continuous wall. Two or more listed parts, an additive source, or
+    an N-times-24h count is a sum and does not count toward the gate.
+    """
+    if not isinstance(wall, dict):
+        return None
+    source = str(wall.get("source") or "").strip().lower()
+    flagged = source in ADDITIVE_WALL_SOURCES or any(wall.get(flag) is True for flag in ADDITIVE_FLAGS)
+    count_claim = False
+    for key in ADDITIVE_COUNT_KEYS:
+        if key not in wall or wall.get(key) is None:
+            continue
+        count_claim = True
+        if not _is_int(wall[key]) or wall[key] < 2:
+            raise CaptureError(f"wall.{key} must be an int >= 2 when set")
+    found: list[float] | None = None
+    for key in ADDITIVE_LIST_KEYS:
+        if key not in wall or wall.get(key) is None:
+            continue
+        found = _parse_component_list(wall[key], field=f"wall.{key}")
+        break
+    if flagged or count_claim:
+        if found is not None:
+            return found
+        for key in ADDITIVE_COUNT_KEYS:
+            if _is_int(wall.get(key)) and wall[key] >= 2:
+                return [SHORT_DAY_SECONDS] * int(wall[key])
+        return []
+    if found is not None and len(found) >= 2:
+        return found
+    return None
+
+
+def assess_short_sum(components: list[float]) -> dict[str, Any]:
+    """Sum ended SHORT walls in memory. The sum never counts toward 259200.
+
+    72h is one continuous monotonic wall_elapsed_s on a single live soak.
+    A naive sum may land on 259200 (86400 * 3) and still does not count.
+    """
+    if isinstance(components, tuple):
+        components = list(components)
+    rounded = _parse_component_list(components, field="short_sum")
+    total = round(sum(rounded), 3)
+    return {
+        "components_seconds": rounded,
+        "component_count": len(rounded),
+        "sum_seconds": total,
+        "wall_required_seconds": WALL_REQUIRED_SECONDS,
+        "naive_sum_reaches_259200": total >= WALL_REQUIRED_SECONDS,
+        "counts_toward_gate": False,
+        "historical_shorts_are_additive": False,
+        "continuous_monotonic_wall": False,
+        "single_live_soak": False,
+    }
+
+
+def standing_non_additivity(components: list[float] | None) -> dict[str, Any]:
+    """Standing rule copied onto every score report. Sums do not count."""
+    base: dict[str, Any] = {
+        "rule": "one_continuous_monotonic_wall",
+        "historical_shorts_are_additive": False,
+        "sum_of_shorts_counts_toward_gate": False,
+        "additive_claim": False,
+        "claimed_component_count": 0,
+        "claimed_sum_seconds": None,
+        "naive_sum_reaches_259200": False,
+        "counts_toward_gate": False,
+    }
+    if components is None:
+        return base
+    base["additive_claim"] = True
+    if not components:
+        return base
+    assessed = assess_short_sum(components)
+    base["claimed_component_count"] = assessed["component_count"]
+    base["claimed_sum_seconds"] = assessed["sum_seconds"]
+    base["naive_sum_reaches_259200"] = assessed["naive_sum_reaches_259200"]
+    base["counts_toward_gate"] = False
+    base["historical_shorts_are_additive"] = False
+    base["sum_of_shorts_counts_toward_gate"] = False
+    return base
+
+
 def _forged_claim(doc: dict[str, Any]) -> bool:
     status = str(doc.get("claimed_l2_2_status") or "").strip().upper().replace(" ", "_")
     production = str(doc.get("claimed_production_7x24") or "").strip().upper().replace(" ", "_")
@@ -467,6 +586,9 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         )
 
     elapsed_meets = _is_number(elapsed) and float(elapsed) >= WALL_REQUIRED_SECONDS
+    additive_components = claimed_additive_components(wall)
+    additive_claim = additive_components is not None
+    non_additivity = standing_non_additivity(additive_components)
     metrics_wall_agrees = False
     if isinstance(metrics, dict) and _is_number(elapsed):
         metrics_wall_agrees = abs(float(metrics["wall_elapsed_s"]) - float(elapsed)) <= WALL_MATCH_TOLERANCE
@@ -484,6 +606,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         and elapsed_meets
         and metrics_wall_agrees
         and final_stop
+        and not additive_claim
     )
     with_work = isinstance(metrics, dict) and metrics.get("cycles_with_work", 0) > 0
     summary_ok = reconciliation["status"] == "match"
@@ -506,7 +629,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         status = "NOT_STARTED"
     else:
         status = "INCOMPLETE"
-        if not monotonic or elapsed is None:
+        if additive_claim or not monotonic or elapsed is None:
             clock_state = "INCOMPLETE"
         elif elapsed_meets:
             clock_state = "WALL_OBSERVED"
@@ -522,6 +645,8 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         blockers.append("interactive_registration_forbidden")
     elif started and not runner_ok:
         blockers.append("runner_not_allowed")
+    if additive_claim:
+        blockers.append("additive_historical_shorts")
     if started and not monotonic:
         blockers.append("wall_not_monotonic")
     if started and not elapsed_meets:
@@ -586,7 +711,9 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
             "exit0_is_business": False,
             "interactive_schtasks": "out_of_scope",
             "note": (
-                "72h means monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200. "
+                "72h means one continuous monotonic wall_elapsed_s >= 259200 "
+                "with max_wall_seconds 259200 on a single live soak. "
+                "A sum of ended SHORT walls is not that wall. "
                 "cycles x interval is not the wall. cycles_exit0 is process success only."
             ),
         },
@@ -596,9 +723,11 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
             "required_seconds": WALL_REQUIRED_SECONDS,
             "elapsed_seconds": elapsed,
             "source": source,
-            "elapsed_meets_259200": elapsed_meets,
+            "elapsed_meets_259200": False if additive_claim else elapsed_meets,
             "counts_toward_gate": wall_bar,
+            "additive_claim": additive_claim,
         },
+        "non_additivity": non_additivity,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -644,6 +773,44 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     return report
 
 
+def _non_additivity_violations(report: dict[str, Any]) -> list[str]:
+    """Reject a report that adds ended SHORT walls toward 259200 or relabels the sum."""
+    violations: list[str] = []
+    block = report.get("non_additivity")
+    wall = report.get("wall") if isinstance(report.get("wall"), dict) else {}
+    if not isinstance(block, dict):
+        return ["non_additivity"]
+    if block.get("rule") != "one_continuous_monotonic_wall":
+        violations.append("non_additivity")
+    if block.get("historical_shorts_are_additive") is not False:
+        violations.append("additive_historical_shorts")
+    if block.get("sum_of_shorts_counts_toward_gate") is not False:
+        violations.append("additive_historical_shorts")
+    if block.get("counts_toward_gate") is not False:
+        violations.append("additive_historical_shorts")
+    if not isinstance(block.get("additive_claim"), bool):
+        violations.append("non_additivity")
+    try:
+        claimed = claimed_additive_components(wall)
+    except CaptureError:
+        violations.append("additive_historical_shorts")
+        claimed = None
+    if claimed is not None and block.get("additive_claim") is not True:
+        violations.append("additive_historical_shorts")
+    if claimed is not None and wall.get("counts_toward_gate") is not False:
+        violations.append("additive_historical_shorts")
+    if block.get("additive_claim") is True:
+        if wall.get("counts_toward_gate") is not False:
+            violations.append("additive_historical_shorts")
+        if report.get("clock_state") == "WALL_OBSERVED":
+            violations.append("additive_historical_shorts")
+        if report.get("l2_2_status") == "PASS":
+            violations.append("forged_pass")
+        if report.get("production_7x24") != "NOT_ACCEPTED":
+            violations.append("production_claim")
+    return violations
+
+
 def validate_report(report: dict[str, Any]) -> list[str]:
     """Reject forged acceptance. Empty list means the report does not over-claim."""
     violations: list[str] = []
@@ -678,6 +845,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         violations.append("forged_clock_start")
     if report.get("evidence_class") == "scaffold" and gates.get("can_accept_l2_2") is True:
         violations.append("scaffold_cannot_accept")
+    violations.extend(_non_additivity_violations(report))
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

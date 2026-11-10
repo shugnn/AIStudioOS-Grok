@@ -29,7 +29,7 @@ PYTHONPATH=. python scripts/coverage_gap_log.py \
   --timestamp 2026-02-01T00:00:30Z --out /tmp/coverage-gap-sample.jsonl
 ```
 
-`operator_sample` is a scratch classification. It is not the Ubuntu-24H summary and not a 72h run. The committed `docs/progress/soak_2h/metrics.json` (wall 86400.001s) is a historical SHORT specimen. The offline preflight records that it is below 259200, that it does not count toward the 72h gate, and that it is not the stall DUT. That binding does not start the 72h clock.
+`operator_sample` is a scratch classification. It is not the Ubuntu-24H summary and not a 72h run. The committed `docs/progress/soak_2h/metrics.json` (wall 86400.001s) is a historical SHORT specimen. The offline preflight records that it is below 259200, that it does not count toward the 72h gate, and that it is not the stall DUT. That binding does not start the 72h clock. Ended SHORT walls are not additive toward 259200. Recording that rule is not a start.
 
 ## Still required before `--max-wall-seconds 259200`
 

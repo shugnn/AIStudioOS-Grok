@@ -52,7 +52,7 @@ Clock **NOT STARTED**. L2-2 gate **NOT ACCEPTED**. Production 7×24 **NOT ACCEPT
 | `scaffold/preflight.json` | Offline preflight report from `scripts/l2_2_preflight.py`. Status `NOT_STARTED`. Not a start decision |
 | `SHA256SUMS.json` | SHA-256 binding written by `scripts/evidence_sha256sums.py` (`--glob "**/*"`). Not a PASS |
 | `scripts/l2_2_score.py` | Offline scorer. Exit 0 is an honest report, not a PASS |
-| `scripts/l2_2_preflight.py` | Offline readiness check. Exit 0 is `NOT_STARTED`, not a gate PASS and not a start. Includes the stall-watchdog hook and the Ubuntu-24H historical SHORT specimen binding |
+| `scripts/l2_2_preflight.py` | Offline readiness check. Exit 0 is `NOT_STARTED`, not a gate PASS and not a start. Includes the stall-watchdog hook, the Ubuntu-24H historical SHORT specimen binding, and the non-additivity gate (ended 24h walls do not sum to 72h) |
 | `scripts/stall_watchdog.py` | Offline hook classifies synthetic fresh vs stale summaries and composes `scripts/coverage_gap_log.py` bands. Does not watch Ubuntu-24H, does not write `STALL_ALERT.json`, and does not start the clock |
 | `scripts/health_check.py` | Re-runs that preflight, including the synthetic stall-watchdog hook and the Ubuntu-24H SHORT specimen, and scores the not-started fixture. Exit 0 is `overall_ok`, not a start and not acceptance. Its pytest step is the unit suite, not L2-2 acceptance |
 | `tests/fixtures/l2_2/` | Synthetic **2026-02-01** captures |
@@ -60,7 +60,7 @@ Clock **NOT STARTED**. L2-2 gate **NOT ACCEPTED**. Production 7×24 **NOT ACCEPT
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank pre-start note. Clock stays **NOT STARTED** |
 | `docs/progress/l2_2/START_DECISION.md` | Blank start-decision template. Decision status **Not given**. Filling this file alone does not start the soak |
 
-`cycles_exit0` and the Ubuntu-24H wall (86400.001s) do not accept this gate. The offline preflight records `docs/progress/soak_2h/metrics.json` as a historical SHORT specimen: the wall is below 259200s, it does not count as 72h evidence, and it is not the stall DUT. Overall L2-2 status stays **NOT STARTED**. L2-4 historical reconstruction for 2026-11-03..06 stays **INCOMPLETE** on [PR #11](https://github.com/shugnn/AIStudioOS-Grok/pull/11) (tip `931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6`, `task_runs=0`, WT Error 1000 count 0). This package does not recapture that window. Host captures stay on that PR.
+`cycles_exit0` and the Ubuntu-24H wall (86400.001s) do not accept this gate. The offline preflight records `docs/progress/soak_2h/metrics.json` as a historical SHORT specimen: the wall is below 259200s, it does not count as 72h evidence, and it is not the stall DUT. Ended SHORT walls are not additive. A sum of 24h walls, including 86400.001 plus another 86400 and 86400 times 3, is not a started L2-2 capture. That gate is not a start. Overall L2-2 status stays **NOT STARTED**. L2-4 historical reconstruction for 2026-11-03..06 stays **INCOMPLETE** on [PR #11](https://github.com/shugnn/AIStudioOS-Grok/pull/11) (tip `931758cb7487d8c8ac1697f1b3ad1e2fa7610ef6`, `task_runs=0`, WT Error 1000 count 0). This package does not recapture that window. Host captures stay on that PR.
 
 ## Commands
 

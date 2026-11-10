@@ -628,7 +628,7 @@ def test_committed_ubuntu_24h_is_a_short_specimen_not_the_72h_gate(monkeypatch: 
     monkeypatch.setattr(l2, "score", wrapped)
     report = pre.preflight()
     _assert_not_a_start(report)
-    assert seen == ["scaffold"]
+    assert seen == ["scaffold", "scaffold"]
     specimen = report["ubuntu_24h_specimen"]
     assert specimen == report["checks"]["ubuntu_24h_specimen"]
     assert specimen["ok"] is True
@@ -740,3 +740,105 @@ def test_forged_ubuntu_specimen_report_fails_closed():
     assert report["clock_state"] == "NOT_STARTED"
     assert report["gates"]["can_start_clock"] is False
     assert report["ubuntu_24h_specimen"]["classification"] == "SHORT"
+
+
+def test_historical_shorts_are_not_additive_and_the_clock_stays_not_started():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is True
+    assert report["documented_soak_argv_executed"] is False
+    assert report["clock_effect"] == "none"
+    row = report["non_additivity"]
+    assert row == report["checks"]["non_additivity"]
+    assert row["ok"] is True
+    assert row["detail"] == "shorts_not_additive"
+    assert row["rule"] == "one_continuous_monotonic_wall"
+    assert row["tool"] == "scripts/l2_2_score.py"
+    assert row["historical_shorts_are_additive"] is False
+    assert row["sum_of_shorts_counts_toward_gate"] is False
+    assert row["d1_windows_metrics_file"] is None
+    assert row["d1_windows_bound_as_specimen"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["clock_effect"] == "none"
+    assert row["soak_launched"] is False
+    assert row["binds_clock_start"] is False
+    assert row["documented_soak_argv_executed"] is False
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    known = row["known_committed_shorts"]
+    assert len(known) == 1
+    assert known[0]["id"] == "ubuntu_24h"
+    assert known[0]["path"] == "docs/progress/soak_2h/metrics.json"
+    assert known[0]["wall_elapsed_s"] == 86400.001
+    assert known[0]["counts_toward_gate"] is False
+    assert known[0]["committed_metrics_file"] is True
+    by_label = {item["label"]: item for item in row["refused_sums"]}
+    assert set(by_label) == {
+        "ubuntu_24h_alone",
+        "ubuntu_24h_plus_another_86400",
+        "three_times_86400",
+        "ubuntu_24h_plus_two_86400",
+    }
+    assert by_label["ubuntu_24h_alone"]["sum_seconds"] == 86400.001
+    assert by_label["ubuntu_24h_alone"]["naive_sum_reaches_259200"] is False
+    assert by_label["ubuntu_24h_plus_another_86400"]["sum_seconds"] == 172800.001
+    assert by_label["ubuntu_24h_plus_another_86400"]["components_seconds"] == [86400.001, 86400.0]
+    assert by_label["ubuntu_24h_plus_another_86400"]["naive_sum_reaches_259200"] is False
+    assert by_label["three_times_86400"]["sum_seconds"] == 259200.0
+    assert by_label["three_times_86400"]["components_seconds"] == [86400.0, 86400.0, 86400.0]
+    assert by_label["three_times_86400"]["naive_sum_reaches_259200"] is True
+    assert by_label["ubuntu_24h_plus_two_86400"]["sum_seconds"] == 259200.001
+    assert by_label["ubuntu_24h_plus_two_86400"]["naive_sum_reaches_259200"] is True
+    for item in by_label.values():
+        assert item["counts_toward_gate"] is False
+        assert item["historical_shorts_are_additive"] is False
+        assert item["continuous_monotonic_wall"] is False
+        assert item["single_live_soak"] is False
+        assert item["wall_required_seconds"] == 259200
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    blob = json.dumps(report)
+    assert '"historical_shorts_are_additive": true' not in blob
+    assert '"sum_of_shorts_counts_toward_gate": true' not in blob
+    assert '"counts_toward_gate": true' not in blob
+    assert '"l2_2_status": "PASS"' not in blob
+    assert '"clock_state": "WALL_OBSERVED"' not in blob
+
+
+def test_forged_additive_preflight_fails_closed():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    forged = json.loads(json.dumps(report))
+    forged["non_additivity"]["historical_shorts_are_additive"] = True
+    forged["non_additivity"]["sum_of_shorts_counts_toward_gate"] = True
+    forged["non_additivity"]["l2_2_status"] = "PASS"
+    forged["non_additivity"]["clock_state"] = "STARTED"
+    forged["non_additivity"]["production_7x24"] = "ACCEPTED"
+    forged["non_additivity"]["can_start_clock"] = True
+    forged["non_additivity"]["binds_clock_start"] = True
+    forged["checks"]["non_additivity"] = json.loads(json.dumps(forged["non_additivity"]))
+    for item in forged["non_additivity"]["refused_sums"]:
+        if item["label"] == "three_times_86400":
+            item["counts_toward_gate"] = True
+            item["historical_shorts_are_additive"] = True
+            item["continuous_monotonic_wall"] = True
+    for item in forged["checks"]["non_additivity"]["refused_sums"]:
+        if item["label"] == "three_times_86400":
+            item["counts_toward_gate"] = True
+            item["historical_shorts_are_additive"] = True
+            item["continuous_monotonic_wall"] = True
+    names = set(pre.validate_report(forged))
+    assert "additive_historical_shorts" in names
+    assert "status" in names
+    assert "clock_state" in names
+    assert "production_claim" in names
+    assert "forged_can_start_clock" in names
+    assert "additive_as_start" in names
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["non_additivity"]["historical_shorts_are_additive"] is False
+    assert report["documented_soak_argv_executed"] is False

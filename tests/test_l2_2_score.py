@@ -465,3 +465,126 @@ def test_gap_boundary_helpers():
     assert l2._classify_gap(300.1) == "red"
     assert l2.INCIDENT_START == datetime(2026, 11, 3, tzinfo=timezone.utc)
     assert l2.INCIDENT_END == datetime(2026, 11, 6, tzinfo=timezone.utc)
+
+
+def test_historical_short_walls_are_not_additive_toward_259200():
+    cases = (
+        ([86400.001], 86400.001, False),
+        ([86400.001, 86400], 172800.001, False),
+        ([86400, 86400, 86400], 259200.0, True),
+        ([86400.001, 86400, 86400], 259200.001, True),
+    )
+    for components, total, naive in cases:
+        assessed = l2.assess_short_sum(components)
+        assert assessed["sum_seconds"] == total
+        assert assessed["naive_sum_reaches_259200"] is naive
+        assert assessed["counts_toward_gate"] is False
+        assert assessed["historical_shorts_are_additive"] is False
+        assert assessed["continuous_monotonic_wall"] is False
+        assert assessed["single_live_soak"] is False
+        assert assessed["wall_required_seconds"] == 259200
+    standing = l2.standing_non_additivity(None)
+    assert standing["historical_shorts_are_additive"] is False
+    assert standing["sum_of_shorts_counts_toward_gate"] is False
+    assert standing["additive_claim"] is False
+    assert standing["counts_toward_gate"] is False
+    report = l2.score(_load("scaffold_clock_not_started.json"))
+    assert report["non_additivity"] == standing
+    assert report["wall"]["additive_claim"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+
+
+def _additive_capture(components: list[float], elapsed: float, source: str = "monotonic") -> dict:
+    doc = _load("scaffold_full_wall_cannot_accept.json")
+    doc["note"] = "In-memory sum of ended SHORT walls. Not one continuous 72h soak."
+    doc["wall"]["elapsed_seconds"] = elapsed
+    doc["wall"]["source"] = source
+    doc["wall"]["components"] = components
+    doc["wall"]["additive"] = True
+    doc["metrics"]["wall_elapsed_s"] = elapsed
+    return doc
+
+
+def test_forged_additive_sum_does_not_count_as_72h():
+    summed = _additive_capture([86400.001, 86400], 172800.001)
+    report = l2.score(summed)
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["clock_state"] == "INCOMPLETE"
+    assert report["wall"]["counts_toward_gate"] is False
+    assert report["wall"]["elapsed_meets_259200"] is False
+    assert report["wall"]["additive_claim"] is True
+    assert report["non_additivity"]["historical_shorts_are_additive"] is False
+    assert report["non_additivity"]["sum_of_shorts_counts_toward_gate"] is False
+    assert report["non_additivity"]["claimed_sum_seconds"] == 172800.001
+    assert report["non_additivity"]["naive_sum_reaches_259200"] is False
+    assert report["non_additivity"]["counts_toward_gate"] is False
+    assert "additive_historical_shorts" in report["gates"]["blockers"]
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert report["gates"]["can_close_l2_2"] is False
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert l2.validate_report(report) == []
+
+    three = _additive_capture([86400, 86400, 86400], 259200.0, source="sum")
+    three["claimed_l2_2_status"] = "PASS"
+    three["claimed_production_7x24"] = "ACCEPTED"
+    report = l2.score(three)
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["clock_state"] == "INCOMPLETE"
+    assert report["wall"]["counts_toward_gate"] is False
+    assert report["wall"]["elapsed_meets_259200"] is False
+    assert report["bars"]["wall_monotonic_72h"] is False
+    assert report["non_additivity"]["naive_sum_reaches_259200"] is True
+    assert report["non_additivity"]["claimed_sum_seconds"] == 259200.0
+    assert report["non_additivity"]["counts_toward_gate"] is False
+    assert report["non_additivity"]["historical_shorts_are_additive"] is False
+    assert "additive_historical_shorts" in report["gates"]["blockers"]
+    assert "forged_claim_ignored" in report["gates"]["blockers"]
+    assert "wall_not_monotonic" in report["gates"]["blockers"]
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert l2.validate_report(report) == []
+
+    times = _additive_capture([], 259200.0)
+    times["wall"].pop("components")
+    times["wall"]["times_24h"] = 3
+    report = l2.score(times)
+    assert report["non_additivity"]["claimed_component_count"] == 3
+    assert report["non_additivity"]["claimed_sum_seconds"] == 259200.0
+    assert report["non_additivity"]["naive_sum_reaches_259200"] is True
+    assert report["wall"]["counts_toward_gate"] is False
+    assert report["clock_state"] == "INCOMPLETE"
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+
+
+def test_forged_additive_report_fails_closed():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    forged = json.loads(json.dumps(honest))
+    forged["non_additivity"]["historical_shorts_are_additive"] = True
+    forged["non_additivity"]["sum_of_shorts_counts_toward_gate"] = True
+    forged["non_additivity"]["counts_toward_gate"] = True
+    forged["non_additivity"]["additive_claim"] = True
+    forged["wall"]["components"] = [86400, 86400, 86400]
+    forged["wall"]["counts_toward_gate"] = True
+    forged["wall"]["source"] = "sum"
+    forged["wall"]["elapsed_seconds"] = 259200
+    forged["l2_2_status"] = "PASS"
+    forged["clock_state"] = "WALL_OBSERVED"
+    forged["production_7x24"] = "ACCEPTED"
+    forged["gates"]["can_accept_l2_2"] = True
+    forged["gates"]["can_start_clock"] = True
+    forged["gates"]["can_close_l2_2"] = True
+    names = set(l2.validate_report(forged))
+    assert "additive_historical_shorts" in names
+    assert "forged_pass" in names
+    assert "production_claim" in names
+    assert "forged_accept" in names
+    assert "forged_clock_start" in names
+    assert "forged_close" in names
+    assert honest["l2_2_status"] == "NOT_STARTED"
+    assert honest["gates"]["can_start_clock"] is False

@@ -17,7 +17,7 @@
     "driver": "scripts/soak_2h.py --via-l1 --max-wall-seconds 259200",
     "exit0_is_business": false,
     "interactive_schtasks": "out_of_scope",
-    "note": "72h means monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200. cycles x interval is not the wall. cycles_exit0 is process success only."
+    "note": "72h means one continuous monotonic wall_elapsed_s >= 259200 with max_wall_seconds 259200 on a single live soak. A sum of ended SHORT walls is not that wall. cycles x interval is not the wall. cycles_exit0 is process success only."
   },
   "bars": {
     "host_evidence": false,
@@ -37,6 +37,17 @@
     "elapsed_seconds": null,
     "source": "unset",
     "elapsed_meets_259200": false,
+    "counts_toward_gate": false,
+    "additive_claim": false
+  },
+  "non_additivity": {
+    "rule": "one_continuous_monotonic_wall",
+    "historical_shorts_are_additive": false,
+    "sum_of_shorts_counts_toward_gate": false,
+    "additive_claim": false,
+    "claimed_component_count": 0,
+    "claimed_sum_seconds": null,
+    "naive_sum_reaches_259200": false,
     "counts_toward_gate": false
   },
   "reconciliation": {
@@ -92,6 +103,7 @@
     "Before that start, fill docs/progress/l2_2/R2_CHECKLIST.md. Watch the live soak summary.jsonl while soak_2h.py is the DUT (runner-*.json only when the DUT is L1 with no soak). scripts/coverage_gap_log.py appends timestamp, gap_seconds, band (ok below 13s, yellow 13s through 5min, red above 5min), and source. Yellow is not a business FAIL. A gap line does not start the clock or complete the soak.",
     "Only after that explicit start decision, on a host already allowed to run the local soak: PYTHONPATH=. python scripts/soak_2h.py --cycles 5000 --interval 60 --via-l1 --seed 300 --idle-policy reseed --max-wall-seconds 259200",
     "Cycles must be large enough that max-wall stops the process. cycles x interval is not the wall. cycles_exit0 is not business progress. A 86400s wall is not this 72h gate.",
+    "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not this 72h gate.",
     "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
     "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
     "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate."

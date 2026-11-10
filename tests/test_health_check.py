@@ -415,6 +415,8 @@ def test_ubuntu_specimen_stays_short_while_the_clock_stays_not_started():
     assert result["l2_2_status"] == "NOT_STARTED"
     assert result["clock_state"] == "NOT_STARTED"
     assert result["ubuntu_24h_counts_as_72h"] is False
+    assert result["historical_shorts_are_additive"] is False
+    assert result["sum_of_shorts_counts_toward_gate"] is False
     viewed = result["ubuntu_24h_specimen"]
     assert viewed["classification"] == "SHORT"
     assert viewed["wall_elapsed_s"] == 86400.001
@@ -500,6 +502,103 @@ def test_summary_drops_a_forged_specimen_claim():
     assert summary["ubuntu_24h_specimen"]["classification"] == "withheld"
     assert summary["ubuntu_24h_specimen"]["clock_state"] == "NOT_STARTED"
     assert summary["production_7x24"] == "NOT_ACCEPTED"
+    assert summary["historical_shorts_are_additive"] is False
+    assert summary["sum_of_shorts_counts_toward_gate"] is False
+
+
+def test_honest_preflight_keeps_shorts_non_additive():
+    preflight_report, scored, r2_text = _honest()
+    row = preflight_report["non_additivity"]
+    assert row["ok"] is True
+    assert row["historical_shorts_are_additive"] is False
+    assert row["sum_of_shorts_counts_toward_gate"] is False
+    assert row["d1_windows_metrics_file"] is None
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    three = next(item for item in row["refused_sums"] if item["label"] == "three_times_86400")
+    assert three["sum_seconds"] == 259200.0
+    assert three["naive_sum_reaches_259200"] is True
+    assert three["counts_toward_gate"] is False
+    paired = next(item for item in row["refused_sums"] if item["label"] == "ubuntu_24h_plus_another_86400")
+    assert paired["sum_seconds"] == 172800.001
+    assert paired["counts_toward_gate"] is False
+    assert scored["non_additivity"]["additive_claim"] is False
+    assert scored["non_additivity"]["historical_shorts_are_additive"] is False
+    result = _assess(preflight_report, scored, r2_text)
+    assert result["ok"] is True, result["violations"]
+    assert result["violations"] == []
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["clock_state"] == "NOT_STARTED"
+    assert result["historical_shorts_are_additive"] is False
+    assert result["sum_of_shorts_counts_toward_gate"] is False
+    assert result["production_7x24"] == "NOT_ACCEPTED"
+    _assert_gates_closed(result)
+
+
+def test_forged_additive_report_fails_closed_without_opening_gates():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    forged["non_additivity"]["historical_shorts_are_additive"] = True
+    forged["non_additivity"]["sum_of_shorts_counts_toward_gate"] = True
+    forged["non_additivity"]["l2_2_status"] = "PASS"
+    forged["non_additivity"]["clock_state"] = "STARTED"
+    forged["non_additivity"]["can_start_clock"] = True
+    forged["non_additivity"]["production_7x24"] = "ACCEPTED"
+    forged["checks"]["non_additivity"] = json.loads(json.dumps(forged["non_additivity"]))
+    for item in forged["non_additivity"]["refused_sums"]:
+        if item["naive_sum_reaches_259200"] is True:
+            item["counts_toward_gate"] = True
+    for item in forged["checks"]["non_additivity"]["refused_sums"]:
+        if item["naive_sum_reaches_259200"] is True:
+            item["counts_toward_gate"] = True
+    forged_score = json.loads(json.dumps(scored))
+    forged_score["non_additivity"]["historical_shorts_are_additive"] = True
+    forged_score["non_additivity"]["sum_of_shorts_counts_toward_gate"] = True
+    forged_score["non_additivity"]["counts_toward_gate"] = True
+    forged_score["non_additivity"]["additive_claim"] = True
+    forged_score["l2_2_status"] = "PASS"
+    forged_score["clock_state"] = "WALL_OBSERVED"
+    forged_score["production_7x24"] = "ACCEPTED"
+    result = _assess(forged, forged_score, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "additive_historical_shorts",
+        "non_additivity",
+        "forged_pass",
+        "forged_clock_start",
+        "forged_can_start_clock",
+        "forged_production_accepted",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    assert result["historical_shorts_are_additive"] is False
+    assert result["sum_of_shorts_counts_toward_gate"] is False
+    assert result["ubuntu_24h_counts_as_72h"] is False
+    _assert_gates_closed(result)
+
+
+def test_summary_drops_a_forged_additive_claim():
+    forged = {
+        "step": "l2_2_offline",
+        "ok": True,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "historical_shorts_are_additive": True,
+        "sum_of_shorts_counts_toward_gate": True,
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+    }
+    summary = hc.summarize([forged], True)
+    assert summary["l2_2_status"] == "NOT_STARTED"
+    assert summary["clock_state"] == "NOT_STARTED"
+    assert summary["can_start_clock"] is False
+    assert summary["can_accept_l2_2"] is False
+    assert summary["can_close_l2_2"] is False
+    assert summary["historical_shorts_are_additive"] is False
+    assert summary["sum_of_shorts_counts_toward_gate"] is False
+    assert summary["production_7x24"] == "NOT_ACCEPTED"
+    assert summary["soak_launched"] is False
 
 
 def test_docs_call_health_check_a_not_started_check():

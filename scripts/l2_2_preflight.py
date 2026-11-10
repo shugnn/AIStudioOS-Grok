@@ -5,9 +5,11 @@ Reads the repo. Parses documented flags. Classifies a synthetic fresh summary
 and a synthetic stale summary through scripts/stall_watchdog.py. Reads
 docs/progress/soak_2h/metrics.json only as a historical SHORT specimen
 (Ubuntu-24H, wall about 86400.001s). That read is not a stall watch, not a
-started L2-2 capture, and not the 72h gate. Does not launch soak_2h.py, does
-not point the stall hook at the committed Ubuntu-24H soak files, does not start
-the 72h clock, and does not register scheduled tasks.
+started L2-2 capture, and not the 72h gate. Refuses sums of ended SHORT walls
+(including 86400.001 plus another 86400, and 86400 times 3) as a 72h capture.
+Does not launch soak_2h.py, does not point the stall hook at the committed
+Ubuntu-24H soak files, does not start the 72h clock, and does not register
+scheduled tasks.
 
 Exit 0: an honest NOT_STARTED report whose not-started scaffold checks held.
 Exit 2: an honest NOT_STARTED report whose checks did not all hold, or a report
@@ -49,6 +51,18 @@ UBUNTU_24H_EXPERIMENT = "UBUNTU-24H"
 UBUNTU_24H_SHA_SHORT = "aaf8d24"
 WALL_REQUIRED_SECONDS = 259200
 SPECIMEN_ROLE = "historical_short_specimen"
+REFUSED_SUMS = (
+    ("ubuntu_24h_alone", (UBUNTU_24H_WALL_S,)),
+    ("ubuntu_24h_plus_another_86400", (UBUNTU_24H_WALL_S, 86400.0)),
+    ("three_times_86400", (86400.0, 86400.0, 86400.0)),
+    ("ubuntu_24h_plus_two_86400", (UBUNTU_24H_WALL_S, 86400.0, 86400.0)),
+)
+REFUSED_SUM_EXPECTED = {
+    "ubuntu_24h_alone": (86400.001, False, 1),
+    "ubuntu_24h_plus_another_86400": (172800.001, False, 2),
+    "three_times_86400": (259200.0, True, 3),
+    "ubuntu_24h_plus_two_86400": (259200.001, True, 3),
+}
 SPECIMEN_SHORT_DETAIL = "historical_short_not_72h_gate"
 SPECIMEN_WITHHELD_DETAILS = frozenset(
     {
@@ -126,6 +140,7 @@ CHECK_ORDER = (
     "supervision_monitor",
     "stall_watchdog",
     "ubuntu_24h_specimen",
+    "non_additivity",
     "scorer_refuses",
 )
 
@@ -141,6 +156,7 @@ OPERATOR_NOTE = (
     "A matching SHA256SUMS.json is not a start decision. "
     "The stall-watchdog hook is not a start decision and is not L2-2 acceptance. "
     "The Ubuntu-24H metrics file is a historical SHORT specimen. Recording it does not start the 72h clock, does not count it as 72h, and does not make it the stall DUT. "
+    "Historical SHORT walls are not additive toward 259200. A sum of ended 24h walls does not start the 72h clock and does not count toward the gate. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -165,6 +181,7 @@ NEXT_STEPS = (
     "SHA256SUMS.json binds scaffold bytes only. It is not permission to start.",
     "The stall-watchdog hook classified synthetic summaries only. It did not watch the Ubuntu-24H soak files and it did not start the 72h clock.",
     "The committed Ubuntu-24H metrics file is a historical SHORT specimen (wall 86400.001s, below 259200). It does not count toward the 72h gate and it is not the stall DUT. This preflight does not wrap it as a started capture.",
+    "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not a started L2-2 capture. This gate is not a start.",
     "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -1043,6 +1060,217 @@ def _specimen_violations(specimen: Any) -> list[str]:
     return violations
 
 
+def _closed_non_additivity(detail: str, **extra: Any) -> dict[str, Any]:
+    """Non-additivity row. Sums of ended SHORT walls stay off the 72h gate.
+
+    Honesty flags are forced closed. A naive sum that lands on 259200 is still
+    not a continuous live soak, not a start, and not acceptance.
+    """
+    refused = extra.get("refused_sums")
+    if not isinstance(refused, list):
+        refused = []
+    ok = extra.get("ok") is True
+    row: dict[str, Any] = {
+        "ok": ok,
+        "rule": "one_continuous_monotonic_wall",
+        "tool": "scripts/l2_2_score.py",
+        "wall_required_seconds": WALL_REQUIRED_SECONDS,
+        "historical_shorts_are_additive": False,
+        "sum_of_shorts_counts_toward_gate": False,
+        "known_committed_shorts": [
+            {
+                "id": "ubuntu_24h",
+                "path": UBUNTU_24H_METRICS.as_posix(),
+                "wall_elapsed_s": UBUNTU_24H_WALL_S,
+                "counts_toward_gate": False,
+                "committed_metrics_file": True,
+            }
+        ],
+        "d1_windows_metrics_file": None,
+        "d1_windows_bound_as_specimen": False,
+        "refused_sums": refused,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "soak_launched": False,
+        "binds_clock_start": False,
+        "documented_soak_argv_executed": False,
+        "detail": detail,
+    }
+    return row
+
+
+def _scorer_refuses_additive_report(l2: Any, root: Path) -> bool:
+    """True when the scorer rejects a report that relabels a 24h sum as 72h."""
+    fixture = root / FIXTURE_RELATIVE
+    if not fixture.is_file():
+        return False
+    try:
+        honest = l2.score(l2.load_capture(fixture))
+    except Exception:
+        return False
+    if not isinstance(honest, dict) or not isinstance(honest.get("non_additivity"), dict):
+        return False
+    forged = json.loads(json.dumps(honest))
+    forged["non_additivity"]["historical_shorts_are_additive"] = True
+    forged["non_additivity"]["sum_of_shorts_counts_toward_gate"] = True
+    forged["non_additivity"]["counts_toward_gate"] = True
+    forged["non_additivity"]["additive_claim"] = True
+    forged["wall"]["components"] = [86400, 86400, 86400]
+    forged["wall"]["counts_toward_gate"] = True
+    forged["wall"]["elapsed_seconds"] = 259200
+    forged["wall"]["source"] = "sum"
+    forged["l2_2_status"] = "PASS"
+    forged["clock_state"] = "WALL_OBSERVED"
+    forged["production_7x24"] = "ACCEPTED"
+    forged["gates"]["can_accept_l2_2"] = True
+    forged["gates"]["can_start_clock"] = True
+    names = set(l2.validate_report(forged))
+    needed = {
+        "additive_historical_shorts",
+        "forged_pass",
+        "production_claim",
+        "forged_accept",
+        "forged_clock_start",
+    }
+    return needed <= names
+
+
+def _check_non_additivity(root: Path) -> dict[str, Any]:
+    """Prove ended SHORT walls are not additive. Does not start the clock.
+
+    The 86400 parts are in-memory ended walls. No Windows metrics file is
+    created or bound. D1's documented wall is not a committed file in this tree.
+    """
+    try:
+        import l2_2_score as l2
+    except Exception:
+        return _closed_non_additivity("scorer_import")
+    if not callable(getattr(l2, "assess_short_sum", None)) or not callable(getattr(l2, "validate_report", None)):
+        return _closed_non_additivity("assessor_missing")
+    refused: list[dict[str, Any]] = []
+    shape_ok = True
+    for label, parts in REFUSED_SUMS:
+        try:
+            assessed = l2.assess_short_sum(list(parts))
+        except Exception:
+            return _closed_non_additivity("assessor_error")
+        if not isinstance(assessed, dict):
+            return _closed_non_additivity("assessor_malformed")
+        total, naive, count = REFUSED_SUM_EXPECTED[label]
+        lie = (
+            assessed.get("counts_toward_gate") is not False
+            or assessed.get("historical_shorts_are_additive") is not False
+            or assessed.get("continuous_monotonic_wall") is not False
+            or assessed.get("single_live_soak") is not False
+            or assessed.get("sum_seconds") != total
+            or assessed.get("naive_sum_reaches_259200") is not naive
+            or assessed.get("component_count") != count
+            or assessed.get("wall_required_seconds") != WALL_REQUIRED_SECONDS
+        )
+        if lie:
+            shape_ok = False
+        refused.append(
+            {
+                "label": label,
+                "components_seconds": list(assessed.get("components_seconds") or []),
+                "component_count": count,
+                "sum_seconds": total,
+                "wall_required_seconds": WALL_REQUIRED_SECONDS,
+                "naive_sum_reaches_259200": naive,
+                "counts_toward_gate": False,
+                "historical_shorts_are_additive": False,
+                "continuous_monotonic_wall": False,
+                "single_live_soak": False,
+            }
+        )
+    forged_refused = _scorer_refuses_additive_report(l2, root)
+    ok = shape_ok and forged_refused
+    if ok:
+        detail = "shorts_not_additive"
+    elif shape_ok:
+        detail = "forged_sum_not_refused"
+    else:
+        detail = "sum_shape"
+    return _closed_non_additivity(detail, ok=ok, refused_sums=refused)
+
+
+def _non_additivity_violations(row: Any) -> list[str]:
+    """Reject a preflight row that treats a sum of 24h walls as the 72h gate."""
+    violations: list[str] = []
+    if not isinstance(row, dict):
+        return ["non_additivity"]
+    if row.get("rule") != "one_continuous_monotonic_wall":
+        violations.append("non_additivity")
+    if row.get("tool") != "scripts/l2_2_score.py":
+        violations.append("non_additivity")
+    if row.get("historical_shorts_are_additive") is not False:
+        violations.append("additive_historical_shorts")
+    if row.get("sum_of_shorts_counts_toward_gate") is not False:
+        violations.append("additive_historical_shorts")
+    if row.get("d1_windows_bound_as_specimen") is not False or row.get("d1_windows_metrics_file") is not None:
+        violations.append("non_additivity")
+    if row.get("binds_clock_start") is not False or row.get("soak_launched") is not False:
+        violations.append("additive_as_start")
+    if row.get("documented_soak_argv_executed") is not False:
+        violations.append("argv_executed")
+    if row.get("clock_effect") != "none":
+        violations.append("clock_effect")
+    if row.get("l2_2_status") != "NOT_STARTED":
+        violations.append("status")
+    if row.get("clock_state") != "NOT_STARTED":
+        violations.append("clock_state")
+    if row.get("production_7x24") != "NOT_ACCEPTED":
+        violations.append("production_claim")
+    for key in GATE_KEYS:
+        if row.get(key) is not False:
+            violations.append("forged_" + key)
+    shorts = row.get("known_committed_shorts")
+    if not isinstance(shorts, list) or len(shorts) != 1 or not isinstance(shorts[0], dict):
+        violations.append("non_additivity")
+    else:
+        only = shorts[0]
+        if (
+            only.get("id") != "ubuntu_24h"
+            or only.get("path") != UBUNTU_24H_METRICS.as_posix()
+            or only.get("wall_elapsed_s") != UBUNTU_24H_WALL_S
+            or only.get("counts_toward_gate") is not False
+            or only.get("committed_metrics_file") is not True
+        ):
+            violations.append("additive_historical_shorts")
+    sums = row.get("refused_sums")
+    if not isinstance(sums, list):
+        violations.append("non_additivity")
+    else:
+        labels = [item.get("label") if isinstance(item, dict) else None for item in sums]
+        if labels != [label for label, _parts in REFUSED_SUMS]:
+            violations.append("non_additivity")
+        else:
+            for item in sums:
+                label = item["label"]
+                total, naive, count = REFUSED_SUM_EXPECTED[label]
+                if (
+                    item.get("sum_seconds") != total
+                    or item.get("naive_sum_reaches_259200") is not naive
+                    or item.get("component_count") != count
+                    or item.get("wall_required_seconds") != WALL_REQUIRED_SECONDS
+                    or item.get("counts_toward_gate") is not False
+                    or item.get("historical_shorts_are_additive") is not False
+                    or item.get("continuous_monotonic_wall") is not False
+                    or item.get("single_live_soak") is not False
+                ):
+                    violations.append("additive_historical_shorts")
+    if row.get("ok") is True and row.get("detail") != "shorts_not_additive":
+        violations.append("non_additivity")
+    if not isinstance(row.get("ok"), bool):
+        violations.append("non_additivity")
+    return violations
+
+
 def _refuses_forged(validate, report: dict[str, Any], **edits: Any) -> bool:
     forged = json.loads(json.dumps(report))
     for key, value in edits.items():
@@ -1151,6 +1379,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "gates": _gates(),
         "l2_4": _l2_4(),
         "ubuntu_24h_specimen": checks["ubuntu_24h_specimen"],
+        "non_additivity": checks["non_additivity"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -1196,6 +1425,7 @@ def preflight(
             "supervision_monitor": _check_monitor(),
             "stall_watchdog": _check_stall_watchdog(),
             "ubuntu_24h_specimen": _check_ubuntu_specimen(metrics),
+            "non_additivity": _check_non_additivity(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -1337,6 +1567,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_specimen_violations(top_specimen))
     if specimen != top_specimen:
         violations.append("ubuntu_24h_specimen_mismatch")
+    additive = checks.get("non_additivity")
+    top_additive = report.get("non_additivity")
+    violations.extend(_non_additivity_violations(additive))
+    violations.extend(_non_additivity_violations(top_additive))
+    if additive != top_additive:
+        violations.append("non_additivity_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

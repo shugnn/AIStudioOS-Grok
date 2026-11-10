@@ -27,3 +27,4 @@ The intended command is the existing non-Interactive local soak. This template d
 - Filling these cells is not a start.
 - `scripts/l2_2_preflight.py` and `scripts/health_check.py` read this file only to confirm it is still blank. Running either check is not a start.
 - Exit 0 from those checks is an honest NOT STARTED report. The three gates stay false. Production 7×24 stays **NOT ACCEPTED**.
+- The offline non-additivity gate is not a start.

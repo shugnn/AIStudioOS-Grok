@@ -603,3 +603,140 @@ def test_forged_stall_hook_report_is_not_a_start_or_acceptance():
     forged["checks"]["stall_watchdog"]["stale_stalled"] = False
     assert "stall_classification" in pre.validate_report(forged)
     assert report["gates"]["can_start_clock"] is False
+
+
+def test_committed_ubuntu_24h_is_a_short_specimen_not_the_72h_gate(monkeypatch: pytest.MonkeyPatch):
+    metrics_path = ROOT / "docs" / "progress" / "soak_2h" / "metrics.json"
+    summary_path = ROOT / "docs" / "progress" / "soak_2h" / "summary.jsonl"
+    before = metrics_path.read_bytes()
+    summary_before = summary_path.read_bytes()
+    metrics = json.loads(before)
+    assert metrics["experiment"] == "UBUNTU-24H"
+    assert metrics["wall_elapsed_s"] == 86400.001
+    assert metrics["wall_elapsed_s"] < 259200
+    assert metrics["max_wall_seconds"] == 86400
+    seen: list[str] = []
+    real_score = l2.score
+
+    def wrapped(doc):
+        clock = doc.get("clock") if isinstance(doc, dict) else None
+        assert not (isinstance(clock, dict) and clock.get("started") is True)
+        assert doc.get("host") != metrics["host"]
+        seen.append(doc.get("evidence_class"))
+        return real_score(doc)
+
+    monkeypatch.setattr(l2, "score", wrapped)
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    assert seen == ["scaffold"]
+    specimen = report["ubuntu_24h_specimen"]
+    assert specimen == report["checks"]["ubuntu_24h_specimen"]
+    assert specimen["ok"] is True
+    assert specimen["role"] == "historical_short_specimen"
+    assert specimen["path"] == "docs/progress/soak_2h/metrics.json"
+    assert specimen["classification"] == "SHORT"
+    assert specimen["experiment"] == "UBUNTU-24H"
+    assert specimen["sha_short"] == "aaf8d24"
+    assert specimen["wall_elapsed_s"] == 86400.001
+    assert specimen["max_wall_seconds"] == 86400
+    assert specimen["wall_required_seconds"] == 259200
+    assert specimen["below_259200"] is True
+    assert specimen["ubuntu_24h_counts_as_72h"] is False
+    assert specimen["counts_toward_72h_gate"] is False
+    assert specimen["ubuntu_24h_used_as_dut"] is False
+    assert specimen["is_stall_dut"] is False
+    assert specimen["is_l2_2_acceptance"] is False
+    assert specimen["binds_clock_start"] is False
+    assert specimen["wrapped_as_started_capture"] is False
+    assert specimen["l2_2_status"] == "NOT_STARTED"
+    assert specimen["clock_state"] == "NOT_STARTED"
+    assert specimen["clock_effect"] == "none"
+    assert specimen["soak_launched"] is False
+    assert specimen["can_start_clock"] is False
+    assert specimen["can_accept_l2_2"] is False
+    assert specimen["can_close_l2_2"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["not_started_scaffold_intact"] is True
+    blob = json.dumps(report)
+    assert '"clock_state": "SHORT"' not in blob
+    assert '"l2_2_status": "INCOMPLETE"' not in blob
+    assert '"l2_2_status": "PASS"' not in blob
+    assert '"can_start_clock": true' not in blob
+    assert metrics_path.read_bytes() == before
+    assert summary_path.read_bytes() == summary_before
+
+
+def test_relabelled_ubuntu_metrics_fail_closed_without_starting(tmp_path: Path):
+    metrics_path = ROOT / "docs" / "progress" / "soak_2h" / "metrics.json"
+    before = metrics_path.read_bytes()
+    metrics = json.loads(before)
+    metrics["wall_elapsed_s"] = 259200
+    metrics["max_wall_seconds"] = 259200
+    copy = tmp_path / "metrics.json"
+    copy.write_text(json.dumps(metrics), encoding="utf-8")
+    report = pre.preflight(metrics_path=copy)
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is False
+    specimen = report["ubuntu_24h_specimen"]
+    assert specimen == report["checks"]["ubuntu_24h_specimen"]
+    assert specimen["ok"] is False
+    assert specimen["classification"] == "withheld"
+    assert specimen["detail"] == "refused_as_72h"
+    assert specimen["wall_elapsed_s"] is None
+    assert specimen["below_259200"] is False
+    assert specimen["ubuntu_24h_counts_as_72h"] is False
+    assert specimen["counts_toward_72h_gate"] is False
+    assert specimen["ubuntu_24h_used_as_dut"] is False
+    assert specimen["is_stall_dut"] is False
+    assert specimen["is_l2_2_acceptance"] is False
+    assert specimen["binds_clock_start"] is False
+    assert specimen["l2_2_status"] == "NOT_STARTED"
+    assert specimen["clock_state"] == "NOT_STARTED"
+    assert "ubuntu_24h_specimen:refused_as_72h" in report["failures"]
+    blob = json.dumps(report)
+    assert '"clock_state": "SHORT"' not in blob
+    assert '"l2_2_status": "INCOMPLETE"' not in blob
+    assert '"l2_2_status": "PASS"' not in blob
+    assert '"production_7x24": "ACCEPTED"' not in blob
+    assert metrics_path.read_bytes() == before
+
+
+def test_forged_ubuntu_specimen_report_fails_closed():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+
+    def forge(**edits: object) -> dict:
+        forged = json.loads(json.dumps(report))
+        for key, value in edits.items():
+            forged["checks"]["ubuntu_24h_specimen"][key] = value
+            forged["ubuntu_24h_specimen"][key] = value
+        return forged
+
+    assert "ubuntu_24h_as_72h" in pre.validate_report(
+        forge(classification="72h", ubuntu_24h_counts_as_72h=True, counts_toward_72h_gate=True)
+    )
+    assert "ubuntu_24h_as_72h" in pre.validate_report(
+        forge(wall_elapsed_s=259200.0, below_259200=False, classification="WALL_OBSERVED")
+    )
+    assert "ubuntu_24h_as_dut" in pre.validate_report(
+        forge(ubuntu_24h_used_as_dut=True, is_stall_dut=True)
+    )
+    assert "ubuntu_24h_as_acceptance" in pre.validate_report(forge(is_l2_2_acceptance=True, classification="ACCEPTED"))
+    assert "ubuntu_24h_as_start" in pre.validate_report(
+        forge(binds_clock_start=True, wrapped_as_started_capture=True, classification="STARTED")
+    )
+    names = pre.validate_report(forge(l2_2_status="PASS", classification="PASS", can_start_clock=True))
+    assert "status" in names
+    assert "forged_can_start_clock" in names
+    assert "clock_state" in pre.validate_report(forge(clock_state="STARTED"))
+    assert "production_claim" in pre.validate_report(forge(production_7x24="ACCEPTED"))
+    mismatched = json.loads(json.dumps(report))
+    mismatched["checks"]["ubuntu_24h_specimen"]["ubuntu_24h_used_as_dut"] = True
+    mismatch_names = pre.validate_report(mismatched)
+    assert "ubuntu_24h_as_dut" in mismatch_names
+    assert "ubuntu_24h_specimen_mismatch" in mismatch_names
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["ubuntu_24h_specimen"]["classification"] == "SHORT"

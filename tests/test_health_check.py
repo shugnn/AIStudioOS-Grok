@@ -99,6 +99,14 @@ def test_subprocess_preflight_and_score_stay_not_started():
     assert result["start_decision_unfilled"] is True
     assert result["stall_dut"] == "synthetic_temp_summary"
     assert result["ubuntu_24h_used_as_dut"] is False
+    assert result["ubuntu_24h_counts_as_72h"] is False
+    assert result["ubuntu_24h_specimen"]["classification"] == "SHORT"
+    assert result["ubuntu_24h_specimen"]["wall_elapsed_s"] == 86400.001
+    assert result["ubuntu_24h_specimen"]["below_259200"] is True
+    assert result["ubuntu_24h_specimen"]["ubuntu_24h_counts_as_72h"] is False
+    assert result["ubuntu_24h_specimen"]["ubuntu_24h_used_as_dut"] is False
+    assert result["ubuntu_24h_specimen"]["clock_state"] == "NOT_STARTED"
+    assert result["ubuntu_24h_specimen"]["l2_2_status"] == "NOT_STARTED"
     assert result["stall_hook_is_l2_2_acceptance"] is False
     _assert_gates_closed(result)
     after = {
@@ -361,6 +369,10 @@ def test_summary_never_grants_gates():
     assert summary["pytest_is_l2_2_acceptance"] is False
     assert summary["stall_dut"] == "withheld"
     assert summary["ubuntu_24h_used_as_dut"] is False
+    assert summary["ubuntu_24h_counts_as_72h"] is False
+    assert summary["ubuntu_24h_specimen"]["classification"] == "withheld"
+    assert summary["ubuntu_24h_specimen"]["ubuntu_24h_used_as_dut"] is False
+    assert summary["ubuntu_24h_specimen"]["clock_state"] == "NOT_STARTED"
     assert summary["stall_hook_is_l2_2_acceptance"] is False
 
     forged = {
@@ -381,6 +393,113 @@ def test_summary_never_grants_gates():
     assert refused["can_close_l2_2"] is False
     assert refused["soak_launched"] is False
     assert refused["production_7x24"] == "NOT_ACCEPTED"
+    assert refused["ubuntu_24h_counts_as_72h"] is False
+    assert refused["ubuntu_24h_specimen"]["classification"] == "withheld"
+
+
+def test_ubuntu_specimen_stays_short_while_the_clock_stays_not_started():
+    preflight_report, scored, r2_text = _honest()
+    specimen = preflight_report["ubuntu_24h_specimen"]
+    assert specimen["classification"] == "SHORT"
+    assert specimen["wall_elapsed_s"] == 86400.001
+    assert specimen["below_259200"] is True
+    assert specimen["ubuntu_24h_counts_as_72h"] is False
+    assert specimen["ubuntu_24h_used_as_dut"] is False
+    assert specimen["l2_2_status"] == "NOT_STARTED"
+    assert specimen["clock_state"] == "NOT_STARTED"
+    blob = json.dumps(preflight_report)
+    assert '"clock_state": "SHORT"' not in blob
+    assert '"l2_2_status": "INCOMPLETE"' not in blob
+    result = _assess(preflight_report, scored, r2_text)
+    assert result["ok"] is True, result["violations"]
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["clock_state"] == "NOT_STARTED"
+    assert result["ubuntu_24h_counts_as_72h"] is False
+    viewed = result["ubuntu_24h_specimen"]
+    assert viewed["classification"] == "SHORT"
+    assert viewed["wall_elapsed_s"] == 86400.001
+    assert viewed["below_259200"] is True
+    assert viewed["ubuntu_24h_counts_as_72h"] is False
+    assert viewed["ubuntu_24h_used_as_dut"] is False
+    assert viewed["is_stall_dut"] is False
+    assert viewed["clock_state"] == "NOT_STARTED"
+    assert viewed["l2_2_status"] == "NOT_STARTED"
+    _assert_gates_closed(result)
+
+
+def test_forged_ubuntu_specimen_cannot_count_as_72h_start_or_dut():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    for target in (forged["ubuntu_24h_specimen"], forged["checks"]["ubuntu_24h_specimen"]):
+        target["classification"] = "72h"
+        target["ubuntu_24h_counts_as_72h"] = True
+        target["counts_toward_72h_gate"] = True
+        target["ubuntu_24h_used_as_dut"] = True
+        target["is_stall_dut"] = True
+        target["is_l2_2_acceptance"] = True
+        target["binds_clock_start"] = True
+        target["wrapped_as_started_capture"] = True
+        target["can_start_clock"] = True
+        target["l2_2_status"] = "PASS"
+        target["clock_state"] = "STARTED"
+        target["production_7x24"] = "ACCEPTED"
+        target["wall_elapsed_s"] = 259200
+        target["below_259200"] = False
+    result = _assess(forged, scored, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "ubuntu_24h_as_72h",
+        "ubuntu_24h_as_dut",
+        "ubuntu_24h_as_acceptance",
+        "ubuntu_24h_as_start",
+        "forged_can_start_clock",
+        "forged_pass",
+        "forged_clock_start",
+        "forged_production_accepted",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    assert result["ubuntu_24h_used_as_dut"] is False
+    assert result["ubuntu_24h_counts_as_72h"] is False
+    viewed = result["ubuntu_24h_specimen"]
+    assert viewed["classification"] == "withheld"
+    assert viewed["ubuntu_24h_counts_as_72h"] is False
+    assert viewed["ubuntu_24h_used_as_dut"] is False
+    assert viewed["clock_state"] == "NOT_STARTED"
+    assert viewed["l2_2_status"] == "NOT_STARTED"
+    _assert_gates_closed(result)
+
+
+def test_summary_drops_a_forged_specimen_claim():
+    forged = {
+        "step": "l2_2_offline",
+        "ok": True,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "ubuntu_24h_specimen": {
+            "ok": True,
+            "classification": "PASS",
+            "ubuntu_24h_counts_as_72h": True,
+            "ubuntu_24h_used_as_dut": True,
+            "can_start_clock": True,
+            "l2_2_status": "PASS",
+            "clock_state": "STARTED",
+            "production_7x24": "ACCEPTED",
+        },
+        "can_start_clock": True,
+    }
+    summary = hc.summarize([forged], True)
+    assert summary["l2_2_status"] == "NOT_STARTED"
+    assert summary["clock_state"] == "NOT_STARTED"
+    assert summary["can_start_clock"] is False
+    assert summary["can_accept_l2_2"] is False
+    assert summary["can_close_l2_2"] is False
+    assert summary["ubuntu_24h_counts_as_72h"] is False
+    assert summary["ubuntu_24h_used_as_dut"] is False
+    assert summary["ubuntu_24h_specimen"]["classification"] == "withheld"
+    assert summary["ubuntu_24h_specimen"]["clock_state"] == "NOT_STARTED"
+    assert summary["production_7x24"] == "NOT_ACCEPTED"
 
 
 def test_docs_call_health_check_a_not_started_check():

@@ -10,7 +10,7 @@
 |----|------|--------|
 | L2-1 | Stall detection tool | **Code PASS** (`stall_watchdog.py`) |
 | L2-4 | 1-day logon schtasks | **INCOMPLETE** — strong time correlation with Windows Terminal errors; host force-reboot 2026-11-04; tasks left Ready with empty NextRunTime; founder requires console window (no pythonw) |
-| L2-2 | 72h wall soak | **NOT STARTED** — scaffold only (`docs/progress/l2_2/`), including `scripts/health_check.py`, the offline stall-watchdog hook, and blank `START_DECISION.md`. Clock not started. **NOT ACCEPTED**. No Interactive schtasks |
+| L2-2 | 72h wall soak | **NOT STARTED** — scaffold only (`docs/progress/l2_2/`), including `scripts/health_check.py`, the offline stall-watchdog hook, the Ubuntu-24H historical SHORT specimen binding, and blank `START_DECISION.md`. Clock not started. **NOT ACCEPTED**. No Interactive schtasks |
 | L2-3 | Mid-run kill recovery | Not done |
 | L2-5/6 | Boot task / power policy | Default **denied** |
 
@@ -27,6 +27,7 @@ This table is the **duty-cycle** L2. It is not the 2026-11-07 product L2 (task s
 - `scripts/coverage_gap_log.py` appends ok/yellow/red gap lines. `docs/progress/l2_2/R2_CHECKLIST.md` is the blank R2 note. Neither one starts the 72h clock.
 - `scripts/l2_2_preflight.py` checks that scaffold offline. Exit 0 is a `NOT_STARTED` report. `can_start_clock` stays false. Running it is not a start decision and does not launch the soak.
 - The same preflight runs `scripts/stall_watchdog.py` as an offline hook: a synthetic fresh summary is not stalled, a synthetic stale summary is stalled. Bands come from `scripts/coverage_gap_log.py` and are not appended. The hook does not watch the Ubuntu-24H files under `docs/progress/soak_2h` (wall 86400.001s, **SHORT**), does not write `docs/progress/STALL_ALERT.json`, and does not start the 72h clock. L2-1 code PASS is not a 72h PASS.
+- The same preflight reads `docs/progress/soak_2h/metrics.json` as a historical SHORT specimen (wall 86400.001s, below 259200). `ubuntu_24h_counts_as_72h` and `ubuntu_24h_used_as_dut` stay false. Overall `l2_2_status` / `clock_state` stay `NOT_STARTED`. That binding is not a start and is not the 72h gate.
 - `scripts/health_check.py` re-runs that preflight and scores the not-started fixture. Exit 0 is `overall_ok`. It is not a start and not acceptance.
 - `docs/progress/l2_2/START_DECISION.md` is the blank start-decision template (decision **Not given**, who / UTC time / host unfilled). Filling or committing that file does not start the soak. Interactive console scheduled tasks stay founder-gated and out of scope.
 - `docs/progress/l2_2/SHA256SUMS.json` (from `scripts/evidence_sha256sums.py`) binds the scaffold bytes. The binding does not start the clock and does not accept production 7×24.

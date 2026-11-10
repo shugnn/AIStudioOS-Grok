@@ -2,8 +2,11 @@
 """Offline readiness check for the L2-2 72h scaffold.
 
 Reads the repo. Parses documented flags. Classifies a synthetic fresh summary
-and a synthetic stale summary through scripts/stall_watchdog.py. Does not launch
-soak_2h.py, does not watch the committed Ubuntu-24H soak files, does not start
+and a synthetic stale summary through scripts/stall_watchdog.py. Reads
+docs/progress/soak_2h/metrics.json only as a historical SHORT specimen
+(Ubuntu-24H, wall about 86400.001s). That read is not a stall watch, not a
+started L2-2 capture, and not the 72h gate. Does not launch soak_2h.py, does
+not point the stall hook at the committed Ubuntu-24H soak files, does not start
 the 72h clock, and does not register scheduled tasks.
 
 Exit 0: an honest NOT_STARTED report whose not-started scaffold checks held.
@@ -39,6 +42,27 @@ SCHEMA_RELATIVE = Path("docs") / "progress" / "l2_2" / "SCHEMA.json"
 SUMS_RELATIVE = Path("docs") / "progress" / "l2_2" / "SHA256SUMS.json"
 SELF_REPORT = "docs/progress/l2_2/scaffold/preflight.json"
 FIXTURE_RELATIVE = Path("tests") / "fixtures" / "l2_2" / "scaffold_clock_not_started.json"
+UBUNTU_24H_METRICS = Path("docs") / "progress" / "soak_2h" / "metrics.json"
+UBUNTU_24H_WALL_S = 86400.001
+UBUNTU_24H_MAX_WALL_S = 86400
+UBUNTU_24H_EXPERIMENT = "UBUNTU-24H"
+UBUNTU_24H_SHA_SHORT = "aaf8d24"
+WALL_REQUIRED_SECONDS = 259200
+SPECIMEN_ROLE = "historical_short_specimen"
+SPECIMEN_SHORT_DETAIL = "historical_short_not_72h_gate"
+SPECIMEN_WITHHELD_DETAILS = frozenset(
+    {
+        "missing",
+        "unreadable",
+        "malformed",
+        "wall_missing",
+        "max_wall_missing",
+        "scorer_import",
+        "wall_bar_drift",
+        "refused_as_72h",
+        "not_the_committed_specimen",
+    }
+)
 
 # Source files the sums file must list. The self report is listed too, but its
 # digest is checked by tests rather than by the report that would rewrite it.
@@ -101,6 +125,7 @@ CHECK_ORDER = (
     "gap_logger",
     "supervision_monitor",
     "stall_watchdog",
+    "ubuntu_24h_specimen",
     "scorer_refuses",
 )
 
@@ -115,6 +140,7 @@ OPERATOR_NOTE = (
     "Filling START_DECISION.md is not a start decision. "
     "A matching SHA256SUMS.json is not a start decision. "
     "The stall-watchdog hook is not a start decision and is not L2-2 acceptance. "
+    "The Ubuntu-24H metrics file is a historical SHORT specimen. Recording it does not start the 72h clock, does not count it as 72h, and does not make it the stall DUT. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -138,6 +164,7 @@ NEXT_STEPS = (
     "Leave the 2026-11-03..06 L2-4 reconstruction INCOMPLETE on PR #11. Do not re-capture that window.",
     "SHA256SUMS.json binds scaffold bytes only. It is not permission to start.",
     "The stall-watchdog hook classified synthetic summaries only. It did not watch the Ubuntu-24H soak files and it did not start the 72h clock.",
+    "The committed Ubuntu-24H metrics file is a historical SHORT specimen (wall 86400.001s, below 259200). It does not count toward the 72h gate and it is not the stall DUT. This preflight does not wrap it as a started capture.",
     "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -797,6 +824,225 @@ def _check_stall_watchdog() -> dict[str, Any]:
     )
 
 
+def _closed_specimen(detail: str, **extra: Any) -> dict[str, Any]:
+    """Historical-specimen row. The L2-2 clock stays NOT_STARTED.
+
+    A SHORT classification lives only in this nested row. It is not clock_state.
+    Honesty flags are forced closed so a caller cannot publish the file as 72h,
+    as acceptance, or as the stall DUT.
+    """
+    row: dict[str, Any] = {
+        "ok": False,
+        "role": SPECIMEN_ROLE,
+        "path": UBUNTU_24H_METRICS.as_posix(),
+        "experiment": None,
+        "sha_short": None,
+        "wall_elapsed_s": None,
+        "max_wall_seconds": None,
+        "wall_required_seconds": WALL_REQUIRED_SECONDS,
+        "below_259200": False,
+        "classification": "withheld",
+        "ubuntu_24h_counts_as_72h": False,
+        "counts_toward_72h_gate": False,
+        "ubuntu_24h_used_as_dut": False,
+        "is_stall_dut": False,
+        "is_l2_2_acceptance": False,
+        "binds_clock_start": False,
+        "wrapped_as_started_capture": False,
+        "clock_effect": "none",
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "soak_launched": False,
+        "detail": detail,
+    }
+    for key in (
+        "ok",
+        "experiment",
+        "sha_short",
+        "wall_elapsed_s",
+        "max_wall_seconds",
+        "below_259200",
+        "classification",
+    ):
+        if key in extra:
+            row[key] = extra[key]
+    row["role"] = SPECIMEN_ROLE
+    row["path"] = UBUNTU_24H_METRICS.as_posix()
+    row["wall_required_seconds"] = WALL_REQUIRED_SECONDS
+    row["ubuntu_24h_counts_as_72h"] = False
+    row["counts_toward_72h_gate"] = False
+    row["ubuntu_24h_used_as_dut"] = False
+    row["is_stall_dut"] = False
+    row["is_l2_2_acceptance"] = False
+    row["binds_clock_start"] = False
+    row["wrapped_as_started_capture"] = False
+    row["clock_effect"] = "none"
+    row["l2_2_status"] = "NOT_STARTED"
+    row["clock_state"] = "NOT_STARTED"
+    row["production_7x24"] = "NOT_ACCEPTED"
+    row["can_start_clock"] = False
+    row["can_accept_l2_2"] = False
+    row["can_close_l2_2"] = False
+    row["soak_launched"] = False
+    row["detail"] = detail
+    wall = row.get("wall_elapsed_s")
+    short = (
+        row.get("ok") is True
+        and row.get("classification") == "SHORT"
+        and row.get("below_259200") is True
+        and type(wall) is float
+        and wall == UBUNTU_24H_WALL_S
+        and wall < WALL_REQUIRED_SECONDS
+        and row.get("max_wall_seconds") == UBUNTU_24H_MAX_WALL_S
+        and row.get("experiment") == UBUNTU_24H_EXPERIMENT
+        and row.get("sha_short") == UBUNTU_24H_SHA_SHORT
+        and detail == SPECIMEN_SHORT_DETAIL
+    )
+    if not short:
+        row["ok"] = False
+        row["classification"] = "withheld"
+        row["below_259200"] = False
+        row["wall_elapsed_s"] = None
+        row["max_wall_seconds"] = None
+        row["experiment"] = None
+        row["sha_short"] = None
+        if detail == SPECIMEN_SHORT_DETAIL:
+            row["detail"] = "not_the_committed_specimen"
+    return row
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _check_ubuntu_specimen(path: Path) -> dict[str, Any]:
+    """Read the committed Ubuntu-24H metrics file as a historical SHORT specimen.
+
+    Does not call the scorer, does not build a capture with clock.started, and
+    does not open the soak summary. The nested classification is SHORT. The
+    L2-2 clock_state on this row stays NOT_STARTED.
+    """
+    if not path.is_file():
+        return _closed_specimen("missing")
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _closed_specimen("unreadable")
+    if not isinstance(doc, dict):
+        return _closed_specimen("malformed")
+    wall = doc.get("wall_elapsed_s")
+    max_wall = doc.get("max_wall_seconds")
+    if not _is_number(wall):
+        return _closed_specimen("wall_missing")
+    if not _is_number(max_wall):
+        return _closed_specimen("max_wall_missing")
+    try:
+        import l2_2_score as l2
+
+        required = l2.WALL_REQUIRED_SECONDS
+    except Exception:
+        return _closed_specimen("scorer_import")
+    if required != WALL_REQUIRED_SECONDS:
+        return _closed_specimen("wall_bar_drift")
+    if float(wall) >= float(required) or max_wall == required:
+        return _closed_specimen("refused_as_72h")
+    if (
+        wall == UBUNTU_24H_WALL_S
+        and max_wall == UBUNTU_24H_MAX_WALL_S
+        and doc.get("experiment") == UBUNTU_24H_EXPERIMENT
+        and doc.get("sha_short") == UBUNTU_24H_SHA_SHORT
+    ):
+        return _closed_specimen(
+            SPECIMEN_SHORT_DETAIL,
+            ok=True,
+            experiment=UBUNTU_24H_EXPERIMENT,
+            sha_short=UBUNTU_24H_SHA_SHORT,
+            wall_elapsed_s=UBUNTU_24H_WALL_S,
+            max_wall_seconds=UBUNTU_24H_MAX_WALL_S,
+            below_259200=True,
+            classification="SHORT",
+        )
+    return _closed_specimen("not_the_committed_specimen")
+
+
+def _specimen_violations(specimen: Any) -> list[str]:
+    """Reject a specimen row that relabels Ubuntu-24H as 72h, PASS, or the DUT."""
+    violations: list[str] = []
+    if not isinstance(specimen, dict):
+        return ["ubuntu_24h_specimen"]
+    if specimen.get("role") != SPECIMEN_ROLE or specimen.get("path") != UBUNTU_24H_METRICS.as_posix():
+        violations.append("ubuntu_24h_specimen")
+    if specimen.get("wall_required_seconds") != WALL_REQUIRED_SECONDS:
+        violations.append("ubuntu_24h_as_72h")
+    if specimen.get("ubuntu_24h_counts_as_72h") is not False or specimen.get("counts_toward_72h_gate") is not False:
+        violations.append("ubuntu_24h_as_72h")
+    if specimen.get("below_259200") is True and specimen.get("classification") != "SHORT":
+        violations.append("ubuntu_24h_as_72h")
+    wall = specimen.get("wall_elapsed_s")
+    if wall is not None and (not _is_number(wall) or float(wall) >= WALL_REQUIRED_SECONDS):
+        violations.append("ubuntu_24h_as_72h")
+    if specimen.get("ubuntu_24h_used_as_dut") is not False or specimen.get("is_stall_dut") is not False:
+        violations.append("ubuntu_24h_as_dut")
+    if specimen.get("is_l2_2_acceptance") is not False:
+        violations.append("ubuntu_24h_as_acceptance")
+    if specimen.get("binds_clock_start") is not False or specimen.get("wrapped_as_started_capture") is not False:
+        violations.append("ubuntu_24h_as_start")
+    if specimen.get("soak_launched") is not False:
+        violations.append("soak_launched")
+    if specimen.get("clock_effect") != "none":
+        violations.append("clock_effect")
+    if specimen.get("l2_2_status") != "NOT_STARTED":
+        violations.append("status")
+    if specimen.get("clock_state") != "NOT_STARTED":
+        violations.append("clock_state")
+    if specimen.get("production_7x24") != "NOT_ACCEPTED":
+        violations.append("production_claim")
+    for key in GATE_KEYS:
+        if specimen.get(key) is not False:
+            violations.append("forged_" + key)
+    classification = specimen.get("classification")
+    detail = specimen.get("detail")
+    if classification == "SHORT":
+        short_ok = (
+            specimen.get("ok") is True
+            and specimen.get("below_259200") is True
+            and type(wall) is float
+            and wall == UBUNTU_24H_WALL_S
+            and wall < WALL_REQUIRED_SECONDS
+            and specimen.get("max_wall_seconds") == UBUNTU_24H_MAX_WALL_S
+            and specimen.get("experiment") == UBUNTU_24H_EXPERIMENT
+            and specimen.get("sha_short") == UBUNTU_24H_SHA_SHORT
+            and detail == SPECIMEN_SHORT_DETAIL
+        )
+        if not short_ok:
+            violations.append("ubuntu_24h_specimen")
+    elif classification == "withheld":
+        withheld_ok = (
+            specimen.get("ok") is False
+            and specimen.get("below_259200") is False
+            and wall is None
+            and specimen.get("max_wall_seconds") is None
+            and specimen.get("experiment") is None
+            and specimen.get("sha_short") is None
+            and detail in SPECIMEN_WITHHELD_DETAILS
+        )
+        if not withheld_ok:
+            violations.append("ubuntu_24h_specimen")
+    elif classification == "PASS":
+        violations.append("status")
+    elif classification == "ACCEPTED":
+        violations.append("ubuntu_24h_as_acceptance")
+    elif classification in {"STARTED", "started"}:
+        violations.append("ubuntu_24h_as_start")
+    else:
+        violations.append("ubuntu_24h_as_72h")
+    return violations
+
+
 def _refuses_forged(validate, report: dict[str, Any], **edits: Any) -> bool:
     forged = json.loads(json.dumps(report))
     for key, value in edits.items():
@@ -904,6 +1150,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "operator_note": OPERATOR_NOTE,
         "gates": _gates(),
         "l2_4": _l2_4(),
+        "ubuntu_24h_specimen": checks["ubuntu_24h_specimen"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -927,6 +1174,7 @@ def preflight(
     stop_path: Path | None = None,
     sums_path: Path | None = None,
     start_decision_path: Path | None = None,
+    metrics_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build an honest NOT_STARTED report. Does not launch soak or write the stop file."""
     repo = (root or ROOT).resolve()
@@ -934,6 +1182,7 @@ def preflight(
     decision = start_decision_path or (repo / DECISION_RELATIVE)
     stop = stop_path or default_stop_path(repo)
     sums = sums_path or (repo / SUMS_RELATIVE)
+    metrics = metrics_path or (repo / UBUNTU_24H_METRICS)
     try:
         checks = {
             "scaffold_files": _check_files(repo),
@@ -946,6 +1195,7 @@ def preflight(
             "gap_logger": _check_gap_logger(),
             "supervision_monitor": _check_monitor(),
             "stall_watchdog": _check_stall_watchdog(),
+            "ubuntu_24h_specimen": _check_ubuntu_specimen(metrics),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -1081,6 +1331,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
             )
             if not shape_ok:
                 violations.append("stall_classification")
+    specimen = checks.get("ubuntu_24h_specimen")
+    top_specimen = report.get("ubuntu_24h_specimen")
+    violations.extend(_specimen_violations(specimen))
+    violations.extend(_specimen_violations(top_specimen))
+    if specimen != top_specimen:
+        violations.append("ubuntu_24h_specimen_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

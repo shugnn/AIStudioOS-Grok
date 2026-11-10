@@ -4,7 +4,9 @@
 Checks: imports, emergency stop module, L1 dry job, CP --once after reset seed=1,
 then the L2-2 not-started scaffold (offline preflight + not-started fixture score).
 The preflight classifies a synthetic fresh summary and a synthetic stale summary
-through the stall watchdog. That hook is not a start and not L2-2 acceptance.
+through the stall watchdog, and reads the committed Ubuntu-24H metrics file only
+as a historical SHORT specimen. That specimen is not the 72h gate and not the
+stall DUT. The hook is not a start and not L2-2 acceptance.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -56,6 +58,122 @@ def interpreter() -> str:
 def _add(violations: list[str], name: str) -> None:
     if name not in violations:
         violations.append(name)
+
+
+def _specimen_view(specimen: Any) -> dict[str, Any]:
+    """Honest nested specimen. SHORT only when the preflight row is the committed file.
+
+    clock_state in this view stays NOT_STARTED. The SHORT label is classification.
+    """
+    closed: dict[str, Any] = {
+        "ok": False,
+        "role": "historical_short_specimen",
+        "path": "docs/progress/soak_2h/metrics.json",
+        "experiment": None,
+        "sha_short": None,
+        "classification": "withheld",
+        "wall_elapsed_s": None,
+        "max_wall_seconds": None,
+        "wall_required_seconds": 259200,
+        "below_259200": False,
+        "ubuntu_24h_counts_as_72h": False,
+        "counts_toward_72h_gate": False,
+        "ubuntu_24h_used_as_dut": False,
+        "is_stall_dut": False,
+        "is_l2_2_acceptance": False,
+        "binds_clock_start": False,
+        "wrapped_as_started_capture": False,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "production_7x24": "NOT_ACCEPTED",
+        "soak_launched": False,
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+    }
+    if not isinstance(specimen, dict):
+        return closed
+    wall = specimen.get("wall_elapsed_s")
+    honest = (
+        specimen.get("ok") is True
+        and specimen.get("role") == "historical_short_specimen"
+        and specimen.get("path") == "docs/progress/soak_2h/metrics.json"
+        and specimen.get("classification") == "SHORT"
+        and specimen.get("experiment") == "UBUNTU-24H"
+        and specimen.get("sha_short") == "aaf8d24"
+        and type(wall) is float
+        and wall == 86400.001
+        and wall < 259200
+        and specimen.get("max_wall_seconds") == 86400
+        and specimen.get("below_259200") is True
+        and specimen.get("wall_required_seconds") == 259200
+        and specimen.get("ubuntu_24h_counts_as_72h") is False
+        and specimen.get("counts_toward_72h_gate") is False
+        and specimen.get("ubuntu_24h_used_as_dut") is False
+        and specimen.get("is_stall_dut") is False
+        and specimen.get("is_l2_2_acceptance") is False
+        and specimen.get("binds_clock_start") is False
+        and specimen.get("wrapped_as_started_capture") is False
+        and specimen.get("l2_2_status") == "NOT_STARTED"
+        and specimen.get("clock_state") == "NOT_STARTED"
+        and specimen.get("clock_effect") == "none"
+        and specimen.get("production_7x24") == "NOT_ACCEPTED"
+        and specimen.get("soak_launched") is False
+        and all(specimen.get(key) is False for key in GATE_KEYS)
+    )
+    if not honest:
+        return closed
+    viewed = dict(closed)
+    viewed["ok"] = True
+    viewed["experiment"] = "UBUNTU-24H"
+    viewed["sha_short"] = "aaf8d24"
+    viewed["classification"] = "SHORT"
+    viewed["wall_elapsed_s"] = 86400.001
+    viewed["max_wall_seconds"] = 86400
+    viewed["below_259200"] = True
+    return viewed
+
+
+def _note_specimen(specimen: Any, violations: list[str]) -> dict[str, Any]:
+    """Fail closed when a report treats Ubuntu-24H as 72h, PASS, a start, or the DUT."""
+    if not isinstance(specimen, dict):
+        _add(violations, "ubuntu_24h_specimen")
+        return _specimen_view(None)
+    if specimen.get("ubuntu_24h_counts_as_72h") is True or specimen.get("counts_toward_72h_gate") is True:
+        _add(violations, "ubuntu_24h_as_72h")
+    if specimen.get("below_259200") is False and specimen.get("classification") == "SHORT":
+        _add(violations, "ubuntu_24h_as_72h")
+    wall = specimen.get("wall_elapsed_s")
+    if isinstance(wall, (int, float)) and not isinstance(wall, bool) and float(wall) >= 259200:
+        _add(violations, "ubuntu_24h_as_72h")
+    classification = specimen.get("classification")
+    if classification in {"72h", "72H", "WALL_OBSERVED"}:
+        _add(violations, "ubuntu_24h_as_72h")
+    if classification == "PASS":
+        _add(violations, "forged_pass")
+    if classification == "ACCEPTED":
+        _add(violations, "forged_production_accepted")
+    if classification in {"STARTED", "started"}:
+        _add(violations, "forged_clock_start")
+    if specimen.get("ubuntu_24h_used_as_dut") is True or specimen.get("is_stall_dut") is True:
+        _add(violations, "ubuntu_24h_as_dut")
+    if specimen.get("is_l2_2_acceptance") is True:
+        _add(violations, "ubuntu_24h_as_acceptance")
+    if specimen.get("binds_clock_start") is True or specimen.get("wrapped_as_started_capture") is True:
+        _add(violations, "ubuntu_24h_as_start")
+    if specimen.get("can_start_clock") is True:
+        _add(violations, "forged_can_start_clock")
+    if specimen.get("l2_2_status") == "PASS":
+        _add(violations, "forged_pass")
+    if specimen.get("clock_state") not in {None, "NOT_STARTED"}:
+        _add(violations, "forged_clock_start")
+    if specimen.get("production_7x24") not in {None, "NOT_ACCEPTED"}:
+        _add(violations, "forged_production_accepted")
+    viewed = _specimen_view(specimen)
+    if viewed["classification"] != "SHORT":
+        _add(violations, "ubuntu_24h_specimen")
+    return viewed
 
 
 def _l2_modules() -> tuple[Any, Any]:
@@ -178,6 +296,7 @@ def assess_l2_2_offline(
     violations: list[str] = []
     r2_unfilled = False
     start_decision_unfilled = False
+    specimen_view = _specimen_view(None)
     if start_decision_text is None:
         start_decision_text = _read_repo_text(ROOT, START_DECISION_RELATIVE)
     try:
@@ -250,6 +369,12 @@ def assess_l2_2_offline(
                 "stall_classification",
                 "stall_gap_appended",
                 "stall_watchdog",
+                "ubuntu_24h_as_72h",
+                "ubuntu_24h_as_dut",
+                "ubuntu_24h_as_acceptance",
+                "ubuntu_24h_as_start",
+                "ubuntu_24h_specimen",
+                "ubuntu_24h_specimen_mismatch",
             }:
                 _add(violations, name)
             else:
@@ -292,6 +417,14 @@ def assess_l2_2_offline(
         for key in GATE_KEYS:
             if stall.get(key) is True:
                 _add(violations, "forged_" + key)
+        checks_specimen = checks.get("ubuntu_24h_specimen")
+        top_specimen = preflight_report.get("ubuntu_24h_specimen")
+        if checks_specimen != top_specimen:
+            _add(violations, "ubuntu_24h_specimen_mismatch")
+        checked_specimen = _note_specimen(checks_specimen, violations)
+        _note_specimen(top_specimen, violations)
+        if checks_specimen == top_specimen and checked_specimen["classification"] == "SHORT":
+            specimen_view = checked_specimen
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -376,6 +509,8 @@ def assess_l2_2_offline(
         "start_decision_unfilled": start_decision_unfilled,
         "stall_dut": "synthetic_temp_summary" if ok else "withheld",
         "ubuntu_24h_used_as_dut": False,
+        "ubuntu_24h_counts_as_72h": False,
+        "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
         "exit_0_is_gate_pass": False,
@@ -421,6 +556,8 @@ def l2_2_offline_step() -> dict:
         start_decision_unfilled=assessment["start_decision_unfilled"],
         stall_dut=assessment["stall_dut"],
         ubuntu_24h_used_as_dut=False,
+        ubuntu_24h_counts_as_72h=False,
+        ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
         stall_hook_is_l2_2_acceptance=False,
         gate_result="NOT_A_GATE",
         exit_0_is_gate_pass=False,
@@ -489,6 +626,8 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         r2_unfilled = l2.get("r2_unfilled")
         start_unfilled = l2.get("start_decision_unfilled")
         stall_dut = l2.get("stall_dut", "withheld")
+    raw_specimen = l2.get("ubuntu_24h_specimen") if l2 is not None and l2.get("ok") is True else None
+    specimen = _specimen_view(raw_specimen)
     return {
         "overall_ok": overall,
         "l2_2_status": status,
@@ -503,6 +642,8 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "start_decision_unfilled": start_unfilled,
         "stall_dut": stall_dut,
         "ubuntu_24h_used_as_dut": False,
+        "ubuntu_24h_counts_as_72h": False,
+        "ubuntu_24h_specimen": specimen,
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
         "exit_0_is_gate_pass": False,

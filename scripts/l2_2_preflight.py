@@ -16,9 +16,12 @@ satisfied, counts LOCAL_ONLY as public evidence, ends on an unknown root
 cause, or treats the soak-DUT stall watchdog as a watchdog of the supervisor.
 Classifies synthetic supervisor-alive and supervisor-crash-unrecorded temp files.
 That offline probe does not satisfy founder condition 2, is not a watchdog of a
-live supervisor, and is not a start. A report that treats the probe or the
-soak-DUT stall hook as that watchdog, or that claims condition 2, PASS,
-started, ACCEPTED, or production 7x24, fails closed.
+live supervisor, and is not a start. Runs scripts/supervisor_watchdog.py against
+a dummy process this check spawned. A crash record within 10 seconds on that
+dummy is not founder condition 2, is not a live L2-2 supervisor watchdog, and
+does not demonstrate a supervision write every 10 minutes. A report that treats
+the probe, the dummy exercise, or the soak-DUT stall hook as that watchdog, or
+that claims condition 2, PASS, started, ACCEPTED, or production 7x24, fails closed.
 Does not launch soak_2h.py, does not point the stall hook at the committed
 Ubuntu-24H soak files, does not start the 72h clock, does not post an L2-2
 START line, and does not register scheduled tasks.
@@ -176,6 +179,7 @@ REQUIRED_PATHS = (
     "scripts/l2_2_preflight.py",
     "scripts/coverage_gap_log.py",
     "scripts/supervision_monitor.py",
+    "scripts/supervisor_watchdog.py",
     "scripts/stall_watchdog.py",
     "scripts/soak_2h.py",
     "docs/progress/l2_2/R2_CHECKLIST.md",
@@ -193,6 +197,7 @@ REQUIRED_PATHS = (
     "tests/fixtures/l2_2/scaffold_wall_short.json",
     "tests/test_l2_2_score.py",
     "tests/test_coverage_gap_log.py",
+    "tests/test_supervisor_watchdog.py",
 )
 
 CHECK_ORDER = (
@@ -211,6 +216,7 @@ CHECK_ORDER = (
     "process_continuity",
     "founder_start_conditions",
     "supervisor_watchdog_honesty",
+    "supervisor_watchdog_implementation",
     "scorer_refuses",
 )
 
@@ -230,6 +236,7 @@ OPERATOR_NOTE = (
     "Sequential or restarted soak invocations are not one continuous 72h wall. Stitching them, even back-to-back on the same host, does not start the 72h clock and does not count toward the gate. "
     "The Issue #9 conditional founder approval is not a start decision. The five start conditions are unfilled. LOCAL_ONLY is not public evidence. Unknown root cause is not a terminal attribution. The soak-DUT stall watchdog is not a watchdog of the supervisor. "
     "The offline supervisor-watchdog probe is not a start and does not satisfy founder condition 2. It is not a watchdog of a live supervisor. "
+    "The dummy supervisor-watchdog exercise is not a start and does not satisfy founder condition 2. It is not a live L2-2 supervisor watchdog and it does not demonstrate a supervision write every 10 minutes. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -258,6 +265,7 @@ NEXT_STEPS = (
     "Sequential or restarted soak invocations are not one live process. A back-to-back 86400s pair, three sequential 86400s soaks covering 72h of calendar time, or a wall that resets, is not a started L2-2 capture. This continuity gate is not a start.",
     "Issue #9 comment 6761044915 is a conditional founder approval, not a start and not a PASS. The five conditions stay unfilled in the committed templates. This preflight does not post an L2-2 START line and does not set can_start_clock.",
     "The offline supervisor-watchdog probe classifies synthetic supervisor-alive and supervisor-crash-unrecorded temp files only. It does not satisfy founder condition 2, it is not a watchdog of a live supervisor, and it is not a start. scripts/stall_watchdog.py watches a soak DUT and is not that watchdog. A report that treats either one as the required supervisor watchdog, or that claims condition 2 is satisfied, or that claims PASS, started, ACCEPTED, or production 7x24, fails closed.",
+    "scripts/supervisor_watchdog.py watches a pid and writes a crash record within 10 seconds. The preflight exercise uses a dummy process it spawned. That dummy success does not satisfy founder condition 2, does not demonstrate a supervision write every 10 minutes, and is not a start. A crash record 11 seconds later does not meet the 10-second requirement. A report that treats this scaffold or those dummy tests as condition 2 fails closed.",
     "Production 7x24 stays NOT ACCEPTED. A 72h result is not production readiness. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -663,7 +671,30 @@ def _check_contract(root: Path) -> dict[str, Any]:
         and watchdog.get("l2_2_status") == "NOT_STARTED"
         and watchdog.get("clock_state") == "NOT_STARTED"
     )
-    ok = ok and founder_ok and watchdog_ok
+    implementation = (
+        doc.get("supervisor_watchdog_implementation")
+        if isinstance(doc.get("supervisor_watchdog_implementation"), dict)
+        else {}
+    )
+    implementation_ok = (
+        implementation.get("tool") == "scripts/supervisor_watchdog.py"
+        and implementation.get("action") == "dummy_process_watch"
+        and implementation.get("dut") == "test_spawned_dummy"
+        and implementation.get("condition_2_satisfied") is False
+        and implementation.get("dummy_tests_satisfy_condition_2") is False
+        and implementation.get("scaffold_satisfies_condition_2") is False
+        and implementation.get("implementation_satisfies_condition_2") is False
+        and implementation.get("synthetic_probe_satisfies_condition_2") is False
+        and implementation.get("stall_watchdog_satisfies_condition_2") is False
+        and implementation.get("is_live_l2_2_supervisor_watchdog") is False
+        and implementation.get("demonstrates_10_minute_supervision_cadence") is False
+        and implementation.get("record_11s_later_meets_requirement") is False
+        and implementation.get("can_start_clock") is False
+        and implementation.get("production_7x24") == "NOT_ACCEPTED"
+        and implementation.get("l2_2_status") == "NOT_STARTED"
+        and implementation.get("clock_state") == "NOT_STARTED"
+    )
+    ok = ok and founder_ok and watchdog_ok and implementation_ok
     return {
         "ok": ok,
         "preflight_schema": doc.get("preflight_schema") if doc.get("preflight_schema") == SCHEMA else "mismatch",
@@ -2584,6 +2615,38 @@ def _supervisor_preflight_violations(row: Any) -> list[str]:
     return violations
 
 
+def _check_supervisor_watchdog_implementation(root: Path) -> dict[str, Any]:
+    """Run the dummy watchdog exercise when the script is in this root.
+
+    An empty root skips the exercise. Dummy success does not satisfy condition 2.
+    """
+    try:
+        import supervisor_watchdog as watchdog
+    except Exception:
+        return {
+            "ok": False,
+            "tool": "scripts/supervisor_watchdog.py",
+            "detail": "import_failed",
+            "condition_2_satisfied": False,
+            "dummy_tests_satisfy_condition_2": False,
+            "l2_2_status": "NOT_STARTED",
+            "clock_state": "NOT_STARTED",
+            "can_start_clock": False,
+            "production_7x24": "NOT_ACCEPTED",
+            "soak_launched": False,
+        }
+    present = (root / "scripts" / "supervisor_watchdog.py").is_file()
+    return watchdog.scaffold_status_for_root(present)
+
+
+def _implementation_preflight_violations(row: Any) -> list[str]:
+    try:
+        import supervisor_watchdog as watchdog
+    except Exception:
+        return ["supervisor_watchdog_implementation"]
+    return watchdog.scaffold_violations(row, require_success=False)
+
+
 def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
     failures = [
         f"{name}:{checks[name].get('detail', 'failed')}"
@@ -2616,6 +2679,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "process_continuity": checks["process_continuity"],
         "founder_start_conditions": checks["founder_start_conditions"],
         "supervisor_watchdog_honesty": checks["supervisor_watchdog_honesty"],
+        "supervisor_watchdog_implementation": checks["supervisor_watchdog_implementation"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -2669,6 +2733,7 @@ def preflight(
                 checklist_path=checklist,
             ),
             "supervisor_watchdog_honesty": _check_supervisor_watchdog_honesty(repo),
+            "supervisor_watchdog_implementation": _check_supervisor_watchdog_implementation(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -2834,6 +2899,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_supervisor_preflight_violations(top_watchdog))
     if watchdog != top_watchdog:
         violations.append("supervisor_watchdog_honesty_mismatch")
+    implementation = checks.get("supervisor_watchdog_implementation")
+    top_implementation = report.get("supervisor_watchdog_implementation")
+    violations.extend(_implementation_preflight_violations(implementation))
+    violations.extend(_implementation_preflight_violations(top_implementation))
+    if implementation != top_implementation:
+        violations.append("supervisor_watchdog_implementation_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

@@ -775,6 +775,11 @@ def test_honest_preflight_records_the_supervisor_probe_as_not_condition_2():
     assert result["offline_probe_is_supervisor_watchdog"] is False
     assert result["offline_probe_is_a_start"] is False
     assert result["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert result["dummy_crash_within_10s_passed"] is True
+    assert result["dummy_tests_satisfy_condition_2"] is False
+    assert result["implementation_satisfies_condition_2"] is False
+    assert result["demonstrates_10_minute_supervision_cadence"] is False
+    assert result["record_11s_later_meets_requirement"] is False
     assert result["l2_2_status"] == "NOT_STARTED"
     assert result["production_7x24"] == "NOT_ACCEPTED"
     _assert_gates_closed(result)

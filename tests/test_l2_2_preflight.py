@@ -1208,3 +1208,52 @@ def test_forged_supervisor_watchdog_preflight_fails_closed():
     assert report["gates"]["can_start_clock"] is False
     assert report["supervisor_watchdog_honesty"]["condition_2_satisfied"] is False
     assert report["documented_soak_argv_executed"] is False
+
+
+def test_dummy_supervisor_watchdog_is_recorded_and_is_not_condition_2():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    row = report["supervisor_watchdog_implementation"]
+    assert row == report["checks"]["supervisor_watchdog_implementation"]
+    assert row["ok"] is True
+    assert row["detail"] == "implementation_exists_dummy_crash_within_10s_passed"
+    assert row["tool"] == "scripts/supervisor_watchdog.py"
+    assert row["dummy_crash_within_10s_passed"] is True
+    assert row["dummy_still_alive_wrote_no_crash_record"] is True
+    assert row["record_11s_later_meets_requirement"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["dummy_tests_satisfy_condition_2"] is False
+    assert row["scaffold_satisfies_condition_2"] is False
+    assert row["is_live_l2_2_supervisor_watchdog"] is False
+    assert row["demonstrates_10_minute_supervision_cadence"] is False
+    assert row["live_supervisor_process"] is False
+    assert row["soak_launched"] is False
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "dummy_scaffold_called_condition_2",
+        "synthetic_probe_called_condition_2",
+        "stall_watchdog_called_condition_2",
+    ]
+    for item in row["refused_claims"]:
+        assert item["condition_2_satisfied"] is False
+        assert item["can_start_clock"] is False
+        assert item["l2_2_status"] == "NOT_STARTED"
+    forged = json.loads(json.dumps(report))
+    forged["supervisor_watchdog_implementation"]["condition_2_satisfied"] = True
+    forged["supervisor_watchdog_implementation"]["dummy_tests_satisfy_condition_2"] = True
+    forged["supervisor_watchdog_implementation"]["l2_2_status"] = "PASS"
+    forged["supervisor_watchdog_implementation"]["clock_state"] = "STARTED"
+    forged["supervisor_watchdog_implementation"]["can_start_clock"] = True
+    forged["checks"]["supervisor_watchdog_implementation"] = json.loads(
+        json.dumps(forged["supervisor_watchdog_implementation"])
+    )
+    names = set(pre.validate_report(forged))
+    assert "condition_2_unsatisfied" in names
+    assert "forged_pass" in names
+    assert "forged_can_start_clock" in names
+    assert report["supervisor_watchdog_implementation"]["condition_2_satisfied"] is False
+    assert report["gates"]["can_start_clock"] is False

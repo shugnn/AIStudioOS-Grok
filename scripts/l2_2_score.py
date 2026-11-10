@@ -11,7 +11,8 @@ pretend the five start conditions are satisfied, pretend that approval started
 the clock, treat LOCAL_ONLY as public evidence, end on an unknown root cause,
 or treat the soak-DUT stall watchdog as a watchdog of the supervisor.
 An offline synthetic supervisor probe is not that watchdog either, does not
-satisfy founder condition 2, and is not a start.
+satisfy founder condition 2, and is not a start. A dummy-process exercise of
+scripts/supervisor_watchdog.py is not that watchdog either.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -235,6 +236,7 @@ NEXT_STEPS = (
     "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
     "Product L2 (self-decompose / self-implement) is CONDITIONAL on the observation track, not granted, pending one end-to-end T3: a new goal and a new schema, the product derives the task set, then executes and delivers, with no handwritten dispatch. T2 DS-T2-20261110 is ACCEPTED (Issue #9 comment 6765608469, 2026-11-10T11:00:40Z, evidence PR #13 tip 9cac002). Comment 6767990189 (2026-11-10T13:00:44Z) accepted the PR #14 tip 738b47a derivation evidence and left L2 CONDITIONAL. No task_inbox/DS-T3 card is on main. PR #15 tip a07ec9f prepared that path with a local demo fixture and is not a T3 run and not acceptance. This scorer does not run T3, does not rerun T1 or T2, and does not grant product L2. L2-3 mid-run kill recovery is a separate gate.",
     "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. That approval is not a start, not a PASS, and it does not set can_start_clock. The five conditions stay unsatisfied until a later explicit declaration: supervision policy (yellow 13s through 300s, red above 300s, monotonic clock), supervision writes at least once every 10 minutes and a separate process records a supervisor crash within 10s (the soak-DUT stall watchdog is not that watchdog; an offline synthetic supervisor-alive versus supervisor-crash-unrecorded probe is not that watchdog either and does not satisfy condition 2), public evidence of final metrics plus a log summary plus a SHA list (LOCAL_ONLY does not count), three-way failure attribution (business, host, supervision; unknown root cause is not a terminal attribution), and no production 7x24 claim. A 72h result is not production readiness. This scorer does not post the L2-2 START line.",
+    "scripts/supervisor_watchdog.py can watch a pid and write a crash record within 10 seconds. Offline dummy-process tests are not a live L2-2 supervisor watchdog, do not demonstrate a supervision write every 10 minutes, and do not satisfy founder condition 2. The synthetic-file probe and scripts/stall_watchdog.py do not satisfy it either. A report that treats the scaffold, the dummy tests, the synthetic probe, or the stall hook as condition 2, PASS, started, ACCEPTED, or production 7x24 fails closed.",
 )
 
 
@@ -1564,7 +1566,9 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
 
     watch_claim = doc.get("supervisor_watchdog_claim") if isinstance(doc.get("supervisor_watchdog_claim"), dict) else None
     supervisor_honesty = offline_supervisor_watchdog_probe(claim=watch_claim)
+    scaffold = supervisor_watchdog_scaffold(watch_claim)
     blockers.append("supervisor_watchdog_offline_probe_is_not_condition_2")
+    blockers.append("supervisor_watchdog_dummy_scaffold_is_not_condition_2")
     if supervisor_honesty.get("stall_watchdog_claimed_as_supervisor_watchdog") is True:
         blockers.append("supervisor_watchdog_required")
     if supervisor_honesty.get("offline_probe_claimed_as_supervisor_watchdog") is True:
@@ -1572,6 +1576,15 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     if supervisor_honesty.get("condition_2_claimed_satisfied") is True:
         blockers.append("condition_2_unsatisfied")
     if supervisor_honesty.get("pass_or_start_claimed") is True:
+        blockers.append("forged_pass")
+    if scaffold.get("stall_watchdog_claimed_as_condition_2") is True and "supervisor_watchdog_required" not in blockers:
+        blockers.append("supervisor_watchdog_required")
+    if (
+        scaffold.get("dummy_scaffold_claimed_as_condition_2") is True
+        or scaffold.get("synthetic_probe_claimed_as_condition_2") is True
+    ) and "condition_2_unsatisfied" not in blockers:
+        blockers.append("condition_2_unsatisfied")
+    if scaffold.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
         blockers.append("forged_pass")
 
     stopped = metrics.get("stopped_early") if isinstance(metrics, dict) else None
@@ -1618,6 +1631,9 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
                 "A soak-DUT stall watchdog is not a watchdog of the supervisor. "
                 "An offline synthetic supervisor probe is not that watchdog, "
                 "does not satisfy founder condition 2, and is not a start. "
+                "A dummy-process exercise of scripts/supervisor_watchdog.py "
+                "is not that watchdog, does not demonstrate a supervision write "
+                "every 10 minutes, and does not satisfy founder condition 2. "
                 "A 72h result is not production readiness."
             ),
         },
@@ -1636,6 +1652,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         "process_continuity": continuity,
         "founder_start_conditions": founder,
         "supervisor_watchdog_honesty": supervisor_honesty,
+        "supervisor_watchdog_implementation": scaffold,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -2219,6 +2236,26 @@ def offline_supervisor_watchdog_probe(
     return block
 
 
+def supervisor_watchdog_scaffold(claim: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Dummy-process watchdog result. Passing it does not satisfy founder condition 2."""
+    try:
+        import supervisor_watchdog as watchdog
+    except Exception:
+        return {"ok": False, "detail": "import_failed", "condition_2_satisfied": False}
+    block = watchdog.stable_scaffold_status()
+    watchdog.annotate_scaffold_claim(block, claim if isinstance(claim, dict) else None)
+    watchdog.apply_closed_flags(block)
+    return block
+
+
+def _scaffold_report_violations(block: Any) -> list[str]:
+    try:
+        import supervisor_watchdog as watchdog
+    except Exception:
+        return ["supervisor_watchdog_implementation"]
+    return watchdog.scaffold_violations(block, require_success=True)
+
+
 def _supervisor_flag_violation(key: str, actual: Any) -> str:
     if key in {"condition_2_satisfied", "offline_probe_satisfies_condition_2"}:
         return "condition_2_unsatisfied"
@@ -2347,9 +2384,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_process_continuity_violations(report))
     violations.extend(_founder_block_violations(report.get("founder_start_conditions")))
     violations.extend(_supervisor_watchdog_honesty_violations(report.get("supervisor_watchdog_honesty")))
+    violations.extend(_scaffold_report_violations(report.get("supervisor_watchdog_implementation")))
     blockers = gates.get("blockers") if isinstance(gates.get("blockers"), list) else []
     if "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
         violations.append("supervisor_watchdog_honesty")
+    if "supervisor_watchdog_dummy_scaffold_is_not_condition_2" not in blockers:
+        violations.append("supervisor_watchdog_implementation")
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

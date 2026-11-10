@@ -32,6 +32,7 @@ The intended command is the existing non-Interactive local soak. This template d
 - The conditional founder approval on Issue #9 is not a start.
 - Recording the five unfilled conditions is not a start.
 - The offline supervisor-watchdog probe is not a start. It classifies synthetic files only. It does not satisfy founder condition 2 and it is not a watchdog of a live supervisor. `scripts/stall_watchdog.py` is not that watchdog.
+- The dummy supervisor-watchdog exercise is not a start. `scripts/supervisor_watchdog.py` can write a crash record within 10 seconds for a process it was pointed at. Dummy-process success does not satisfy founder condition 2 and does not demonstrate a supervision write every 10 minutes. A crash record 11 seconds later does not meet the 10-second requirement.
 
 ## Conditional founder approval (not a start)
 
@@ -40,7 +41,7 @@ Issue #9 comment `6761044915` at `2026-11-10T06:50:14Z` records a conditional fo
 | Condition | This template |
 |-----------|----------------|
 | Supervision policy | Unfilled. Yellow is 13s through 300s. Red is above 300s. The clock is monotonic. Writing the bands here is not a declaration before a launch |
-| Supervision cadence and supervisor watchdog | Unfilled. A future supervision writer would have to record at least once every 10 minutes. The supervisor itself would need another process to record a crash within 10s. `scripts/stall_watchdog.py` watches a soak DUT. It is not that supervisor watchdog |
+| Supervision cadence and supervisor watchdog | Unfilled. A future supervision writer would have to record at least once every 10 minutes. The supervisor itself would need another process to record a crash within 10s. `scripts/stall_watchdog.py` watches a soak DUT. It is not that supervisor watchdog. `scripts/supervisor_watchdog.py` can watch a pid and write a crash record within 10 seconds. A dummy-process exercise does not fill this cell |
 | Public evidence | Unfilled. Final metrics, a log summary, and a SHA list would have to be committed in public. LOCAL_ONLY does not count |
 | Failure attribution | Unfilled. A failure would have to name business, host, or supervision. Unknown root cause is not a terminal attribution |
 | Production 7×24 | Stays **NOT ACCEPTED**. A 72h result is not production readiness |

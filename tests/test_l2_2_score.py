@@ -65,6 +65,13 @@ def test_schema_ids_match_contract():
     assert founder["condition_ids"] == list(l2.FOUNDER_CONDITION_IDS)
     watchdog = doc["supervisor_watchdog_honesty"]
     assert watchdog["condition_2_satisfied"] is False
+    implementation = doc["supervisor_watchdog_implementation"]
+    assert implementation["condition_2_satisfied"] is False
+    assert implementation["dummy_tests_satisfy_condition_2"] is False
+    assert implementation["tool"] == "scripts/supervisor_watchdog.py"
+    assert implementation["record_11s_later_meets_requirement"] is False
+    assert implementation["can_start_clock"] is False
+    assert implementation["l2_2_status"] == "NOT_STARTED"
     assert watchdog["offline_probe_is_supervisor_watchdog"] is False
     assert watchdog["offline_probe_is_a_start"] is False
     assert watchdog["soak_dut_stall_watchdog_is_supervisor_watchdog"] is False
@@ -112,6 +119,7 @@ def test_clock_not_started_is_the_canonical_report():
         "clock_not_started",
         "founder_start_conditions_unsatisfied",
         "supervisor_watchdog_offline_probe_is_not_condition_2",
+        "supervisor_watchdog_dummy_scaffold_is_not_condition_2",
     ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -1153,7 +1161,50 @@ def test_offline_supervisor_probe_is_not_condition_2_and_not_a_start():
     report = l2.score(_load("scaffold_clock_not_started.json"))
     assert report["supervisor_watchdog_honesty"]["cases"] == block["cases"]
     assert "supervisor_watchdog_offline_probe_is_not_condition_2" in report["gates"]["blockers"]
+    scaffold = report["supervisor_watchdog_implementation"]
+    assert scaffold["ok"] is True
+    assert scaffold["dummy_crash_within_10s_passed"] is True
+    assert scaffold["dummy_still_alive_wrote_no_crash_record"] is True
+    assert scaffold["record_11s_later_meets_requirement"] is False
+    assert scaffold["condition_2_satisfied"] is False
+    assert scaffold["dummy_tests_satisfy_condition_2"] is False
+    assert scaffold["is_live_l2_2_supervisor_watchdog"] is False
+    assert scaffold["demonstrates_10_minute_supervision_cadence"] is False
+    assert scaffold["l2_2_status"] == "NOT_STARTED"
+    assert scaffold["clock_state"] == "NOT_STARTED"
+    assert scaffold["can_start_clock"] is False
+    assert "supervisor_watchdog_dummy_scaffold_is_not_condition_2" in report["gates"]["blockers"]
     assert l2.validate_report(report) == []
+
+    claimed = _load("scaffold_clock_not_started.json")
+    claimed["supervisor_watchdog_claim"] = {
+        "dummy_tests_satisfy_condition_2": True,
+        "scaffold_satisfies_condition_2": True,
+        "stall_watchdog_satisfies_condition_2": True,
+        "tool": "scripts/stall_watchdog.py",
+        "synthetic_probe_satisfies_condition_2": True,
+        "condition_2_satisfied": True,
+        "l2_2_status": "PASS",
+        "clock_state": "STARTED",
+        "production_7x24": "ACCEPTED",
+        "can_start_clock": True,
+    }
+    claimed_report = l2.score(claimed)
+    claimed_block = claimed_report["supervisor_watchdog_implementation"]
+    assert claimed_block["dummy_scaffold_claimed_as_condition_2"] is True
+    assert claimed_block["stall_watchdog_claimed_as_condition_2"] is True
+    assert claimed_block["synthetic_probe_claimed_as_condition_2"] is True
+    assert claimed_block["pass_or_start_claimed"] is True
+    assert claimed_block["condition_2_satisfied"] is False
+    assert claimed_block["dummy_tests_satisfy_condition_2"] is False
+    assert claimed_block["l2_2_status"] == "NOT_STARTED"
+    assert claimed_block["clock_state"] == "NOT_STARTED"
+    assert claimed_block["production_7x24"] == "NOT_ACCEPTED"
+    assert claimed_block["can_start_clock"] is False
+    assert claimed_report["l2_2_status"] == "NOT_STARTED"
+    assert claimed_report["gates"]["can_start_clock"] is False
+    assert "condition_2_unsatisfied" in claimed_report["gates"]["blockers"]
+    assert l2.validate_report(claimed_report) == []
 
 
 def test_supervisor_watchdog_pretenses_fail_closed():

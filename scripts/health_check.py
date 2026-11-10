@@ -17,7 +17,10 @@ stay unsatisfied. LOCAL_ONLY is not public evidence. Unknown root cause is
 not a terminal attribution. The soak-DUT stall watchdog is not a watchdog of
 the supervisor. An offline probe of synthetic supervisor-alive and
 supervisor-crash-unrecorded files is not that watchdog either, does not
-satisfy founder condition 2, and is not a start.
+satisfy founder condition 2, and is not a start. A dummy-process exercise of
+scripts/supervisor_watchdog.py can write a crash record within 10 seconds.
+That exercise is not a live L2-2 supervisor watchdog, does not demonstrate a
+supervision write every 10 minutes, and does not satisfy founder condition 2.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -254,8 +257,20 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
         if node.get("condition_2_satisfied") is True or node.get("offline_probe_satisfies_condition_2") is True:
             _add(violations, "condition_2_unsatisfied")
         if (
+            node.get("dummy_tests_satisfy_condition_2") is True
+            or node.get("scaffold_satisfies_condition_2") is True
+            or node.get("implementation_satisfies_condition_2") is True
+            or node.get("synthetic_probe_satisfies_condition_2") is True
+            or node.get("stall_watchdog_satisfies_condition_2") is True
+            or node.get("dummy_crash_within_10s_satisfies_condition_2") is True
+            or node.get("demonstrates_10_minute_supervision_cadence") is True
+            or node.get("record_11s_later_meets_requirement") is True
+        ):
+            _add(violations, "condition_2_unsatisfied")
+        if (
             node.get("offline_probe_is_supervisor_watchdog") is True
             or node.get("is_supervisor_watchdog_of_live_supervisor") is True
+            or node.get("is_live_l2_2_supervisor_watchdog") is True
             or node.get("live_supervisor_process") is True
             or node.get("live_watchdog_process") is True
         ):
@@ -342,6 +357,44 @@ def _supervisor_row_ok(row: Any, *, claims_required: bool = True) -> bool:
     if "does not satisfy founder condition 2" not in note or "not a start" not in note:
         return False
     return True
+
+
+def _dummy_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
+    """True only when both reports record a closed dummy exercise that passed."""
+
+    def row_ok(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and row.get("ok") is True
+            and row.get("dummy_crash_within_10s_passed") is True
+            and row.get("dummy_still_alive_wrote_no_crash_record") is True
+            and row.get("record_11s_later_meets_requirement") is False
+            and row.get("condition_2_satisfied") is False
+            and row.get("dummy_tests_satisfy_condition_2") is False
+            and row.get("implementation_satisfies_condition_2") is False
+            and row.get("demonstrates_10_minute_supervision_cadence") is False
+            and row.get("l2_2_status") == "NOT_STARTED"
+            and row.get("clock_state") == "NOT_STARTED"
+            and row.get("can_start_clock") is False
+        )
+
+    if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
+        return False
+    return row_ok(preflight_report.get("supervisor_watchdog_implementation")) and row_ok(
+        score_report.get("supervisor_watchdog_implementation")
+    )
+
+
+def _implementation_row_ok(row: Any) -> bool:
+    """True when the dummy watchdog scaffold stays closed and the exercise passed."""
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import supervisor_watchdog as watchdog
+    except Exception:
+        return False
+    return watchdog.scaffold_violations(row, require_success=True) == []
 
 
 def l2_2_commands(root: Path | None = None) -> list[list[str]]:
@@ -504,6 +557,8 @@ def assess_l2_2_offline(
                 "supervisor_watchdog_required",
                 "supervisor_watchdog_honesty",
                 "supervisor_watchdog_honesty_mismatch",
+                "supervisor_watchdog_implementation",
+                "supervisor_watchdog_implementation_mismatch",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -711,6 +766,12 @@ def assess_l2_2_offline(
                     _add(violations, "offline_probe_is_not_a_start")
                 if item.get("production_7x24") != "NOT_ACCEPTED":
                     _add(violations, "forged_production_accepted")
+        implementation = checks.get("supervisor_watchdog_implementation")
+        top_implementation = preflight_report.get("supervisor_watchdog_implementation")
+        if implementation != top_implementation:
+            _add(violations, "supervisor_watchdog_implementation_mismatch")
+        if not _implementation_row_ok(implementation):
+            _add(violations, "supervisor_watchdog_implementation")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -774,9 +835,14 @@ def assess_l2_2_offline(
         scored_watchdog = score_report.get("supervisor_watchdog_honesty")
         if not _supervisor_row_ok(scored_watchdog, claims_required=False):
             _add(violations, "supervisor_watchdog_honesty")
+        scored_implementation = score_report.get("supervisor_watchdog_implementation")
+        if not _implementation_row_ok(scored_implementation):
+            _add(violations, "supervisor_watchdog_implementation")
         blockers = score_report.get("gates", {}).get("blockers") if isinstance(score_report.get("gates"), dict) else []
         if not isinstance(blockers, list) or "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_honesty")
+        if not isinstance(blockers, list) or "supervisor_watchdog_dummy_scaffold_is_not_condition_2" not in blockers:
+            _add(violations, "supervisor_watchdog_implementation")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -803,6 +869,7 @@ def assess_l2_2_offline(
                 "unknown_root_cause_refused",
                 "supervisor_watchdog_required",
                 "supervisor_watchdog_honesty",
+                "supervisor_watchdog_implementation",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -879,6 +946,11 @@ def assess_l2_2_offline(
         "offline_probe_is_supervisor_watchdog": False,
         "offline_probe_is_a_start": False,
         "is_supervisor_watchdog_of_live_supervisor": False,
+        "dummy_crash_within_10s_passed": _dummy_exercise_passed(preflight_report, score_report) if ok else False,
+        "dummy_tests_satisfy_condition_2": False,
+        "implementation_satisfies_condition_2": False,
+        "demonstrates_10_minute_supervision_cadence": False,
+        "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
         "stall_hook_is_l2_2_acceptance": False,
@@ -942,6 +1014,11 @@ def l2_2_offline_step() -> dict:
         offline_probe_is_supervisor_watchdog=False,
         offline_probe_is_a_start=False,
         is_supervisor_watchdog_of_live_supervisor=False,
+        dummy_crash_within_10s_passed=assessment["dummy_crash_within_10s_passed"],
+        dummy_tests_satisfy_condition_2=False,
+        implementation_satisfies_condition_2=False,
+        demonstrates_10_minute_supervision_cadence=False,
+        record_11s_later_meets_requirement=False,
         a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
         stall_hook_is_l2_2_acceptance=False,
@@ -1014,6 +1091,13 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         stall_dut = l2.get("stall_dut", "withheld")
     raw_specimen = l2.get("ubuntu_24h_specimen") if l2 is not None and l2.get("ok") is True else None
     specimen = _specimen_view(raw_specimen)
+    dummy_passed = (
+        l2 is not None
+        and l2.get("ok") is True
+        and l2.get("dummy_crash_within_10s_passed") is True
+        and l2.get("condition_2_satisfied") is not True
+        and l2.get("dummy_tests_satisfy_condition_2") is not True
+    )
     return {
         "overall_ok": overall,
         "l2_2_status": status,
@@ -1044,6 +1128,11 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "offline_probe_is_supervisor_watchdog": False,
         "offline_probe_is_a_start": False,
         "is_supervisor_watchdog_of_live_supervisor": False,
+        "dummy_crash_within_10s_passed": dummy_passed,
+        "dummy_tests_satisfy_condition_2": False,
+        "implementation_satisfies_condition_2": False,
+        "demonstrates_10_minute_supervision_cadence": False,
+        "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,
         "stall_hook_is_l2_2_acceptance": False,

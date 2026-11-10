@@ -3,6 +3,8 @@
 
 Checks: imports, emergency stop module, L1 dry job, CP --once after reset seed=1,
 then the L2-2 not-started scaffold (offline preflight + not-started fixture score).
+The preflight classifies a synthetic fresh summary and a synthetic stale summary
+through the stall watchdog. That hook is not a start and not L2-2 acceptance.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -241,9 +243,55 @@ def assess_l2_2_offline(
                 _add(violations, "forged_pass")
             elif name in {"r2_implies_start", "start_decision_implies_start"}:
                 _add(violations, "forged_start_decision")
+            elif name in {
+                "stall_implies_start",
+                "stall_ubuntu_dut",
+                "stall_alert_in_repo",
+                "stall_classification",
+                "stall_gap_appended",
+                "stall_watchdog",
+            }:
+                _add(violations, name)
             else:
                 _add(violations, "preflight:" + name)
         _walk_claims(preflight_report, violations)
+        stall = checks.get("stall_watchdog") if isinstance(checks.get("stall_watchdog"), dict) else {}
+        if stall.get("ok") is not True or stall.get("detail") != "synthetic_fresh_vs_stale":
+            _add(violations, "stall_watchdog")
+        if stall.get("action") != "synthetic_mtime" or stall.get("dut") != "synthetic_temp_summary":
+            _add(violations, "stall_not_synthetic")
+        if stall.get("ubuntu_24h_used_as_dut") is not False or stall.get("default_summary_used") is not False:
+            _add(violations, "stall_ubuntu_dut")
+        if (
+            stall.get("fresh_stalled") is not False
+            or stall.get("stale_stalled") is not True
+            or stall.get("fresh_exit") != 0
+            or stall.get("stale_exit") != 1
+            or stall.get("fresh_gap_band") != "ok"
+            or stall.get("stale_gap_band") != "red"
+            or stall.get("gap_appended") is not False
+        ):
+            _add(violations, "stall_classification")
+        if (
+            stall.get("binds_clock_start") is True
+            or stall.get("implies_l2_2_acceptance") is True
+            or stall.get("implies_72h_pass") is True
+            or stall.get("gap_implies_soak_complete") is True
+        ):
+            _add(violations, "stall_implies_start")
+        if stall.get("clock_effect") != "none" or stall.get("clock_state") != "NOT_STARTED":
+            _add(violations, "forged_clock_start")
+        if stall.get("l2_2_status") != "NOT_STARTED":
+            _add(violations, "l2_2_status")
+        if stall.get("soak_launched") is not False:
+            _add(violations, "soak_launched")
+        if stall.get("repo_alert_written") is True or stall.get("alert_left_in_repo") is True:
+            _add(violations, "stall_alert_in_repo")
+        if stall.get("production_7x24") != "NOT_ACCEPTED":
+            _add(violations, "forged_production_accepted")
+        for key in GATE_KEYS:
+            if stall.get(key) is True:
+                _add(violations, "forged_" + key)
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -326,6 +374,9 @@ def assess_l2_2_offline(
         "can_close_l2_2": False,
         "r2_unfilled": r2_unfilled,
         "start_decision_unfilled": start_decision_unfilled,
+        "stall_dut": "synthetic_temp_summary" if ok else "withheld",
+        "ubuntu_24h_used_as_dut": False,
+        "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
         "exit_0_is_gate_pass": False,
         "pytest_is_l2_2_acceptance": False,
@@ -368,6 +419,9 @@ def l2_2_offline_step() -> dict:
         can_close_l2_2=False,
         r2_unfilled=assessment["r2_unfilled"],
         start_decision_unfilled=assessment["start_decision_unfilled"],
+        stall_dut=assessment["stall_dut"],
+        ubuntu_24h_used_as_dut=False,
+        stall_hook_is_l2_2_acceptance=False,
         gate_result="NOT_A_GATE",
         exit_0_is_gate_pass=False,
         violations=assessment["violations"],
@@ -420,12 +474,13 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
     """This process never grants a start, an accept, or a close."""
     l2 = next((row for row in results if row.get("step") == "l2_2_offline"), None)
     if l2 is None:
-        status, clock, checked, r2_unfilled, start_unfilled = (
+        status, clock, checked, r2_unfilled, start_unfilled, stall_dut = (
             "NOT_STARTED",
             "NOT_STARTED",
             False,
             None,
             None,
+            "withheld",
         )
     else:
         status = l2.get("l2_2_status", "WITHHELD")
@@ -433,6 +488,7 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         checked = l2.get("ok") is True
         r2_unfilled = l2.get("r2_unfilled")
         start_unfilled = l2.get("start_decision_unfilled")
+        stall_dut = l2.get("stall_dut", "withheld")
     return {
         "overall_ok": overall,
         "l2_2_status": status,
@@ -445,6 +501,9 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "can_close_l2_2": False,
         "r2_unfilled": r2_unfilled,
         "start_decision_unfilled": start_unfilled,
+        "stall_dut": stall_dut,
+        "ubuntu_24h_used_as_dut": False,
+        "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
         "exit_0_is_gate_pass": False,
         "pytest_is_l2_2_acceptance": False,

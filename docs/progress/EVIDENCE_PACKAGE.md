@@ -52,8 +52,9 @@ Clock **NOT STARTED**. L2-2 gate **NOT ACCEPTED**. Production 7×24 **NOT ACCEPT
 | `scaffold/preflight.json` | Offline preflight report from `scripts/l2_2_preflight.py`. Status `NOT_STARTED`. Not a start decision |
 | `SHA256SUMS.json` | SHA-256 binding written by `scripts/evidence_sha256sums.py` (`--glob "**/*"`). Not a PASS |
 | `scripts/l2_2_score.py` | Offline scorer. Exit 0 is an honest report, not a PASS |
-| `scripts/l2_2_preflight.py` | Offline readiness check. Exit 0 is `NOT_STARTED`, not a gate PASS and not a start |
-| `scripts/health_check.py` | Re-runs that preflight and scores the not-started fixture. Exit 0 is `overall_ok`, not a start and not acceptance. Its pytest step is the unit suite, not L2-2 acceptance |
+| `scripts/l2_2_preflight.py` | Offline readiness check. Exit 0 is `NOT_STARTED`, not a gate PASS and not a start. Includes the stall-watchdog hook |
+| `scripts/stall_watchdog.py` | Offline hook classifies synthetic fresh vs stale summaries and composes `scripts/coverage_gap_log.py` bands. Does not watch Ubuntu-24H, does not write `STALL_ALERT.json`, and does not start the clock |
+| `scripts/health_check.py` | Re-runs that preflight, including the synthetic stall-watchdog hook, and scores the not-started fixture. Exit 0 is `overall_ok`, not a start and not acceptance. Its pytest step is the unit suite, not L2-2 acceptance |
 | `tests/fixtures/l2_2/` | Synthetic **2026-02-01** captures |
 | `scripts/coverage_gap_log.py` | Runtime gap lines only. A line is not soak completeness |
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank pre-start note. Clock stays **NOT STARTED** |

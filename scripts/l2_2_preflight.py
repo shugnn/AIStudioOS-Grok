@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Offline readiness check for the L2-2 72h scaffold.
 
-Reads the repo. Parses documented flags. Does not launch soak_2h.py, does not
-start the 72h clock, and does not register scheduled tasks.
+Reads the repo. Parses documented flags. Classifies a synthetic fresh summary
+and a synthetic stale summary through scripts/stall_watchdog.py. Does not launch
+soak_2h.py, does not watch the committed Ubuntu-24H soak files, does not start
+the 72h clock, and does not register scheduled tasks.
 
 Exit 0: an honest NOT_STARTED report whose not-started scaffold checks held.
 Exit 2: an honest NOT_STARTED report whose checks did not all hold, or a report
@@ -69,6 +71,7 @@ REQUIRED_PATHS = (
     "scripts/l2_2_preflight.py",
     "scripts/coverage_gap_log.py",
     "scripts/supervision_monitor.py",
+    "scripts/stall_watchdog.py",
     "scripts/soak_2h.py",
     "docs/progress/l2_2/R2_CHECKLIST.md",
     "docs/progress/l2_2/START_DECISION.md",
@@ -97,6 +100,7 @@ CHECK_ORDER = (
     "emergency_stop",
     "gap_logger",
     "supervision_monitor",
+    "stall_watchdog",
     "scorer_refuses",
 )
 
@@ -110,6 +114,7 @@ OPERATOR_NOTE = (
     "Filling R2_CHECKLIST.md is not a start decision. "
     "Filling START_DECISION.md is not a start decision. "
     "A matching SHA256SUMS.json is not a start decision. "
+    "The stall-watchdog hook is not a start decision and is not L2-2 acceptance. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -132,6 +137,7 @@ NEXT_STEPS = (
     "Do not register, create, or enable Interactive console scheduled tasks.",
     "Leave the 2026-11-03..06 L2-4 reconstruction INCOMPLETE on PR #11. Do not re-capture that window.",
     "SHA256SUMS.json binds scaffold bytes only. It is not permission to start.",
+    "The stall-watchdog hook classified synthetic summaries only. It did not watch the Ubuntu-24H soak files and it did not start the 72h clock.",
     "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -630,6 +636,167 @@ def _check_monitor() -> dict[str, Any]:
     }
 
 
+def _closed_stall(detail: str, **extra: Any) -> dict[str, Any]:
+    """Honest stall-hook row. Claim fields stay closed even when the probe failed."""
+    row: dict[str, Any] = {
+        "ok": False,
+        "action": "synthetic_mtime",
+        "tool": "scripts/stall_watchdog.py",
+        "dut": "synthetic_temp_summary",
+        "ubuntu_24h_used_as_dut": False,
+        "default_summary_used": False,
+        "fresh_stalled": False,
+        "stale_stalled": False,
+        "fresh_exit": None,
+        "stale_exit": None,
+        "fresh_gap_band": None,
+        "stale_gap_band": None,
+        "gap_source": "operator_sample",
+        "gap_appended": False,
+        "gap_implies_soak_complete": False,
+        "composed_with": "scripts/coverage_gap_log.py",
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "soak_launched": False,
+        "binds_clock_start": False,
+        "implies_l2_2_acceptance": False,
+        "implies_72h_pass": False,
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "repo_alert_written": False,
+        "alert_left_in_repo": False,
+        "max_idle_minutes": 15.0,
+        "stall_idle_seconds": 900.0,
+        "gap_red_exclusive_min_seconds": 300.0,
+        "detail": detail,
+    }
+    row.update(extra)
+    row["l2_2_status"] = "NOT_STARTED"
+    row["clock_state"] = "NOT_STARTED"
+    row["clock_effect"] = "none"
+    row["soak_launched"] = False
+    row["binds_clock_start"] = False
+    row["implies_l2_2_acceptance"] = False
+    row["implies_72h_pass"] = False
+    row["production_7x24"] = "NOT_ACCEPTED"
+    row["can_start_clock"] = False
+    row["can_accept_l2_2"] = False
+    row["can_close_l2_2"] = False
+    row["ubuntu_24h_used_as_dut"] = False
+    row["default_summary_used"] = False
+    row["repo_alert_written"] = False
+    row["alert_left_in_repo"] = False
+    row["gap_appended"] = False
+    row["gap_implies_soak_complete"] = False
+    return row
+
+
+def _probe_overclaims(result: dict[str, Any]) -> bool:
+    """True when a probe result tries to start, accept, or use the ended soak as the DUT."""
+    if result.get("binds_clock_start") is True or result.get("implies_l2_2_acceptance") is True:
+        return True
+    if result.get("implies_72h_pass") is True or result.get("soak_launched") is True:
+        return True
+    if result.get("clock_effect") not in {None, "none"}:
+        return True
+    if result.get("clock_state") not in {None, "NOT_STARTED"}:
+        return True
+    if result.get("l2_2_status") not in {None, "NOT_STARTED"}:
+        return True
+    if result.get("production_7x24") not in {None, "NOT_ACCEPTED"}:
+        return True
+    if result.get("ubuntu_24h_used_as_dut") is True or result.get("default_summary_used") is True:
+        return True
+    if result.get("repo_alert_written") is True or result.get("alert_left_in_repo") is True:
+        return True
+    if result.get("gap_implies_soak_complete") is True or result.get("gap_appended") is True:
+        return True
+    return any(result.get(key) is True for key in GATE_KEYS)
+
+
+def _check_stall_watchdog() -> dict[str, Any]:
+    """Classify synthetic fresh vs stale summaries. Does not launch soak or watch Ubuntu-24H."""
+    try:
+        import stall_watchdog as watchdog
+    except Exception as exc:
+        return _closed_stall(f"import:{type(exc).__name__}")
+    if not callable(getattr(watchdog, "offline_probe", None)):
+        return _closed_stall("probe_missing")
+    try:
+        result = watchdog.offline_probe()
+    except Exception as exc:
+        return _closed_stall(f"probe:{type(exc).__name__}")
+    if not isinstance(result, dict):
+        return _closed_stall("probe_malformed")
+    overclaim = _probe_overclaims(result)
+    fresh_stalled = result.get("fresh_stalled")
+    stale_stalled = result.get("stale_stalled")
+    fresh_band = result.get("fresh_gap_band")
+    stale_band = result.get("stale_gap_band")
+    fresh_exit = result.get("fresh_exit")
+    stale_exit = result.get("stale_exit")
+    classified = (
+        result.get("ok") is True
+        and result.get("action") == "synthetic_mtime"
+        and result.get("dut") == "synthetic_temp_summary"
+        and result.get("ubuntu_24h_used_as_dut") is False
+        and result.get("default_summary_used") is False
+        and fresh_stalled is False
+        and stale_stalled is True
+        and fresh_exit == 0
+        and stale_exit == 1
+        and fresh_band == "ok"
+        and stale_band == "red"
+        and result.get("gap_source") == "operator_sample"
+        and result.get("gap_appended") is False
+        and result.get("gap_implies_soak_complete") is False
+        and result.get("composed_with") == "scripts/coverage_gap_log.py"
+        and result.get("clock_effect") == "none"
+        and result.get("soak_launched") is False
+        and result.get("repo_alert_written") is False
+        and result.get("alert_left_in_repo") is False
+        and result.get("max_idle_minutes") == 15
+        and result.get("stall_idle_seconds") == 900
+        and not overclaim
+    )
+    if overclaim:
+        detail = "probe_overclaim"
+    elif classified:
+        detail = "synthetic_fresh_vs_stale"
+    else:
+        raw = result.get("detail")
+        allowed = {
+            "classification_failed",
+            "probe_missing",
+            "probe_malformed",
+            "synthetic_path_in_soak_tree",
+            "default_summary",
+        }
+        prefixes = ("gap_logger:", "probe_io:", "gap_band:", "import:", "probe:")
+        if isinstance(raw, str) and (raw in allowed or raw.startswith(prefixes)):
+            detail = raw
+        else:
+            detail = "classification_failed"
+    band_ok = fresh_band if fresh_band in {"ok", "yellow", "red"} else None
+    band_stale = stale_band if stale_band in {"ok", "yellow", "red"} else None
+    return _closed_stall(
+        detail,
+        ok=classified,
+        fresh_stalled=fresh_stalled if isinstance(fresh_stalled, bool) else False,
+        stale_stalled=stale_stalled if isinstance(stale_stalled, bool) else False,
+        fresh_exit=fresh_exit if isinstance(fresh_exit, int) and not isinstance(fresh_exit, bool) else None,
+        stale_exit=stale_exit if isinstance(stale_exit, int) and not isinstance(stale_exit, bool) else None,
+        fresh_gap_band=band_ok,
+        stale_gap_band=band_stale,
+        max_idle_minutes=15.0,
+        stall_idle_seconds=900.0,
+        gap_red_exclusive_min_seconds=300.0,
+    )
+
+
 def _refuses_forged(validate, report: dict[str, Any], **edits: Any) -> bool:
     forged = json.loads(json.dumps(report))
     for key, value in edits.items():
@@ -778,6 +945,7 @@ def preflight(
             "emergency_stop": _check_stop(stop, repo),
             "gap_logger": _check_gap_logger(),
             "supervision_monitor": _check_monitor(),
+            "stall_watchdog": _check_stall_watchdog(),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -875,6 +1043,44 @@ def validate_report(report: dict[str, Any]) -> list[str]:
             violations.append("start_decision_implies_start")
         if decided.get("detail") == "forged_claim" and decided.get("ok") is True:
             violations.append("start_decision_implies_start")
+    stall = checks.get("stall_watchdog") if isinstance(checks.get("stall_watchdog"), dict) else {}
+    if isinstance(stall, dict):
+        if stall.get("binds_clock_start") is True or stall.get("implies_l2_2_acceptance") is True:
+            violations.append("stall_implies_start")
+        if stall.get("implies_72h_pass") is True or stall.get("gap_implies_soak_complete") is True:
+            violations.append("stall_implies_start")
+        if stall.get("ubuntu_24h_used_as_dut") is True or stall.get("default_summary_used") is True:
+            violations.append("stall_ubuntu_dut")
+        if stall.get("repo_alert_written") is True or stall.get("alert_left_in_repo") is True:
+            violations.append("stall_alert_in_repo")
+        if stall.get("gap_appended") is True:
+            violations.append("stall_gap_appended")
+        if stall.get("clock_effect") != "none":
+            violations.append("clock_effect")
+        if stall.get("clock_state") != "NOT_STARTED":
+            violations.append("clock_state")
+        if stall.get("l2_2_status") != "NOT_STARTED":
+            violations.append("status")
+        if stall.get("production_7x24") != "NOT_ACCEPTED":
+            violations.append("production_claim")
+        for key in GATE_KEYS:
+            if stall.get(key) is not False:
+                violations.append("forged_" + key)
+        if stall.get("ok") is True:
+            shape_ok = (
+                stall.get("fresh_stalled") is False
+                and stall.get("stale_stalled") is True
+                and stall.get("fresh_exit") == 0
+                and stall.get("stale_exit") == 1
+                and stall.get("fresh_gap_band") == "ok"
+                and stall.get("stale_gap_band") == "red"
+                and stall.get("action") == "synthetic_mtime"
+                and stall.get("dut") == "synthetic_temp_summary"
+                and stall.get("detail") == "synthetic_fresh_vs_stale"
+                and stall.get("gap_appended") is False
+            )
+            if not shape_ok:
+                violations.append("stall_classification")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

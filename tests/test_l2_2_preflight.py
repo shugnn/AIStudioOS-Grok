@@ -17,6 +17,7 @@ import evidence_sha256sums as sums_tool  # noqa: E402
 import l2_2_preflight as pre  # noqa: E402
 import l2_2_score as l2  # noqa: E402
 import soak_2h  # noqa: E402
+import stall_watchdog  # noqa: E402
 import supervision_monitor  # noqa: E402
 
 COMMITTED = ROOT / "docs" / "progress" / "l2_2" / "scaffold" / "preflight.json"
@@ -99,6 +100,35 @@ def test_real_repo_preflight_is_not_started_and_intact():
     assert report["checks"]["supervision_monitor"]["wired_to_gap_logger"] is True
     assert report["checks"]["supervision_monitor"]["live_dut_switch_parses"] is True
     assert report["checks"]["supervision_monitor"]["executed"] is False
+    stall = report["checks"]["stall_watchdog"]
+    assert stall["ok"] is True
+    assert stall["detail"] == "synthetic_fresh_vs_stale"
+    assert stall["action"] == "synthetic_mtime"
+    assert stall["dut"] == "synthetic_temp_summary"
+    assert stall["ubuntu_24h_used_as_dut"] is False
+    assert stall["default_summary_used"] is False
+    assert stall["fresh_stalled"] is False
+    assert stall["stale_stalled"] is True
+    assert stall["fresh_exit"] == 0
+    assert stall["stale_exit"] == 1
+    assert stall["fresh_gap_band"] == "ok"
+    assert stall["stale_gap_band"] == "red"
+    assert stall["gap_source"] == "operator_sample"
+    assert stall["gap_appended"] is False
+    assert stall["gap_implies_soak_complete"] is False
+    assert stall["composed_with"] == "scripts/coverage_gap_log.py"
+    assert stall["clock_effect"] == "none"
+    assert stall["soak_launched"] is False
+    assert stall["binds_clock_start"] is False
+    assert stall["implies_l2_2_acceptance"] is False
+    assert stall["implies_72h_pass"] is False
+    assert stall["l2_2_status"] == "NOT_STARTED"
+    assert stall["clock_state"] == "NOT_STARTED"
+    assert stall["production_7x24"] == "NOT_ACCEPTED"
+    assert stall["can_start_clock"] is False
+    assert stall["repo_alert_written"] is False
+    assert stall["alert_left_in_repo"] is False
+    assert "soak_2h" not in json.dumps(stall)
     assert report["checks"]["scorer_refuses"]["status"] == "NOT_STARTED"
     assert report["checks"]["scorer_refuses"]["gates_false"] is True
     assert report["checks"]["scorer_refuses"]["forged_pass_rejected"] is True
@@ -220,6 +250,7 @@ def test_soak_flags_are_parsed_not_executed(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(soak_2h, "main", boom)
     monkeypatch.setattr(supervision_monitor, "main", boom)
+    monkeypatch.setattr(stall_watchdog, "main", boom)
     monkeypatch.setattr(gaplog, "append_record", boom)
     bare = soak_2h.build_parser().parse_args([])
     assert bare.via_l1 is False
@@ -230,6 +261,8 @@ def test_soak_flags_are_parsed_not_executed(monkeypatch: pytest.MonkeyPatch):
     _assert_not_a_start(report)
     assert report["checks"]["soak_flags"]["detail"] == "parsed_not_executed"
     assert report["checks"]["supervision_monitor"]["detail"] == "parsed_not_executed"
+    assert report["checks"]["stall_watchdog"]["detail"] == "synthetic_fresh_vs_stale"
+    assert report["checks"]["stall_watchdog"]["soak_launched"] is False
 
 
 def test_missing_soak_flag_fails_closed(monkeypatch: pytest.MonkeyPatch):
@@ -309,6 +342,8 @@ def test_preflight_source_does_not_launch_soak_or_register_tasks():
         assert token not in text
     assert "build_parser" in text
     assert "can_start_clock" in text
+    assert "offline_probe" in text
+    assert "stall_watchdog.main" not in text
 
 
 def test_operator_notes_say_running_is_not_a_start():
@@ -317,6 +352,10 @@ def test_operator_notes_say_running_is_not_a_start():
     decision = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
     schema = json.loads((ROOT / "docs" / "progress" / "l2_2" / "SCHEMA.json").read_text(encoding="utf-8"))
     assert "scripts/l2_2_preflight.py" in readme
+    assert "scripts/stall_watchdog.py" in readme
+    assert "synthetic fresh summary" in readme
+    assert "STALL_ALERT.json" in readme
+    assert "86400.001" in readme
     assert "not a start decision" in readme
     assert "START_DECISION.md" in readme
     assert "--idle-policy reseed --max-wall-seconds 259200" in readme
@@ -338,6 +377,8 @@ def test_evidence_package_indexes_preflight_and_sums_as_not_started():
     text = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")
     section = text.split("## L2-2", 1)[1].split("\n## ", 1)[0]
     assert "scripts/l2_2_preflight.py" in section
+    assert "scripts/stall_watchdog.py" in section
+    assert "synthetic fresh" in section
     assert "START_DECISION.md" in section
     assert "Filling this file alone does not start the soak" in section or "not a start" in section
     assert "scaffold/preflight.json" in section
@@ -495,3 +536,70 @@ def test_start_decision_field_cannot_imply_a_start():
     assert "start_decision_implies_start" in pre.validate_report(forged)
     refused = pre.validate_report(pre.preflight())
     assert refused == []
+
+
+def test_stall_hook_overclaim_cannot_start_the_clock(monkeypatch: pytest.MonkeyPatch):
+    real = stall_watchdog.offline_probe()
+
+    def evil():
+        forged = json.loads(json.dumps(real))
+        forged["l2_2_status"] = "PASS"
+        forged["clock_state"] = "STARTED"
+        forged["production_7x24"] = "ACCEPTED"
+        forged["can_start_clock"] = True
+        forged["implies_l2_2_acceptance"] = True
+        forged["implies_72h_pass"] = True
+        forged["binds_clock_start"] = True
+        forged["ubuntu_24h_used_as_dut"] = True
+        forged["soak_launched"] = True
+        return forged
+
+    monkeypatch.setattr(stall_watchdog, "offline_probe", evil)
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    stall = report["checks"]["stall_watchdog"]
+    assert stall["ok"] is False
+    assert stall["detail"] == "probe_overclaim"
+    assert stall["l2_2_status"] == "NOT_STARTED"
+    assert stall["clock_state"] == "NOT_STARTED"
+    assert stall["production_7x24"] == "NOT_ACCEPTED"
+    assert stall["can_start_clock"] is False
+    assert stall["implies_l2_2_acceptance"] is False
+    assert stall["ubuntu_24h_used_as_dut"] is False
+    assert stall["soak_launched"] is False
+    assert report["not_started_scaffold_intact"] is False
+    assert report["gates"]["can_start_clock"] is False
+    dumped = json.dumps(report)
+    assert '"l2_2_status": "PASS"' not in dumped
+    assert '"production_7x24": "ACCEPTED"' not in dumped
+    assert '"clock_state": "STARTED"' not in dumped
+    assert '"can_start_clock": true' not in dumped
+
+
+def test_forged_stall_hook_report_is_not_a_start_or_acceptance():
+    report = pre.preflight()
+    forged = json.loads(json.dumps(report))
+    forged["checks"]["stall_watchdog"]["implies_l2_2_acceptance"] = True
+    forged["checks"]["stall_watchdog"]["binds_clock_start"] = True
+    forged["checks"]["stall_watchdog"]["implies_72h_pass"] = True
+    assert "stall_implies_start" in pre.validate_report(forged)
+    forged = json.loads(json.dumps(report))
+    forged["checks"]["stall_watchdog"]["l2_2_status"] = "PASS"
+    forged["checks"]["stall_watchdog"]["can_start_clock"] = True
+    forged["checks"]["stall_watchdog"]["production_7x24"] = "ACCEPTED"
+    forged["checks"]["stall_watchdog"]["clock_state"] = "STARTED"
+    names = pre.validate_report(forged)
+    assert "status" in names
+    assert "forged_can_start_clock" in names
+    assert "production_claim" in names
+    assert "clock_state" in names
+    forged = json.loads(json.dumps(report))
+    forged["checks"]["stall_watchdog"]["ubuntu_24h_used_as_dut"] = True
+    forged["checks"]["stall_watchdog"]["default_summary_used"] = True
+    assert "stall_ubuntu_dut" in pre.validate_report(forged)
+    forged = json.loads(json.dumps(report))
+    forged["checks"]["stall_watchdog"]["ok"] = True
+    forged["checks"]["stall_watchdog"]["fresh_stalled"] = True
+    forged["checks"]["stall_watchdog"]["stale_stalled"] = False
+    assert "stall_classification" in pre.validate_report(forged)
+    assert report["gates"]["can_start_clock"] is False

@@ -18,7 +18,7 @@ One continuous local duty on a single host, scored only after it exists:
 | Heartbeat | Live soak `summary.jsonl` while that soak is the DUT. `runner-*.json` only when the DUT is L1 with no soak |
 | Supervision | R2 written **before** start. Yellow gap 13s–5min is `coverage_gap`, not a business FAIL. Red gap **> 5 min** stops and seals as supervision failure |
 | R3 | A receipt is required before any later **supervision-verified** tag. This scaffold does not run R3 |
-| Stall | `scripts/stall_watchdog.py` (L2-1 code PASS) may watch the live summary during a future run. That code PASS is not a 72h PASS |
+| Stall | `scripts/stall_watchdog.py` (L2-1 code PASS) may watch a future **live** summary. The offline hook classifies synthetic fresh and stale files only. That code PASS is not a 72h PASS |
 | Not this gate | Interactive / logon scheduled tasks, a 86400s wall, product L2 task-split, L2-3 kill recovery |
 
 The committed Ubuntu-24H file `docs/progress/soak_2h/metrics.json` is wall **86400.001**. The scorer treats that length as **SHORT**. It is not relabelled as 72h.
@@ -32,8 +32,9 @@ The committed Ubuntu-24H file `docs/progress/soak_2h/metrics.json` is wall **864
 | `tests/fixtures/l2_2/` | Synthetic captures dated **2026-02-01**. Not host evidence. Not the November incident |
 | `tests/test_l2_2_score.py` | Short wall, exit0-only, full wall still refused, Interactive registration refused, forged PASS rejected |
 | `docs/progress/l2_2/scaffold/report.json` | Score of the not-started fixture. Label `scaffold` |
-| `scripts/l2_2_preflight.py` | Offline readiness check. Emits `NOT_STARTED`. Does not launch soak. `can_start_clock` stays false |
-| `scripts/health_check.py` | One-shot local check. Re-runs this preflight and scores the not-started fixture. Does not launch soak. Exit 0 is `overall_ok`, not a gate PASS and not a start. A pytest step in that command is the unit suite, not L2-2 acceptance |
+| `scripts/l2_2_preflight.py` | Offline readiness check. Emits `NOT_STARTED`. Does not launch soak. `can_start_clock` stays false. Calls the stall-watchdog hook on synthetic temp summaries |
+| `scripts/stall_watchdog.py` | L2-1 age check. The offline hook (`offline_probe`) classifies a synthetic fresh summary and a synthetic stale summary, composes `coverage_gap_log.py` bands, and does not write `docs/progress/STALL_ALERT.json`. It does not watch `docs/progress/soak_2h` and does not start the clock |
+| `scripts/health_check.py` | One-shot local check. Re-runs this preflight, including the synthetic stall-watchdog hook, and scores the not-started fixture. Does not launch soak. Exit 0 is `overall_ok`, not a gate PASS and not a start. A pytest step in that command is the unit suite, not L2-2 acceptance |
 | `docs/progress/l2_2/START_DECISION.md` | Blank start-decision template. Decision status **Not given**. Filling or committing it does not start the soak |
 | `docs/progress/l2_2/scaffold/preflight.json` | Committed output of that check. Label `scaffold`. Not a start decision |
 | `docs/progress/l2_2/SHA256SUMS.json` | Byte binding from `scripts/evidence_sha256sums.py`. Not a start, not a PASS, not production acceptance |
@@ -53,7 +54,7 @@ python scripts/evidence_sha256sums.py docs/progress/l2_2 --glob "**/*"
 
 The sums command rewrites `SHA256SUMS.json` for the files in this directory. It does not launch the soak. A matching file is not a gate PASS and does not set `can_start_clock`. The preflight checks those bytes, except the digest of `scaffold/preflight.json` itself, which the tests recompute.
 
-Exit 0 from the preflight means the not-started scaffold still matches this repo: the pieces are present, the documented soak flags parse, `R2_CHECKLIST.md` is still unfilled, `START_DECISION.md` is still the blank template with decision **Not given**, `docs/progress/EMERGENCY_STOP` is absent, and the scorer still refuses PASS / start / accept / close. Exit 0 is an honest NOT STARTED report. It does **not** mean L2-2 passed, it does **not** set `can_start_clock`, and it does **not** launch `soak_2h.py`. Running the preflight is not a start decision. Filling the checklist is not a start decision. Filling `START_DECISION.md` is not a start decision.
+Exit 0 from the preflight means the not-started scaffold still matches this repo: the pieces are present, the documented soak flags parse, `R2_CHECKLIST.md` is still unfilled, `START_DECISION.md` is still the blank template with decision **Not given**, `docs/progress/EMERGENCY_STOP` is absent, the stall-watchdog hook classified a synthetic fresh summary (not stalled, gap band ok) and a synthetic stale summary (stalled, gap band red) without appending a gap line, and the scorer still refuses PASS / start / accept / close. Those synthetic files are temp files. The hook does not open `docs/progress/soak_2h` and does not leave `docs/progress/STALL_ALERT.json`. Exit 0 is an honest NOT STARTED report. It does **not** mean L2-2 passed, it does **not** set `can_start_clock`, and it does **not** launch `soak_2h.py`. Running the preflight is not a start decision. Filling the checklist is not a start decision. Filling `START_DECISION.md` is not a start decision. The stall hook is not a start and not L2-2 acceptance.
 
 `scripts/health_check.py` runs that same preflight and scores `tests/fixtures/l2_2/scaffold_clock_not_started.json`, then keeps the older local checks. Exit 0 there is `overall_ok` for those checks: `l2_2_status` / `clock_state` stay `NOT_STARTED`, the soak was not launched, the three gates stay false, production 7×24 stays **NOT ACCEPTED**, `R2_CHECKLIST.md` is still the blank template, and `START_DECISION.md` is still **Not given**. A pytest run inside that command is the unit suite. It is not L2-2 acceptance and it is not a start decision. The check fails closed if a report flips a gate, or if `START_DECISION.md` smuggles a start, PASS, ACCEPTED, or `can_start_clock` true. Writing that file is not a start.
 
@@ -79,7 +80,7 @@ PYTHONPATH=. python scripts/soak_2h.py --cycles 5000 --interval 60 --via-l1 --se
   --idle-policy reseed --max-wall-seconds 259200
 ```
 
-`cycles` must stay above `259200 / interval` so the stop reason can be `max_wall_seconds`. Point `stall_watchdog.py` at the **live** summary for that process, not at an ended experiment.
+`cycles` must stay above `259200 / interval` so the stop reason can be `max_wall_seconds`. Point `stall_watchdog.py` at the **live** summary for that process, not at an ended experiment. The offline hook must not be aimed at the committed Ubuntu-24H files (`docs/progress/soak_2h`, wall 86400.001s). Those stay **SHORT**.
 
 5. Score the resulting metrics with `scripts/l2_2_score.py`. Expect **INCOMPLETE**. The tool will still refuse PASS and will not accept production 7×24.
 6. Run R3 injection and keep the receipt before anyone uses a supervision-verified tag. The observation track (DS) accepts or rejects. This scorer does not.

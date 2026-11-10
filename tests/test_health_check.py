@@ -67,6 +67,19 @@ def test_healthy_not_started_scaffold_keeps_gates_false():
     assert result["clock_state"] == "NOT_STARTED"
     assert result["r2_unfilled"] is True
     assert result["start_decision_unfilled"] is True
+    assert result["stall_dut"] == "synthetic_temp_summary"
+    assert result["ubuntu_24h_used_as_dut"] is False
+    assert result["stall_hook_is_l2_2_acceptance"] is False
+    stall = preflight_report["checks"]["stall_watchdog"]
+    assert stall["detail"] == "synthetic_fresh_vs_stale"
+    assert stall["fresh_stalled"] is False
+    assert stall["stale_stalled"] is True
+    assert stall["fresh_gap_band"] == "ok"
+    assert stall["stale_gap_band"] == "red"
+    assert stall["ubuntu_24h_used_as_dut"] is False
+    assert stall["implies_l2_2_acceptance"] is False
+    assert stall["binds_clock_start"] is False
+    assert stall["can_start_clock"] is False
     _assert_gates_closed(result)
 
 
@@ -84,6 +97,9 @@ def test_subprocess_preflight_and_score_stay_not_started():
     assert result["clock_state"] == "NOT_STARTED"
     assert result["r2_unfilled"] is True
     assert result["start_decision_unfilled"] is True
+    assert result["stall_dut"] == "synthetic_temp_summary"
+    assert result["ubuntu_24h_used_as_dut"] is False
+    assert result["stall_hook_is_l2_2_acceptance"] is False
     _assert_gates_closed(result)
     after = {
         CHECKLIST: CHECKLIST.read_bytes(),
@@ -131,6 +147,36 @@ def test_forged_start_pass_accept_close_are_refused(target, key, value, needle):
     _assert_gates_closed(result)
     assert CHECKLIST.read_bytes() == before
     assert "**Not given**" in CHECKLIST.read_text(encoding="utf-8")
+
+
+def test_forged_stall_hook_is_not_a_start_or_acceptance():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    forged["checks"]["stall_watchdog"]["implies_l2_2_acceptance"] = True
+    forged["checks"]["stall_watchdog"]["implies_72h_pass"] = True
+    forged["checks"]["stall_watchdog"]["binds_clock_start"] = True
+    forged["checks"]["stall_watchdog"]["can_start_clock"] = True
+    forged["checks"]["stall_watchdog"]["l2_2_status"] = "PASS"
+    forged["checks"]["stall_watchdog"]["production_7x24"] = "ACCEPTED"
+    forged["checks"]["stall_watchdog"]["clock_state"] = "STARTED"
+    forged["checks"]["stall_watchdog"]["ubuntu_24h_used_as_dut"] = True
+    result = _assess(forged, scored, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "stall_implies_start",
+        "forged_can_start_clock",
+        "forged_pass",
+        "forged_production_accepted",
+        "forged_clock_start",
+        "stall_ubuntu_dut",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    assert result["stall_dut"] == "withheld"
+    assert result["ubuntu_24h_used_as_dut"] is False
+    assert result["stall_hook_is_l2_2_acceptance"] is False
+    _assert_gates_closed(result)
 
 
 def test_nested_pass_accepted_and_start_are_refused():
@@ -313,6 +359,9 @@ def test_summary_never_grants_gates():
     assert summary["gate_result"] == "NOT_A_GATE"
     assert summary["exit_0_is_gate_pass"] is False
     assert summary["pytest_is_l2_2_acceptance"] is False
+    assert summary["stall_dut"] == "withheld"
+    assert summary["ubuntu_24h_used_as_dut"] is False
+    assert summary["stall_hook_is_l2_2_acceptance"] is False
 
     forged = {
         "step": "l2_2_offline",

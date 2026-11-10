@@ -44,6 +44,7 @@
     "scripts/l2_2_preflight.py is an offline readiness check. Exit 0 is an honest NOT_STARTED report. It does not launch soak_2h.py and does not set can_start_clock. Running it is not a start decision.",
     "docs/progress/l2_2/SHA256SUMS.json is a byte binding from scripts/evidence_sha256sums.py. Matching sums do not start the clock, accept L2-2, or accept production 7x24.",
     "docs/progress/l2_2/START_DECISION.md is a blank template. Decision status stays Not given. Filling or committing that file does not start the soak and does not set can_start_clock.",
+    "The offline stall-watchdog hook classifies synthetic fresh and stale summaries through scripts/stall_watchdog.py and reads bands from scripts/coverage_gap_log.py. It does not watch docs/progress/soak_2h, does not write STALL_ALERT.json, does not start the 72h clock, and does not accept L2-2. Ubuntu-24H wall 86400.001s stays SHORT.",
     "The scorer never starts the clock and never registers Interactive console scheduled tasks.",
     "Registering Interactive duty is a founder major gate and is out of scope for the L2-2 scaffold.",
     "Lighting every informational bar still leaves can_accept_l2_2 false.",

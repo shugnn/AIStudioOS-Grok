@@ -1,0 +1,351 @@
+{
+  "claim_boundary": {
+    "l2_granted": false,
+    "l2_accepted": false,
+    "production_7x24": "NOT ACCEPTED",
+    "l2_2_72h_clock": "NOT STARTED",
+    "new_frozen_observation_task": false,
+    "t1_or_t2_rerun": false
+  },
+  "what_this_is": "Minimal evidence that changing the goal and the input schema changes the derived job set. DS judged L2 conditional on Issue #9 comment 6765608469. This dump does not record acceptance of that evidence.",
+  "historical": {
+    "decomposer_before_this_change": "returned []",
+    "stub_locations": [
+      "main: control_plane/task_decomposer.py (introduced in 0ca8074, still the stub at a081c2e)",
+      "cursor/ds-t2-20261110-recovery-aae0: same stub"
+    ],
+    "t1_dispatch": "task_inbox/DS-T1-20261108/dispatch.json on main",
+    "t2_dispatch": "task_inbox/DS-T2-20261110/dispatch.json on cursor/ds-t2-20261110-recovery-aae0",
+    "job_titles": [
+      "generate_or_verify_orders_csv",
+      "monthly_summary",
+      "anomaly_list",
+      "evidence_pack_manifest"
+    ],
+    "derived_by_decompose": false,
+    "note": "T1 and T2 share one frozen orders card: monthly operating summary, anomaly list, evidence pack. Both dispatch files list the same four titles. Those titles were written on the cards. decompose() did not produce them. This change does not edit those dispatch files and does not rerun T1 or T2."
+  },
+  "decision_rules": [
+    "Tokenize the statement on ASCII words. Map tokens onto a closed intent set: monthly, weekly, summary, anomaly, evidence, sla, aging, verify_input. Card ids, fixture names, and schema names are not read.",
+    "Classify each column, first match wins: *_id identifier; *_at event_time; *_date/_day/date calendar_date; known measure names measure; status/state status; priority/severity priority; a declared numeric type measure; otherwise dimension.",
+    "Emit a job only when its predicate is true. Titles are composed from the grain and the actual column names. An unseen schema cannot select a stored title list.",
+    "Emission order, which assigns J1..Jn: verify_input_schema, temporal_aggregate (month then week), anomaly_list, sla_breach_list, backlog_aging, evidence_pack.",
+    "verify_input_schema fires only when the statement asks to verify a frozen input or asks for evidence, and a schema is present. The key is the first identifier column.",
+    "temporal_aggregate fires only for a summary at month and/or week grain when the schema has at least one measure and one time column. Calendar dates win over event times. Measures stay in schema order.",
+    "anomaly_list fires only when anomalies are requested and a status column or a measure exists.",
+    "sla_breach_list fires only when a breach is requested, at least two event_time columns exist, and a group column is named with 'by <column>' or a priority-role column exists. Start prefers opened_at then created_at, else schema order. End prefers first_response_at, responded_at, resolved_at, closed_at, else another event time.",
+    "backlog_aging fires only when aging or backlog is requested and an event_time column exists. Open uses the same start preference. Close prefers resolved_at then closed_at and does not use a response timestamp. Weekly grain wins over monthly when both intents are present.",
+    "evidence_pack fires only when evidence is requested and a schema is present. Its title is the sorted set of column roles, and it records the prior job ids it covers.",
+    "No predicate matches \u2192 []. That is also what the previous stub returned for every input. The same statement tokens and the same columns always return the same jobs."
+  ],
+  "case_a": {
+    "input": {
+      "statement": "Frozen tabular orders: produce a monthly operating summary, an anomaly list, and an independently verifiable evidence pack.",
+      "schema": {
+        "columns": [
+          {
+            "name": "order_id"
+          },
+          {
+            "name": "order_date"
+          },
+          {
+            "name": "amount"
+          },
+          {
+            "name": "status"
+          },
+          {
+            "name": "customer_id"
+          },
+          {
+            "name": "channel"
+          }
+        ]
+      }
+    },
+    "jobs": [
+      {
+        "job_id": "J1",
+        "title": "verify_input_schema_keyed_by_order_id",
+        "kind": "verify_input_schema",
+        "status": "PENDING",
+        "reason": "rule=verify_input_schema; because=evidence,verify_input; key=order_id",
+        "inputs": {
+          "key": "order_id",
+          "columns": [
+            "order_id",
+            "order_date",
+            "amount",
+            "status",
+            "customer_id",
+            "channel"
+          ]
+        }
+      },
+      {
+        "job_id": "J2",
+        "title": "aggregate_amount_by_month_of_order_date",
+        "kind": "temporal_aggregate",
+        "status": "PENDING",
+        "reason": "rule=temporal_aggregate; because=monthly,summary; grain=month; measures=amount; time_column=order_date; group_by=none",
+        "inputs": {
+          "grain": "month",
+          "measures": [
+            "amount"
+          ],
+          "time_column": "order_date",
+          "group_by": null
+        }
+      },
+      {
+        "job_id": "J3",
+        "title": "list_anomalies_on_status_amount",
+        "kind": "anomaly_list",
+        "status": "PENDING",
+        "reason": "rule=anomaly_list; because=anomaly; columns=status,amount",
+        "inputs": {
+          "columns": [
+            "status",
+            "amount"
+          ]
+        }
+      },
+      {
+        "job_id": "J4",
+        "title": "assemble_evidence_pack_over_calendar_date_dimension_identifier_measure_status",
+        "kind": "evidence_pack",
+        "status": "PENDING",
+        "reason": "rule=evidence_pack; because=evidence; roles=calendar_date,dimension,identifier,measure,status; covers=J1,J2,J3",
+        "inputs": {
+          "roles": [
+            "calendar_date",
+            "dimension",
+            "identifier",
+            "measure",
+            "status"
+          ],
+          "covers": [
+            "J1",
+            "J2",
+            "J3"
+          ]
+        }
+      }
+    ]
+  },
+  "case_b": {
+    "input": {
+      "statement": "Support tickets: SLA breach list by priority, weekly backlog aging, and an independently verifiable evidence pack.",
+      "schema": {
+        "columns": [
+          {
+            "name": "ticket_id"
+          },
+          {
+            "name": "opened_at"
+          },
+          {
+            "name": "first_response_at"
+          },
+          {
+            "name": "resolved_at"
+          },
+          {
+            "name": "priority"
+          }
+        ]
+      }
+    },
+    "jobs": [
+      {
+        "job_id": "J1",
+        "title": "verify_input_schema_keyed_by_ticket_id",
+        "kind": "verify_input_schema",
+        "status": "PENDING",
+        "reason": "rule=verify_input_schema; because=evidence; key=ticket_id",
+        "inputs": {
+          "key": "ticket_id",
+          "columns": [
+            "ticket_id",
+            "opened_at",
+            "first_response_at",
+            "resolved_at",
+            "priority"
+          ]
+        }
+      },
+      {
+        "job_id": "J2",
+        "title": "list_sla_breaches_by_priority_from_opened_at_to_first_response_at",
+        "kind": "sla_breach_list",
+        "status": "PENDING",
+        "reason": "rule=sla_breach_list; because=sla; group_by=priority; start=opened_at; end=first_response_at",
+        "inputs": {
+          "group_by": "priority",
+          "start": "opened_at",
+          "end": "first_response_at"
+        }
+      },
+      {
+        "job_id": "J3",
+        "title": "age_backlog_by_week_of_opened_at_until_resolved_at",
+        "kind": "backlog_aging",
+        "status": "PENDING",
+        "reason": "rule=backlog_aging; because=aging,weekly; grain=week; open=opened_at; close=resolved_at",
+        "inputs": {
+          "grain": "week",
+          "open": "opened_at",
+          "close": "resolved_at"
+        }
+      },
+      {
+        "job_id": "J4",
+        "title": "assemble_evidence_pack_over_event_time_identifier_priority",
+        "kind": "evidence_pack",
+        "status": "PENDING",
+        "reason": "rule=evidence_pack; because=evidence; roles=event_time,identifier,priority; covers=J1,J2,J3",
+        "inputs": {
+          "roles": [
+            "event_time",
+            "identifier",
+            "priority"
+          ],
+          "covers": [
+            "J1",
+            "J2",
+            "J3"
+          ]
+        }
+      }
+    ]
+  },
+  "cross_orders_schema_with_case_b_goal": {
+    "input": {
+      "statement": "Support tickets: SLA breach list by priority, weekly backlog aging, and an independently verifiable evidence pack.",
+      "schema": {
+        "columns": [
+          {
+            "name": "order_id"
+          },
+          {
+            "name": "order_date"
+          },
+          {
+            "name": "amount"
+          },
+          {
+            "name": "status"
+          },
+          {
+            "name": "customer_id"
+          },
+          {
+            "name": "channel"
+          }
+        ]
+      }
+    },
+    "jobs": [
+      {
+        "job_id": "J1",
+        "title": "verify_input_schema_keyed_by_order_id",
+        "kind": "verify_input_schema",
+        "status": "PENDING",
+        "reason": "rule=verify_input_schema; because=evidence; key=order_id",
+        "inputs": {
+          "key": "order_id",
+          "columns": [
+            "order_id",
+            "order_date",
+            "amount",
+            "status",
+            "customer_id",
+            "channel"
+          ]
+        }
+      },
+      {
+        "job_id": "J2",
+        "title": "assemble_evidence_pack_over_calendar_date_dimension_identifier_measure_status",
+        "kind": "evidence_pack",
+        "status": "PENDING",
+        "reason": "rule=evidence_pack; because=evidence; roles=calendar_date,dimension,identifier,measure,status; covers=J1",
+        "inputs": {
+          "roles": [
+            "calendar_date",
+            "dimension",
+            "identifier",
+            "measure",
+            "status"
+          ],
+          "covers": [
+            "J1"
+          ]
+        }
+      }
+    ],
+    "why": "Case B goal words on an orders schema. No two event_time columns, so the SLA and aging predicates do not fire."
+  },
+  "cross_ticket_schema_with_case_a_goal": {
+    "input": {
+      "statement": "Frozen tabular orders: produce a monthly operating summary, an anomaly list, and an independently verifiable evidence pack.",
+      "schema": {
+        "columns": [
+          {
+            "name": "ticket_id"
+          },
+          {
+            "name": "opened_at"
+          },
+          {
+            "name": "first_response_at"
+          },
+          {
+            "name": "resolved_at"
+          },
+          {
+            "name": "priority"
+          }
+        ]
+      }
+    },
+    "jobs": [
+      {
+        "job_id": "J1",
+        "title": "verify_input_schema_keyed_by_ticket_id",
+        "kind": "verify_input_schema",
+        "status": "PENDING",
+        "reason": "rule=verify_input_schema; because=evidence,verify_input; key=ticket_id",
+        "inputs": {
+          "key": "ticket_id",
+          "columns": [
+            "ticket_id",
+            "opened_at",
+            "first_response_at",
+            "resolved_at",
+            "priority"
+          ]
+        }
+      },
+      {
+        "job_id": "J2",
+        "title": "assemble_evidence_pack_over_event_time_identifier_priority",
+        "kind": "evidence_pack",
+        "status": "PENDING",
+        "reason": "rule=evidence_pack; because=evidence; roles=event_time,identifier,priority; covers=J1",
+        "inputs": {
+          "roles": [
+            "event_time",
+            "identifier",
+            "priority"
+          ],
+          "covers": [
+            "J1"
+          ]
+        }
+      }
+    ],
+    "why": "Case A goal words on a ticket schema. No measure and no status column, so the monthly aggregate and the anomaly list do not fire."
+  }
+}

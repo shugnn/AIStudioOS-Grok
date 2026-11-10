@@ -1,0 +1,8 @@
+{
+  "killed_pid": 2406,
+  "killed_utc": "2026-11-10T08:29:48Z",
+  "kill_checkpoint": "after_J2_before_J3",
+  "signal": 9,
+  "launcher_pid": 2406,
+  "wait_status": 137
+}

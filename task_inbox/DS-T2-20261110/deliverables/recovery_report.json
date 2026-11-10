@@ -1,0 +1,19 @@
+{
+  "task_id": "DS-T2-20261110",
+  "killed_pid": 2406,
+  "kill_checkpoint": "after_J2_before_J3",
+  "killed_utc": "2026-11-10T08:29:48Z",
+  "resumed_utc": "2026-11-10T08:29:49Z",
+  "jobs_done_before": [
+    "J1",
+    "J2"
+  ],
+  "jobs_done_after": [
+    "J1",
+    "J2",
+    "J3",
+    "J4"
+  ],
+  "duplicate_jobs": [],
+  "idempotency_keys": []
+}

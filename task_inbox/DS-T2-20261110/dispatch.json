@@ -1,0 +1,64 @@
+{
+  "task_id": "DS-T2-20261110",
+  "dispatched_utc": "2026-11-10T08:23:28Z",
+  "inbox": "task_inbox/DS-T2-20261110/",
+  "worker": "scripts/worker_run_task.py",
+  "jobs": [
+    {
+      "job_id": "J1",
+      "title": "generate_or_verify_orders_csv",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T2-20261110/data/orders.csv",
+        "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "bytes": 237705,
+        "lines": 6001
+      }
+    },
+    {
+      "job_id": "J2",
+      "title": "monthly_summary",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T2-20261110/deliverables/summary.json",
+        "sha256": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2"
+      }
+    },
+    {
+      "job_id": "J3",
+      "title": "anomaly_list",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T2-20261110/deliverables/anomalies.json",
+        "sha256": "a5d368e0f7c5970f38b5fd2c093e8b6448bf7ff00996521275bd23624a3606c1"
+      }
+    },
+    {
+      "job_id": "J4",
+      "title": "evidence_pack_manifest",
+      "status": "DONE",
+      "evidence": {
+        "paths": [
+          {
+            "path": "task_inbox/DS-T2-20261110/deliverables/report.md",
+            "sha256": "95c6121de2534fc464b37e943f2a000fcee45b40cffea24d3658a231e9059be7"
+          },
+          {
+            "path": "task_inbox/DS-T2-20261110/deliverables/recovery_report.json",
+            "sha256": "479f3de5c07987bd14ee465688ae0a18241999ff4d0f94794d7b1bd8b4ab09f0"
+          },
+          {
+            "path": "task_inbox/DS-T2-20261110/deliverables/manifest.json",
+            "sha256": "44d7278cbb4875c25fa80ee104c0f363bdb1ec37b85d398981d4f156bfe2b9a1"
+          }
+        ]
+      }
+    }
+  ],
+  "network": false,
+  "paid": false,
+  "note": "T0 dispatch for DS-T2-20261110. Production 7x24 is NOT ACCEPTED. L2-2 clock is NOT STARTED.",
+  "fingerprint_match": true,
+  "executed_utc": "2026-11-10T08:29:49Z",
+  "executed_by": "scripts/worker_run_task.py"
+}

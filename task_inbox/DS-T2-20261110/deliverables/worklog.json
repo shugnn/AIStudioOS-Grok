@@ -1,0 +1,32 @@
+{
+  "task_id": "DS-T2-20261110",
+  "worker": "scripts/worker_run_task.py",
+  "started_utc": "2026-11-10T08:29:48Z",
+  "steps": [
+    {
+      "step": "run",
+      "result": {
+        "ok": true,
+        "status": "DONE",
+        "fingerprint_match": true,
+        "sha256_orders": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "bytes": 237705,
+        "lines": 6001,
+        "duplicate_jobs": [],
+        "killed_pid": 2406,
+        "kill_checkpoint": "after_J2_before_J3",
+        "killed_utc": "2026-11-10T08:29:48Z",
+        "resumed_utc": "2026-11-10T08:29:49Z",
+        "jobs_done_before": [
+          "J1",
+          "J2"
+        ],
+        "deliverables": "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T2-20261110/deliverables",
+        "network": false,
+        "paid": false,
+        "recovery": true
+      }
+    }
+  ],
+  "finished_utc": "2026-11-10T08:29:49Z"
+}

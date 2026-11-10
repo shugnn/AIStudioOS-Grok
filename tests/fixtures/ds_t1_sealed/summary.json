@@ -1,0 +1,126 @@
+{
+  "total_orders": 6000,
+  "total_amount": "5983804.03",
+  "by_month": {
+    "2026-01": {
+      "orders": 667,
+      "amount": "668850.24"
+    },
+    "2026-02": {
+      "orders": 631,
+      "amount": "609611.59"
+    },
+    "2026-03": {
+      "orders": 716,
+      "amount": "736710.12"
+    },
+    "2026-04": {
+      "orders": 633,
+      "amount": "629907.82"
+    },
+    "2026-05": {
+      "orders": 688,
+      "amount": "670223.99"
+    },
+    "2026-06": {
+      "orders": 639,
+      "amount": "642742.70"
+    },
+    "2026-07": {
+      "orders": 677,
+      "amount": "675958.80"
+    },
+    "2026-08": {
+      "orders": 683,
+      "amount": "679097.14"
+    },
+    "2026-09": {
+      "orders": 666,
+      "amount": "670701.63"
+    }
+  },
+  "by_status": {
+    "paid": {
+      "orders": 4175,
+      "amount": "4166663.94"
+    },
+    "pending": {
+      "orders": 1236,
+      "amount": "1241939.77"
+    },
+    "refunded": {
+      "orders": 371,
+      "amount": "358073.32"
+    },
+    "cancelled": {
+      "orders": 218,
+      "amount": "217127.00"
+    }
+  },
+  "by_channel": {
+    "web": {
+      "orders": 3020,
+      "amount": "2983433.46"
+    },
+    "app": {
+      "orders": 2098,
+      "amount": "2100063.74"
+    },
+    "store": {
+      "orders": 882,
+      "amount": "900306.83"
+    }
+  },
+  "top10_customers": [
+    {
+      "customer_id": "C0641",
+      "orders": 14,
+      "amount": "17000.42"
+    },
+    {
+      "customer_id": "C0362",
+      "orders": 18,
+      "amount": "16755.97"
+    },
+    {
+      "customer_id": "C0281",
+      "orders": 18,
+      "amount": "16367.99"
+    },
+    {
+      "customer_id": "C0483",
+      "orders": 11,
+      "amount": "16143.76"
+    },
+    {
+      "customer_id": "C0375",
+      "orders": 12,
+      "amount": "16020.91"
+    },
+    {
+      "customer_id": "C0734",
+      "orders": 15,
+      "amount": "16020.60"
+    },
+    {
+      "customer_id": "C0730",
+      "orders": 13,
+      "amount": "15965.44"
+    },
+    {
+      "customer_id": "C0019",
+      "orders": 15,
+      "amount": "15765.55"
+    },
+    {
+      "customer_id": "C0732",
+      "orders": 15,
+      "amount": "15299.41"
+    },
+    {
+      "customer_id": "C0316",
+      "orders": 14,
+      "amount": "14957.55"
+    }
+  ]
+}

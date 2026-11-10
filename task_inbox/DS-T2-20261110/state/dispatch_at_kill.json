@@ -1,0 +1,42 @@
+{
+  "task_id": "DS-T2-20261110",
+  "dispatched_utc": "2026-11-10T08:23:28Z",
+  "inbox": "task_inbox/DS-T2-20261110/",
+  "worker": "scripts/worker_run_task.py",
+  "jobs": [
+    {
+      "job_id": "J1",
+      "title": "generate_or_verify_orders_csv",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T2-20261110/data/orders.csv",
+        "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "bytes": 237705,
+        "lines": 6001
+      }
+    },
+    {
+      "job_id": "J2",
+      "title": "monthly_summary",
+      "status": "DONE",
+      "evidence": {
+        "path": "task_inbox/DS-T2-20261110/deliverables/summary.json",
+        "sha256": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2"
+      }
+    },
+    {
+      "job_id": "J3",
+      "title": "anomaly_list",
+      "status": "PENDING"
+    },
+    {
+      "job_id": "J4",
+      "title": "evidence_pack_manifest",
+      "status": "PENDING"
+    }
+  ],
+  "network": false,
+  "paid": false,
+  "note": "T0 dispatch for DS-T2-20261110. Production 7x24 is NOT ACCEPTED. L2-2 clock is NOT STARTED.",
+  "fingerprint_match": true
+}

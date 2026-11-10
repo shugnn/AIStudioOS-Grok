@@ -1,0 +1,16 @@
+{
+  "pid": 2406,
+  "kill_checkpoint": "after_J2_before_J3",
+  "ready_utc": "2026-11-10T08:29:48Z",
+  "jobs_done": [
+    "J1",
+    "J2"
+  ],
+  "jobs_not_started": [
+    "J3",
+    "J4"
+  ],
+  "task_id": "DS-T2-20261110",
+  "cmdline": "python3 scripts/worker_run_task.py --task-id DS-T2-20261110",
+  "inject_consumed": true
+}

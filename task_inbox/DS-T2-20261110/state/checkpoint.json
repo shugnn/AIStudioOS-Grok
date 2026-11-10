@@ -1,0 +1,160 @@
+{
+  "task_id": "DS-T2-20261110",
+  "jobs": {
+    "J1": {
+      "status": "DONE",
+      "title": "generate_or_verify_orders_csv",
+      "idempotency_key": "DS-T2-20261110:J1",
+      "completed_utc": "2026-11-10T08:29:48Z",
+      "artifacts": [
+        {
+          "rel": "data/orders.csv",
+          "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+          "bytes": 237705
+        }
+      ],
+      "fingerprint": {
+        "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "bytes": 237705,
+        "lines": 6001,
+        "newlines": 6001,
+        "match_expected": true,
+        "expected_sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe",
+        "expected_bytes": 237705,
+        "expected_lines": 6001
+      }
+    },
+    "J2": {
+      "status": "DONE",
+      "title": "monthly_summary",
+      "idempotency_key": "DS-T2-20261110:J2",
+      "completed_utc": "2026-11-10T08:29:48Z",
+      "artifacts": [
+        {
+          "rel": "deliverables/summary.json",
+          "sha256": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2",
+          "bytes": 2215
+        }
+      ]
+    },
+    "J3": {
+      "status": "DONE",
+      "title": "anomaly_list",
+      "idempotency_key": "DS-T2-20261110:J3",
+      "completed_utc": "2026-11-10T08:29:49Z",
+      "artifacts": [
+        {
+          "rel": "deliverables/anomalies.json",
+          "sha256": "a5d368e0f7c5970f38b5fd2c093e8b6448bf7ff00996521275bd23624a3606c1",
+          "bytes": 19999
+        }
+      ]
+    },
+    "J4": {
+      "status": "DONE",
+      "title": "evidence_pack_manifest",
+      "idempotency_key": "DS-T2-20261110:J4",
+      "completed_utc": "2026-11-10T08:29:49Z",
+      "artifacts": [
+        {
+          "rel": "deliverables/report.md",
+          "sha256": "95c6121de2534fc464b37e943f2a000fcee45b40cffea24d3658a231e9059be7",
+          "bytes": 2943
+        },
+        {
+          "rel": "deliverables/recovery_report.json",
+          "sha256": "8d95b41d7f1b680e4e8d4e446274421acb677265932611ea68d12110f011ae21",
+          "bytes": 447
+        },
+        {
+          "rel": "deliverables/manifest.json",
+          "sha256": "3c854412a140db8e48c24854c0cc9bf52cea004a0e790b4a8b4274fcf503f3d4",
+          "bytes": 1029
+        }
+      ]
+    }
+  },
+  "journal": [
+    {
+      "event": "job_committed",
+      "job_id": "J1",
+      "idempotency_key": "DS-T2-20261110:J1",
+      "utc": "2026-11-10T08:29:48Z",
+      "seq": 1
+    },
+    {
+      "event": "job_committed",
+      "job_id": "J2",
+      "idempotency_key": "DS-T2-20261110:J2",
+      "utc": "2026-11-10T08:29:48Z",
+      "seq": 2
+    },
+    {
+      "event": "kill_window_open",
+      "kill_checkpoint": "after_J2_before_J3",
+      "pid": 2406,
+      "jobs_done": [
+        "J1",
+        "J2"
+      ],
+      "utc": "2026-11-10T08:29:48Z",
+      "seq": 3
+    },
+    {
+      "event": "resumed",
+      "utc": "2026-11-10T08:29:49Z",
+      "jobs_done_before": [
+        "J1",
+        "J2"
+      ],
+      "resumed_pid": 2415,
+      "seq": 4
+    },
+    {
+      "event": "job_committed",
+      "job_id": "J3",
+      "idempotency_key": "DS-T2-20261110:J3",
+      "utc": "2026-11-10T08:29:49Z",
+      "seq": 5
+    },
+    {
+      "event": "job_committed",
+      "job_id": "J4",
+      "idempotency_key": "DS-T2-20261110:J4",
+      "utc": "2026-11-10T08:29:49Z",
+      "seq": 6
+    }
+  ],
+  "duplicate_jobs": [],
+  "started_utc": "2026-11-10T08:29:48Z",
+  "kill_window": {
+    "pid": 2406,
+    "kill_checkpoint": "after_J2_before_J3",
+    "ready_utc": "2026-11-10T08:29:48Z",
+    "jobs_done": [
+      "J1",
+      "J2"
+    ],
+    "jobs_not_started": [
+      "J3",
+      "J4"
+    ],
+    "task_id": "DS-T2-20261110",
+    "cmdline": "python3 scripts/worker_run_task.py --task-id DS-T2-20261110",
+    "inject_consumed": true
+  },
+  "sigkill": {
+    "killed_pid": 2406,
+    "killed_utc": "2026-11-10T08:29:48Z",
+    "signal": 9,
+    "kill_checkpoint": "after_J2_before_J3"
+  },
+  "resume": {
+    "resumed_utc": "2026-11-10T08:29:49Z",
+    "resumed_pid": 2415,
+    "jobs_done_before": [
+      "J1",
+      "J2"
+    ]
+  }
+}

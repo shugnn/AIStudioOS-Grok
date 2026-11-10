@@ -1,0 +1,30 @@
+{
+  "task_id": "DS-T2-20261110",
+  "generated_at_utc": "2026-11-10T08:29:49Z",
+  "component_version": "ds-t2-worker-1",
+  "input": {
+    "path": "task_inbox/DS-T2-20261110/data/orders.csv",
+    "sha256": "633aded091b1da111f4c3c9c378c975d3bdddf17e85a0fd3b001c7e4ddbf7ffe"
+  },
+  "outputs": [
+    {
+      "path": "task_inbox/DS-T2-20261110/deliverables/summary.json",
+      "sha256": "1f1b56e79459084f1fa1f565320e70433013ba6ee32fdb4521c914d108b5eec2"
+    },
+    {
+      "path": "task_inbox/DS-T2-20261110/deliverables/anomalies.json",
+      "sha256": "a5d368e0f7c5970f38b5fd2c093e8b6448bf7ff00996521275bd23624a3606c1"
+    },
+    {
+      "path": "task_inbox/DS-T2-20261110/deliverables/report.md",
+      "sha256": "95c6121de2534fc464b37e943f2a000fcee45b40cffea24d3658a231e9059be7"
+    },
+    {
+      "path": "task_inbox/DS-T2-20261110/deliverables/recovery_report.json",
+      "sha256": "8d95b41d7f1b680e4e8d4e446274421acb677265932611ea68d12110f011ae21"
+    }
+  ],
+  "fingerprint_match": true,
+  "network": false,
+  "paid": false
+}

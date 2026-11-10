@@ -1,0 +1,17 @@
+{
+  "statement": "Frozen support tickets: monthly summary and weekly summary of labor amount by priority, an anomaly list, an SLA breach list by priority, weekly backlog aging, and an independently verifiable evidence pack.",
+  "schema": {
+    "columns": [
+      {"name": "ticket_id"},
+      {"name": "opened_at"},
+      {"name": "first_response_at"},
+      {"name": "resolved_at"},
+      {"name": "priority"},
+      {"name": "status"},
+      {"name": "labor_amount"}
+    ]
+  },
+  "input": "data/tickets.csv",
+  "label": "local_demo_not_an_observation_card",
+  "observation_card": false
+}

@@ -3,7 +3,9 @@
 
 Reads a capture bundle (schema aistudioos-grok.l2-2.capture.v1) and writes an
 honest report. This tool does not start a clock, does not register scheduled
-tasks, and never emits L2-2 PASS or production 7x24 acceptance.
+tasks, and never emits L2-2 PASS or production 7x24 acceptance. A sum of ended
+SHORT walls does not count. Stitching sequential or restarted soak invocations
+into one capture does not count, even when the stitched span reaches 259200.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -14,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -59,11 +61,34 @@ ADDITIVE_WALL_SOURCES = frozenset(
         "hours_times_count",
     }
 )
-WALL_SOURCES = {"unset", "monotonic", "cycles_times_interval", "utc_span"} | set(ADDITIVE_WALL_SOURCES)
 ADDITIVE_FLAGS = ("additive", "summed", "stacked")
 ADDITIVE_LIST_KEYS = ("components", "summed_from", "additive_walls", "historical_walls")
 ADDITIVE_COUNT_KEYS = ("sum_of_24h", "added_24h_count", "times_24h")
 SHORT_DAY_SECONDS = 86400.0
+# Explicit stitch/restart sources. A capture may name them so the scorer can
+# refuse the claim. Two invocations are not one live soak process.
+STITCH_WALL_SOURCES = frozenset(
+    {
+        "stitch",
+        "stitched",
+        "chained",
+        "concatenated",
+        "restarted",
+        "restart",
+        "sequential",
+        "process_boundary",
+    }
+)
+WALL_SOURCES = {"unset", "monotonic", "cycles_times_interval", "utc_span"} | set(ADDITIVE_WALL_SOURCES) | set(
+    STITCH_WALL_SOURCES
+)
+STITCH_FLAGS = ("stitched", "chained", "concatenated", "restarted", "sequential", "wall_reset")
+STITCH_LIST_KEYS = ("invocations", "processes", "segments", "stitched_from", "soaks")
+WALL_SERIES_KEYS = ("wall_samples", "elapsed_series", "wall_elapsed_series")
+START_LIST_KEYS = ("starts", "start_utcs", "start_timestamps")
+PID_LIST_KEYS = ("pids", "process_ids")
+# In-memory sequential soaks are anchored here, far from the L2-4 window.
+STITCH_ANCHOR = datetime(2026, 2, 1, tzinfo=timezone.utc)
 HOST_STOPS = {
     "exception",
     "keyboard_interrupt",
@@ -90,6 +115,7 @@ NEXT_STEPS = (
     "Only after that explicit start decision, on a host already allowed to run the local soak: PYTHONPATH=. python scripts/soak_2h.py --cycles 5000 --interval 60 --via-l1 --seed 300 --idle-policy reseed --max-wall-seconds 259200",
     "Cycles must be large enough that max-wall stops the process. cycles x interval is not the wall. cycles_exit0 is not business progress. A 86400s wall is not this 72h gate.",
     "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not this 72h gate.",
+    "Sequential or restarted soak invocations are not one live process. A back-to-back pair of 86400s soaks, three sequential 86400s soaks covering 72h of calendar time, or a wall that resets or goes backwards, is not this 72h gate.",
     "After a real run, score the bundle with scripts/l2_2_score.py. Expect INCOMPLETE. This tool will not emit PASS or accept production 7x24.",
     "An R3 injection receipt is required before any supervision-verified tag. The observation track accepts or rejects. This scorer does not.",
     "Product L2 (task split / worker) stays NOT STARTED. L2-3 mid-run kill recovery is a separate gate.",
@@ -208,6 +234,10 @@ def validate_capture(doc: dict[str, Any]) -> None:
             raise CaptureError("a clock that has not started must use wall.source unset")
         if wall.get("elapsed_seconds") is not None or wall.get("max_wall_seconds") is not None:
             raise CaptureError("elapsed and max_wall_seconds must be null when the clock has not started")
+    _parse_invocation_list(wall)
+    _parse_wall_samples(wall)
+    _parse_start_list(wall)
+    _parse_pid_list(wall)
 
     metrics = doc.get("metrics")
     if started:
@@ -341,6 +371,17 @@ def _reject_scaffold_incident_dates(doc: dict[str, Any]) -> None:
     for index, gap in enumerate(doc["supervision"]["coverage_gaps"]):
         _seconds, stamp = _normalized_gap(gap, index)
         stamps.append((f"coverage_gaps[{index}]", stamp))
+    wall = doc.get("wall") if isinstance(doc.get("wall"), dict) else {}
+    invocations = _parse_invocation_list(wall)
+    if invocations:
+        for index, item in enumerate(invocations):
+            stamps.append((f"wall.invocations[{index}].start_utc", item["start"]))
+            if item["end"] is not None:
+                stamps.append((f"wall.invocations[{index}].end_utc", item["end"]))
+    starts = _parse_start_list(wall)
+    if starts:
+        for index, stamp in enumerate(starts):
+            stamps.append((f"wall.starts[{index}]", stamp))
     for field, stamp in stamps:
         if _in_incident_window(stamp):
             raise CaptureError(
@@ -454,6 +495,356 @@ def standing_non_additivity(components: list[float] | None) -> dict[str, Any]:
     base["counts_toward_gate"] = False
     base["historical_shorts_are_additive"] = False
     base["sum_of_shorts_counts_toward_gate"] = False
+    return base
+
+
+def _first_wall_value(wall: dict[str, Any], keys: tuple[str, ...]) -> tuple[str, Any] | None:
+    for key in keys:
+        if key not in wall or wall.get(key) is None:
+            continue
+        return key, wall[key]
+    return None
+
+
+def _invocation_pid(item: dict[str, Any], field: str) -> int | None:
+    has_pid = "pid" in item and item.get("pid") is not None
+    has_process = "process_id" in item and item.get("process_id") is not None
+    if not has_pid and not has_process:
+        return None
+    pid = item.get("pid")
+    process_id = item.get("process_id")
+    if has_pid and (not _is_int(pid) or pid < 0):
+        raise CaptureError(f"{field}.pid must be a non-negative int")
+    if has_process and (not _is_int(process_id) or process_id < 0):
+        raise CaptureError(f"{field}.process_id must be a non-negative int")
+    if has_pid and has_process and pid != process_id:
+        raise CaptureError(f"{field}.pid and process_id disagree")
+    return int(pid if has_pid else process_id)
+
+
+def _parse_invocation_list(wall: dict[str, Any]) -> list[dict[str, Any]] | None:
+    found = _first_wall_value(wall, STITCH_LIST_KEYS)
+    if found is None:
+        return None
+    field_name, raw = found
+    field = f"wall.{field_name}"
+    if not isinstance(raw, list) or not raw:
+        raise CaptureError(f"{field} must be a non-empty list when set")
+    parsed: list[dict[str, Any]] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise CaptureError(f"{field}[{index}] must be an object")
+        start = parse_utc(item.get("start_utc"), field=f"{field}[{index}].start_utc")
+        end = None
+        if item.get("end_utc") is not None:
+            end = parse_utc(item.get("end_utc"), field=f"{field}[{index}].end_utc")
+            if end <= start:
+                raise CaptureError(f"{field}[{index}].end_utc must be after start_utc")
+        elapsed = item.get("wall_elapsed_s", item.get("elapsed_seconds"))
+        if not _is_number(elapsed) or float(elapsed) < 0:
+            raise CaptureError(f"{field}[{index}].wall_elapsed_s must be a non-negative number")
+        host = item.get("host")
+        if host is not None and (not isinstance(host, str) or not host.strip()):
+            raise CaptureError(f"{field}[{index}].host must be a non-empty string or null")
+        parsed.append(
+            {
+                "start": start,
+                "end": end,
+                "pid": _invocation_pid(item, f"{field}[{index}]"),
+                "wall_elapsed_s": round(float(elapsed), 3),
+                "host": host.strip() if isinstance(host, str) else None,
+            }
+        )
+    return parsed
+
+
+def _parse_wall_samples(wall: dict[str, Any]) -> list[float] | None:
+    found = _first_wall_value(wall, WALL_SERIES_KEYS)
+    if found is None:
+        return None
+    field_name, raw = found
+    field = f"wall.{field_name}"
+    if not isinstance(raw, list) or not raw:
+        raise CaptureError(f"{field} must be a non-empty list of numbers")
+    parsed: list[float] = []
+    for index, item in enumerate(raw):
+        if not _is_number(item) or float(item) < 0:
+            raise CaptureError(f"{field}[{index}] must be a non-negative number")
+        parsed.append(round(float(item), 3))
+    return parsed
+
+
+def _parse_start_list(wall: dict[str, Any]) -> list[datetime] | None:
+    found = _first_wall_value(wall, START_LIST_KEYS)
+    if found is None:
+        return None
+    field_name, raw = found
+    field = f"wall.{field_name}"
+    if not isinstance(raw, list) or not raw:
+        raise CaptureError(f"{field} must be a non-empty list of timestamps")
+    return [parse_utc(item, field=f"{field}[{index}]") for index, item in enumerate(raw)]
+
+
+def _parse_pid_list(wall: dict[str, Any]) -> list[int] | None:
+    found = _first_wall_value(wall, PID_LIST_KEYS)
+    if found is None:
+        return None
+    field_name, raw = found
+    field = f"wall.{field_name}"
+    if not isinstance(raw, list) or not raw:
+        raise CaptureError(f"{field} must be a non-empty list of process ids")
+    parsed: list[int] = []
+    for index, item in enumerate(raw):
+        if not _is_int(item) or item < 0:
+            raise CaptureError(f"{field}[{index}] must be a non-negative int")
+        parsed.append(int(item))
+    return parsed
+
+
+def _segment_peaks(samples: list[float]) -> tuple[list[float], bool]:
+    """Split a wall series where it resets or goes backwards.
+
+    Each monotonic run contributes its last sample. A later sample that is
+    lower than the previous sample is a new run, not a continuation.
+    """
+    if not samples:
+        return [], False
+    peaks: list[float] = []
+    previous = samples[0]
+    peak = samples[0]
+    reset = False
+    for value in samples[1:]:
+        if value < previous:
+            peaks.append(peak)
+            peak = value
+            reset = True
+        else:
+            peak = value
+        previous = value
+    peaks.append(peak)
+    return peaks, reset
+
+
+def _coerce_starts(values: list[Any] | None) -> list[datetime]:
+    if not values:
+        return []
+    parsed: list[datetime] = []
+    for index, value in enumerate(values):
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                raise CaptureError(f"starts[{index}] must include a UTC offset")
+            parsed.append(value.astimezone(timezone.utc))
+        else:
+            parsed.append(parse_utc(value, field=f"starts[{index}]"))
+    return parsed
+
+
+def _coerce_pids(values: list[Any] | None) -> list[int]:
+    if not values:
+        return []
+    parsed: list[int] = []
+    for index, value in enumerate(values):
+        if not _is_int(value) or value < 0:
+            raise CaptureError(f"pids[{index}] must be a non-negative int")
+        parsed.append(int(value))
+    return parsed
+
+
+def synthetic_sequential_soaks(
+    walls: list[float],
+    *,
+    pid_base: int = 7100,
+    host: str = "synthetic-host",
+) -> list[dict[str, Any]]:
+    """In-memory ended soaks placed back-to-back. Not a file and not a live process."""
+    if not isinstance(walls, list) or not walls:
+        raise CaptureError("sequential soaks need a non-empty list of wall seconds")
+    cursor = STITCH_ANCHOR
+    rows: list[dict[str, Any]] = []
+    for index, wall in enumerate(walls):
+        if not _is_number(wall) or float(wall) < 0:
+            raise CaptureError(f"sequential soaks[{index}] must be a non-negative number")
+        seconds = round(float(wall), 3)
+        end = cursor + timedelta(seconds=seconds)
+        rows.append(
+            {
+                "start_utc": utc_z(cursor),
+                "end_utc": utc_z(end),
+                "pid": pid_base + index,
+                "wall_elapsed_s": seconds,
+                "host": host,
+            }
+        )
+        cursor = end
+    return rows
+
+
+def assess_process_continuity(
+    invocations: list[dict[str, Any]] | None = None,
+    wall_samples: list[float] | None = None,
+    extra_starts: list[Any] | None = None,
+    extra_pids: list[Any] | None = None,
+) -> dict[str, Any]:
+    """Score sequential or restarted soaks. The stitch never counts toward 259200.
+
+    72h is one continuous monotonic wall_elapsed_s on a single live soak
+    process. A back-to-back pair, a 72h calendar of three 86400 soaks, or a
+    wall that resets may show a stitched duration of 259200 and still does
+    not count. Same host does not make them one process.
+    """
+    if invocations is None:
+        invocations = []
+    if not isinstance(invocations, list):
+        raise CaptureError("invocations must be a list")
+    normalized = _parse_invocation_list({"invocations": invocations}) if invocations else []
+    samples = _parse_wall_samples({"wall_samples": wall_samples}) if wall_samples is not None else None
+    peaks, wall_reset = _segment_peaks(samples or [])
+    starts = [item["start"] for item in normalized]
+    starts.extend(_coerce_starts(extra_starts))
+    pids = [item["pid"] for item in normalized if item["pid"] is not None]
+    pids.extend(_coerce_pids(extra_pids))
+    if normalized:
+        duration: float | None = round(sum(item["wall_elapsed_s"] for item in normalized), 3)
+        segment_count = len(normalized)
+    elif samples:
+        duration = round(sum(peaks), 3)
+        segment_count = len(peaks)
+    else:
+        duration = None
+        segment_count = 0
+    if normalized:
+        earliest = min(item["start"] for item in normalized)
+        latest = max(item["end"] or item["start"] for item in normalized)
+        span: float | None = round((latest - earliest).total_seconds(), 3)
+    else:
+        span = None
+    back_to_back = False
+    if len(normalized) >= 2 and all(item["end"] is not None for item in normalized):
+        back_to_back = all(
+            normalized[index]["start"] == normalized[index - 1]["end"] for index in range(1, len(normalized))
+        )
+    hosts = [item["host"] for item in normalized]
+    same_host = bool(hosts) and all(isinstance(host, str) and host for host in hosts) and len(set(hosts)) == 1
+    distinct_starts = len({utc_z(item) for item in starts})
+    distinct_pids = len(set(pids))
+    single = (
+        len(normalized) == 1
+        and not wall_reset
+        and distinct_starts <= 1
+        and distinct_pids <= 1
+        and segment_count <= 1
+    )
+    return {
+        "invocation_count": len(normalized),
+        "distinct_start_count": distinct_starts,
+        "distinct_process_count": distinct_pids,
+        "segment_count": segment_count,
+        "same_host": same_host,
+        "wall_reset": wall_reset,
+        "back_to_back": back_to_back,
+        "walls_seconds": [item["wall_elapsed_s"] for item in normalized],
+        "wall_samples": samples,
+        "stitched_duration_seconds": duration,
+        "calendar_span_seconds": span,
+        "wall_required_seconds": WALL_REQUIRED_SECONDS,
+        "stitched_duration_reaches_259200": duration is not None and duration >= WALL_REQUIRED_SECONDS,
+        "calendar_span_reaches_259200": span is not None and span >= WALL_REQUIRED_SECONDS,
+        "counts_toward_gate": False,
+        "sequential_soaks_are_continuous": False,
+        "stitched_processes_count_toward_gate": False,
+        "single_live_process": single,
+    }
+
+
+def claimed_process_boundary(wall: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a stitch claim when a wall joins two or more soak processes.
+
+    A single monotonic elapsed_seconds is not a stitch. 259200 on one live
+    soak stays a continuous wall. Two or more invocations, different start
+    timestamps, different process ids, a wall that resets, or an explicit
+    stitch source does not count toward the gate.
+    """
+    if not isinstance(wall, dict):
+        return None
+    source = str(wall.get("source") or "").strip().lower()
+    explicit = source in STITCH_WALL_SOURCES or any(wall.get(flag) is True for flag in STITCH_FLAGS)
+    invocations = _parse_invocation_list(wall)
+    samples = _parse_wall_samples(wall)
+    starts = _parse_start_list(wall)
+    pids = _parse_pid_list(wall)
+    _peaks, reset = _segment_peaks(samples or [])
+    multi = invocations is not None and len(invocations) >= 2
+    multi_starts = starts is not None and len({utc_z(item) for item in starts}) >= 2
+    multi_pids = pids is not None and len(set(pids)) >= 2
+    invocation_starts = 0
+    invocation_pids = 0
+    if invocations:
+        invocation_starts = len({utc_z(item["start"]) for item in invocations})
+        invocation_pids = len({item["pid"] for item in invocations if item["pid"] is not None})
+    if not any((explicit, reset, multi, multi_starts, multi_pids, invocation_starts >= 2, invocation_pids >= 2)):
+        return None
+    raw_invocations: list[Any] = []
+    found = _first_wall_value(wall, STITCH_LIST_KEYS)
+    if found is not None and isinstance(found[1], list):
+        raw_invocations = list(found[1])
+    return {
+        "invocations": raw_invocations,
+        "wall_samples": samples,
+        "starts": [utc_z(item) for item in (starts or [])],
+        "pids": list(pids or []),
+    }
+
+
+def standing_process_continuity(
+    claim: dict[str, Any] | None,
+    *,
+    claimed_elapsed: float | None = None,
+) -> dict[str, Any]:
+    """Standing rule copied onto every score report. Stitches do not count."""
+    base: dict[str, Any] = {
+        "rule": "one_live_soak_process",
+        "sequential_soaks_are_continuous": False,
+        "stitched_processes_count_toward_gate": False,
+        "stitch_claim": False,
+        "claimed_invocation_count": 0,
+        "distinct_start_count": 0,
+        "distinct_process_count": 0,
+        "segment_count": 0,
+        "wall_reset": False,
+        "same_host": False,
+        "back_to_back": False,
+        "stitched_duration_seconds": None,
+        "calendar_span_seconds": None,
+        "stitched_duration_reaches_259200": False,
+        "calendar_span_reaches_259200": False,
+        "counts_toward_gate": False,
+    }
+    if claim is None:
+        return base
+    assessed = assess_process_continuity(
+        list(claim.get("invocations") or []),
+        wall_samples=claim.get("wall_samples"),
+        extra_starts=list(claim.get("starts") or []),
+        extra_pids=list(claim.get("pids") or []),
+    )
+    duration = assessed["stitched_duration_seconds"]
+    if duration is None and _is_number(claimed_elapsed):
+        duration = round(float(claimed_elapsed), 3)
+    base["stitch_claim"] = True
+    base["claimed_invocation_count"] = assessed["invocation_count"]
+    base["distinct_start_count"] = assessed["distinct_start_count"]
+    base["distinct_process_count"] = assessed["distinct_process_count"]
+    base["segment_count"] = assessed["segment_count"]
+    base["wall_reset"] = assessed["wall_reset"]
+    base["same_host"] = assessed["same_host"]
+    base["back_to_back"] = assessed["back_to_back"]
+    base["stitched_duration_seconds"] = duration
+    base["calendar_span_seconds"] = assessed["calendar_span_seconds"]
+    base["stitched_duration_reaches_259200"] = duration is not None and duration >= WALL_REQUIRED_SECONDS
+    base["calendar_span_reaches_259200"] = assessed["calendar_span_reaches_259200"]
+    base["sequential_soaks_are_continuous"] = False
+    base["stitched_processes_count_toward_gate"] = False
+    base["counts_toward_gate"] = False
     return base
 
 
@@ -589,6 +980,12 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     additive_components = claimed_additive_components(wall)
     additive_claim = additive_components is not None
     non_additivity = standing_non_additivity(additive_components)
+    boundary = claimed_process_boundary(wall)
+    stitch_claim = boundary is not None
+    continuity = standing_process_continuity(
+        boundary,
+        claimed_elapsed=float(elapsed) if stitch_claim and _is_number(elapsed) else None,
+    )
     metrics_wall_agrees = False
     if isinstance(metrics, dict) and _is_number(elapsed):
         metrics_wall_agrees = abs(float(metrics["wall_elapsed_s"]) - float(elapsed)) <= WALL_MATCH_TOLERANCE
@@ -607,6 +1004,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         and metrics_wall_agrees
         and final_stop
         and not additive_claim
+        and not stitch_claim
     )
     with_work = isinstance(metrics, dict) and metrics.get("cycles_with_work", 0) > 0
     summary_ok = reconciliation["status"] == "match"
@@ -629,7 +1027,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         status = "NOT_STARTED"
     else:
         status = "INCOMPLETE"
-        if additive_claim or not monotonic or elapsed is None:
+        if additive_claim or stitch_claim or not monotonic or elapsed is None:
             clock_state = "INCOMPLETE"
         elif elapsed_meets:
             clock_state = "WALL_OBSERVED"
@@ -647,6 +1045,8 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         blockers.append("runner_not_allowed")
     if additive_claim:
         blockers.append("additive_historical_shorts")
+    if stitch_claim:
+        blockers.append("stitched_process_boundaries")
     if started and not monotonic:
         blockers.append("wall_not_monotonic")
     if started and not elapsed_meets:
@@ -712,8 +1112,11 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
             "interactive_schtasks": "out_of_scope",
             "note": (
                 "72h means one continuous monotonic wall_elapsed_s >= 259200 "
-                "with max_wall_seconds 259200 on a single live soak. "
+                "with max_wall_seconds 259200 on a single live soak process. "
                 "A sum of ended SHORT walls is not that wall. "
+                "Stitching sequential or restarted invocations is not that wall, "
+                "even when the stitched duration or calendar span reaches 259200. "
+                "A wall that resets or goes backwards is not that wall. "
                 "cycles x interval is not the wall. cycles_exit0 is process success only."
             ),
         },
@@ -723,11 +1126,13 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
             "required_seconds": WALL_REQUIRED_SECONDS,
             "elapsed_seconds": elapsed,
             "source": source,
-            "elapsed_meets_259200": False if additive_claim else elapsed_meets,
+            "elapsed_meets_259200": False if additive_claim or stitch_claim else elapsed_meets,
             "counts_toward_gate": wall_bar,
             "additive_claim": additive_claim,
+            "stitch_claim": stitch_claim,
         },
         "non_additivity": non_additivity,
+        "process_continuity": continuity,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -811,6 +1216,48 @@ def _non_additivity_violations(report: dict[str, Any]) -> list[str]:
     return violations
 
 
+def _process_continuity_violations(report: dict[str, Any]) -> list[str]:
+    """Reject a report that stitches soak processes and relabels the stitch as 72h."""
+    violations: list[str] = []
+    block = report.get("process_continuity")
+    wall = report.get("wall") if isinstance(report.get("wall"), dict) else {}
+    if not isinstance(block, dict):
+        return ["process_continuity"]
+    if block.get("rule") != "one_live_soak_process":
+        violations.append("process_continuity")
+    if block.get("sequential_soaks_are_continuous") is not False:
+        violations.append("stitched_process_boundaries")
+    if block.get("stitched_processes_count_toward_gate") is not False:
+        violations.append("stitched_process_boundaries")
+    if block.get("counts_toward_gate") is not False:
+        violations.append("stitched_process_boundaries")
+    if not isinstance(block.get("stitch_claim"), bool):
+        violations.append("process_continuity")
+    try:
+        claimed = claimed_process_boundary(wall)
+    except CaptureError:
+        violations.append("stitched_process_boundaries")
+        claimed = None
+    if claimed is not None and block.get("stitch_claim") is not True:
+        violations.append("stitched_process_boundaries")
+    if claimed is not None and wall.get("counts_toward_gate") is not False:
+        violations.append("stitched_process_boundaries")
+    if block.get("stitch_claim") is True:
+        if wall.get("counts_toward_gate") is not False:
+            violations.append("stitched_process_boundaries")
+        if wall.get("stitch_claim") is not True:
+            violations.append("stitched_process_boundaries")
+        if report.get("clock_state") == "WALL_OBSERVED":
+            violations.append("stitched_process_boundaries")
+        if report.get("l2_2_status") == "PASS":
+            violations.append("forged_pass")
+        if report.get("production_7x24") != "NOT_ACCEPTED":
+            violations.append("production_claim")
+    elif wall.get("stitch_claim") is True:
+        violations.append("stitched_process_boundaries")
+    return violations
+
+
 def validate_report(report: dict[str, Any]) -> list[str]:
     """Reject forged acceptance. Empty list means the report does not over-claim."""
     violations: list[str] = []
@@ -846,6 +1293,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     if report.get("evidence_class") == "scaffold" and gates.get("can_accept_l2_2") is True:
         violations.append("scaffold_cannot_accept")
     violations.extend(_non_additivity_violations(report))
+    violations.extend(_process_continuity_violations(report))
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

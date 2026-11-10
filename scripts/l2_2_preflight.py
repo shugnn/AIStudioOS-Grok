@@ -7,6 +7,9 @@ docs/progress/soak_2h/metrics.json only as a historical SHORT specimen
 (Ubuntu-24H, wall about 86400.001s). That read is not a stall watch, not a
 started L2-2 capture, and not the 72h gate. Refuses sums of ended SHORT walls
 (including 86400.001 plus another 86400, and 86400 times 3) as a 72h capture.
+Refuses stitching sequential or restarted
+soak invocations into one capture, including a back-to-back pair, three
+sequential 86400 soaks covering 72h of calendar time, and a wall that resets.
 Does not launch soak_2h.py, does not point the stall hook at the committed
 Ubuntu-24H soak files, does not start the 72h clock, and does not register
 scheduled tasks.
@@ -62,6 +65,61 @@ REFUSED_SUM_EXPECTED = {
     "ubuntu_24h_plus_another_86400": (172800.001, False, 2),
     "three_times_86400": (259200.0, True, 3),
     "ubuntu_24h_plus_two_86400": (259200.001, True, 3),
+}
+# In-memory ended soaks. No metrics file is created for these. The pair sits
+# back-to-back. The trio covers 72h of calendar time. The reset series is one
+# wall counter that goes backwards. None of them is one live process.
+REFUSED_STITCHES = (
+    ("pair_86400_back_to_back", "sequential", (86400.0, 86400.0), 8100),
+    ("trio_86400_calendar_72h", "sequential", (86400.0, 86400.0, 86400.0), 8200),
+    ("wall_reset_three_86400", "reset", (0.0, 86400.0, 0.0, 86400.0, 0.0, 86400.0), 0),
+)
+REFUSED_STITCH_EXPECTED = {
+    "pair_86400_back_to_back": {
+        "invocation_count": 2,
+        "distinct_start_count": 2,
+        "distinct_process_count": 2,
+        "segment_count": 2,
+        "same_host": True,
+        "wall_reset": False,
+        "back_to_back": True,
+        "walls_seconds": [86400.0, 86400.0],
+        "wall_samples": None,
+        "stitched_duration_seconds": 172800.0,
+        "calendar_span_seconds": 172800.0,
+        "stitched_duration_reaches_259200": False,
+        "calendar_span_reaches_259200": False,
+    },
+    "trio_86400_calendar_72h": {
+        "invocation_count": 3,
+        "distinct_start_count": 3,
+        "distinct_process_count": 3,
+        "segment_count": 3,
+        "same_host": True,
+        "wall_reset": False,
+        "back_to_back": True,
+        "walls_seconds": [86400.0, 86400.0, 86400.0],
+        "wall_samples": None,
+        "stitched_duration_seconds": 259200.0,
+        "calendar_span_seconds": 259200.0,
+        "stitched_duration_reaches_259200": True,
+        "calendar_span_reaches_259200": True,
+    },
+    "wall_reset_three_86400": {
+        "invocation_count": 0,
+        "distinct_start_count": 0,
+        "distinct_process_count": 0,
+        "segment_count": 3,
+        "same_host": False,
+        "wall_reset": True,
+        "back_to_back": False,
+        "walls_seconds": [],
+        "wall_samples": [0.0, 86400.0, 0.0, 86400.0, 0.0, 86400.0],
+        "stitched_duration_seconds": 259200.0,
+        "calendar_span_seconds": None,
+        "stitched_duration_reaches_259200": True,
+        "calendar_span_reaches_259200": False,
+    },
 }
 SPECIMEN_SHORT_DETAIL = "historical_short_not_72h_gate"
 SPECIMEN_WITHHELD_DETAILS = frozenset(
@@ -141,6 +199,7 @@ CHECK_ORDER = (
     "stall_watchdog",
     "ubuntu_24h_specimen",
     "non_additivity",
+    "process_continuity",
     "scorer_refuses",
 )
 
@@ -157,6 +216,7 @@ OPERATOR_NOTE = (
     "The stall-watchdog hook is not a start decision and is not L2-2 acceptance. "
     "The Ubuntu-24H metrics file is a historical SHORT specimen. Recording it does not start the 72h clock, does not count it as 72h, and does not make it the stall DUT. "
     "Historical SHORT walls are not additive toward 259200. A sum of ended 24h walls does not start the 72h clock and does not count toward the gate. "
+    "Sequential or restarted soak invocations are not one continuous 72h wall. Stitching them, even back-to-back on the same host, does not start the 72h clock and does not count toward the gate. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -182,6 +242,7 @@ NEXT_STEPS = (
     "The stall-watchdog hook classified synthetic summaries only. It did not watch the Ubuntu-24H soak files and it did not start the 72h clock.",
     "The committed Ubuntu-24H metrics file is a historical SHORT specimen (wall 86400.001s, below 259200). It does not count toward the 72h gate and it is not the stall DUT. This preflight does not wrap it as a started capture.",
     "Historical SHORT walls are not additive. Ubuntu-24H 86400.001s plus another 86400s, or 86400s times 3, is not one continuous monotonic wall and is not a started L2-2 capture. This gate is not a start.",
+    "Sequential or restarted soak invocations are not one live process. A back-to-back 86400s pair, three sequential 86400s soaks covering 72h of calendar time, or a wall that resets, is not a started L2-2 capture. This continuity gate is not a start.",
     "Production 7x24 stays NOT ACCEPTED. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -1271,6 +1332,228 @@ def _non_additivity_violations(row: Any) -> list[str]:
     return violations
 
 
+def _closed_process_continuity(detail: str, **extra: Any) -> dict[str, Any]:
+    """Continuity row. Stitched soak processes stay off the 72h gate.
+
+    Honesty flags are forced closed. A back-to-back pair, a 72h calendar of
+    three 86400 soaks, or a wall that resets is still not one live process,
+    not a start, and not acceptance.
+    """
+    refused = extra.get("refused_stitches")
+    if not isinstance(refused, list):
+        refused = []
+    ok = extra.get("ok") is True
+    return {
+        "ok": ok,
+        "rule": "one_live_soak_process",
+        "tool": "scripts/l2_2_score.py",
+        "wall_required_seconds": WALL_REQUIRED_SECONDS,
+        "sequential_soaks_are_continuous": False,
+        "stitched_processes_count_toward_gate": False,
+        "counts_toward_gate": False,
+        "d1_windows_metrics_file": None,
+        "d1_windows_bound_as_specimen": False,
+        "refused_stitches": refused,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "clock_effect": "none",
+        "production_7x24": "NOT_ACCEPTED",
+        "can_start_clock": False,
+        "can_accept_l2_2": False,
+        "can_close_l2_2": False,
+        "soak_launched": False,
+        "binds_clock_start": False,
+        "documented_soak_argv_executed": False,
+        "detail": detail,
+    }
+
+
+def _scorer_refuses_stitched_report(l2: Any, root: Path) -> bool:
+    """True when the scorer rejects a report that relabels a stitch as 72h."""
+    fixture = root / FIXTURE_RELATIVE
+    if not fixture.is_file():
+        return False
+    try:
+        honest = l2.score(l2.load_capture(fixture))
+    except Exception:
+        return False
+    if not isinstance(honest, dict) or not isinstance(honest.get("process_continuity"), dict):
+        return False
+    forged = json.loads(json.dumps(honest))
+    forged["process_continuity"]["sequential_soaks_are_continuous"] = True
+    forged["process_continuity"]["stitched_processes_count_toward_gate"] = True
+    forged["process_continuity"]["counts_toward_gate"] = True
+    forged["process_continuity"]["stitch_claim"] = True
+    forged["wall"]["invocations"] = l2.synthetic_sequential_soaks([86400.0, 86400.0], pid_base=8100)
+    forged["wall"]["counts_toward_gate"] = True
+    forged["wall"]["stitch_claim"] = True
+    forged["wall"]["elapsed_seconds"] = 172800
+    forged["wall"]["source"] = "stitched"
+    forged["l2_2_status"] = "PASS"
+    forged["clock_state"] = "WALL_OBSERVED"
+    forged["production_7x24"] = "ACCEPTED"
+    forged["gates"]["can_accept_l2_2"] = True
+    forged["gates"]["can_start_clock"] = True
+    names = set(l2.validate_report(forged))
+    needed = {
+        "stitched_process_boundaries",
+        "forged_pass",
+        "production_claim",
+        "forged_accept",
+        "forged_clock_start",
+    }
+    return needed <= names
+
+
+def _check_process_continuity(root: Path) -> dict[str, Any]:
+    """Prove sequential soaks are not one continuous 72h. Does not start the clock.
+
+    The soaks are in-memory. No metrics file is created or bound. Ubuntu-24H
+    stays a historical SHORT specimen on its own row. D1 is not a file here.
+    """
+    try:
+        import l2_2_score as l2
+    except Exception:
+        return _closed_process_continuity("scorer_import")
+    if not callable(getattr(l2, "assess_process_continuity", None)) or not callable(
+        getattr(l2, "validate_report", None)
+    ):
+        return _closed_process_continuity("assessor_missing")
+    refused: list[dict[str, Any]] = []
+    shape_ok = True
+    compared = (
+        "invocation_count",
+        "distinct_start_count",
+        "distinct_process_count",
+        "segment_count",
+        "same_host",
+        "wall_reset",
+        "back_to_back",
+        "walls_seconds",
+        "wall_samples",
+        "stitched_duration_seconds",
+        "calendar_span_seconds",
+        "stitched_duration_reaches_259200",
+        "calendar_span_reaches_259200",
+    )
+    for label, kind, parts, pid_base in REFUSED_STITCHES:
+        try:
+            if kind == "sequential":
+                assessed = l2.assess_process_continuity(
+                    l2.synthetic_sequential_soaks(list(parts), pid_base=pid_base)
+                )
+            else:
+                assessed = l2.assess_process_continuity([], wall_samples=list(parts))
+        except Exception:
+            return _closed_process_continuity("assessor_error")
+        if not isinstance(assessed, dict):
+            return _closed_process_continuity("assessor_malformed")
+        expected = REFUSED_STITCH_EXPECTED[label]
+        lie = (
+            assessed.get("counts_toward_gate") is not False
+            or assessed.get("sequential_soaks_are_continuous") is not False
+            or assessed.get("stitched_processes_count_toward_gate") is not False
+            or assessed.get("single_live_process") is not False
+            or assessed.get("wall_required_seconds") != WALL_REQUIRED_SECONDS
+            or any(assessed.get(key) != expected[key] for key in compared)
+        )
+        if lie:
+            shape_ok = False
+        row = {
+            "label": label,
+            "wall_required_seconds": WALL_REQUIRED_SECONDS,
+            "counts_toward_gate": False,
+            "sequential_soaks_are_continuous": False,
+            "stitched_processes_count_toward_gate": False,
+            "single_live_process": False,
+        }
+        for key in compared:
+            row[key] = expected[key]
+        refused.append(row)
+    forged_refused = _scorer_refuses_stitched_report(l2, root)
+    ok = shape_ok and forged_refused
+    if ok:
+        detail = "stitches_not_continuous"
+    elif shape_ok:
+        detail = "forged_stitch_not_refused"
+    else:
+        detail = "stitch_shape"
+    return _closed_process_continuity(detail, ok=ok, refused_stitches=refused)
+
+
+def _process_continuity_violations(row: Any) -> list[str]:
+    """Reject a preflight row that treats stitched soaks as the 72h gate."""
+    violations: list[str] = []
+    if not isinstance(row, dict):
+        return ["process_continuity"]
+    if row.get("rule") != "one_live_soak_process":
+        violations.append("process_continuity")
+    if row.get("tool") != "scripts/l2_2_score.py":
+        violations.append("process_continuity")
+    if row.get("sequential_soaks_are_continuous") is not False:
+        violations.append("stitched_process_boundaries")
+    if row.get("stitched_processes_count_toward_gate") is not False:
+        violations.append("stitched_process_boundaries")
+    if row.get("counts_toward_gate") is not False:
+        violations.append("stitched_process_boundaries")
+    if row.get("d1_windows_bound_as_specimen") is not False or row.get("d1_windows_metrics_file") is not None:
+        violations.append("process_continuity")
+    if row.get("binds_clock_start") is not False or row.get("soak_launched") is not False:
+        violations.append("stitch_as_start")
+    if row.get("documented_soak_argv_executed") is not False:
+        violations.append("argv_executed")
+    if row.get("clock_effect") != "none":
+        violations.append("clock_effect")
+    if row.get("l2_2_status") != "NOT_STARTED":
+        violations.append("status")
+    if row.get("clock_state") != "NOT_STARTED":
+        violations.append("clock_state")
+    if row.get("production_7x24") != "NOT_ACCEPTED":
+        violations.append("production_claim")
+    for key in GATE_KEYS:
+        if row.get(key) is not False:
+            violations.append("forged_" + key)
+    stitches = row.get("refused_stitches")
+    if not isinstance(stitches, list):
+        violations.append("process_continuity")
+    else:
+        labels = [item.get("label") if isinstance(item, dict) else None for item in stitches]
+        if labels != [label for label, _kind, _parts, _pid in REFUSED_STITCHES]:
+            violations.append("process_continuity")
+        else:
+            compared = (
+                "invocation_count",
+                "distinct_start_count",
+                "distinct_process_count",
+                "segment_count",
+                "same_host",
+                "wall_reset",
+                "back_to_back",
+                "walls_seconds",
+                "wall_samples",
+                "stitched_duration_seconds",
+                "calendar_span_seconds",
+                "stitched_duration_reaches_259200",
+                "calendar_span_reaches_259200",
+            )
+            for item in stitches:
+                expected = REFUSED_STITCH_EXPECTED[item["label"]]
+                if (
+                    item.get("wall_required_seconds") != WALL_REQUIRED_SECONDS
+                    or item.get("counts_toward_gate") is not False
+                    or item.get("sequential_soaks_are_continuous") is not False
+                    or item.get("stitched_processes_count_toward_gate") is not False
+                    or item.get("single_live_process") is not False
+                    or any(item.get(key) != expected[key] for key in compared)
+                ):
+                    violations.append("stitched_process_boundaries")
+    if row.get("ok") is True and row.get("detail") != "stitches_not_continuous":
+        violations.append("process_continuity")
+    if not isinstance(row.get("ok"), bool):
+        violations.append("process_continuity")
+    return violations
+
+
 def _refuses_forged(validate, report: dict[str, Any], **edits: Any) -> bool:
     forged = json.loads(json.dumps(report))
     for key, value in edits.items():
@@ -1380,6 +1663,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "l2_4": _l2_4(),
         "ubuntu_24h_specimen": checks["ubuntu_24h_specimen"],
         "non_additivity": checks["non_additivity"],
+        "process_continuity": checks["process_continuity"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -1426,6 +1710,7 @@ def preflight(
             "stall_watchdog": _check_stall_watchdog(),
             "ubuntu_24h_specimen": _check_ubuntu_specimen(metrics),
             "non_additivity": _check_non_additivity(repo),
+            "process_continuity": _check_process_continuity(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -1573,6 +1858,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_non_additivity_violations(top_additive))
     if additive != top_additive:
         violations.append("non_additivity_mismatch")
+    continuity = checks.get("process_continuity")
+    top_continuity = report.get("process_continuity")
+    violations.extend(_process_continuity_violations(continuity))
+    violations.extend(_process_continuity_violations(top_continuity))
+    if continuity != top_continuity:
+        violations.append("process_continuity_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

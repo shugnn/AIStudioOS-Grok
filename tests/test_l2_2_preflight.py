@@ -628,7 +628,7 @@ def test_committed_ubuntu_24h_is_a_short_specimen_not_the_72h_gate(monkeypatch: 
     monkeypatch.setattr(l2, "score", wrapped)
     report = pre.preflight()
     _assert_not_a_start(report)
-    assert seen == ["scaffold", "scaffold"]
+    assert seen == ["scaffold", "scaffold", "scaffold"]
     specimen = report["ubuntu_24h_specimen"]
     assert specimen == report["checks"]["ubuntu_24h_specimen"]
     assert specimen["ok"] is True
@@ -841,4 +841,128 @@ def test_forged_additive_preflight_fails_closed():
     assert report["l2_2_status"] == "NOT_STARTED"
     assert report["gates"]["can_start_clock"] is False
     assert report["non_additivity"]["historical_shorts_are_additive"] is False
+    assert report["documented_soak_argv_executed"] is False
+
+
+def test_sequential_soaks_do_not_stitch_into_72h_and_the_clock_stays_not_started():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    assert report["not_started_scaffold_intact"] is True
+    assert report["documented_soak_argv_executed"] is False
+    assert report["clock_effect"] == "none"
+    row = report["process_continuity"]
+    assert row == report["checks"]["process_continuity"]
+    assert row["ok"] is True
+    assert row["detail"] == "stitches_not_continuous"
+    assert row["rule"] == "one_live_soak_process"
+    assert row["tool"] == "scripts/l2_2_score.py"
+    assert row["sequential_soaks_are_continuous"] is False
+    assert row["stitched_processes_count_toward_gate"] is False
+    assert row["counts_toward_gate"] is False
+    assert row["d1_windows_metrics_file"] is None
+    assert row["d1_windows_bound_as_specimen"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["clock_effect"] == "none"
+    assert row["soak_launched"] is False
+    assert row["binds_clock_start"] is False
+    assert row["documented_soak_argv_executed"] is False
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    by_label = {item["label"]: item for item in row["refused_stitches"]}
+    assert list(by_label) == [
+        "pair_86400_back_to_back",
+        "trio_86400_calendar_72h",
+        "wall_reset_three_86400",
+    ]
+    pair = by_label["pair_86400_back_to_back"]
+    assert pair["walls_seconds"] == [86400.0, 86400.0]
+    assert pair["stitched_duration_seconds"] == 172800.0
+    assert pair["calendar_span_seconds"] == 172800.0
+    assert pair["same_host"] is True
+    assert pair["back_to_back"] is True
+    assert pair["distinct_start_count"] == 2
+    assert pair["distinct_process_count"] == 2
+    assert pair["stitched_duration_reaches_259200"] is False
+    trio = by_label["trio_86400_calendar_72h"]
+    assert trio["walls_seconds"] == [86400.0, 86400.0, 86400.0]
+    assert trio["stitched_duration_seconds"] == 259200.0
+    assert trio["calendar_span_seconds"] == 259200.0
+    assert trio["stitched_duration_reaches_259200"] is True
+    assert trio["calendar_span_reaches_259200"] is True
+    assert trio["same_host"] is True
+    reset = by_label["wall_reset_three_86400"]
+    assert reset["wall_reset"] is True
+    assert reset["segment_count"] == 3
+    assert reset["stitched_duration_seconds"] == 259200.0
+    assert reset["stitched_duration_reaches_259200"] is True
+    assert reset["calendar_span_reaches_259200"] is False
+    for item in by_label.values():
+        assert item["counts_toward_gate"] is False
+        assert item["sequential_soaks_are_continuous"] is False
+        assert item["stitched_processes_count_toward_gate"] is False
+        assert item["single_live_process"] is False
+        assert item["wall_required_seconds"] == 259200
+    assert report["ubuntu_24h_specimen"]["ubuntu_24h_counts_as_72h"] is False
+    assert report["ubuntu_24h_specimen"]["ubuntu_24h_used_as_dut"] is False
+    assert report["ubuntu_24h_specimen"]["classification"] == "SHORT"
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    blob = json.dumps(report)
+    assert '"sequential_soaks_are_continuous": true' not in blob
+    assert '"stitched_processes_count_toward_gate": true' not in blob
+    assert '"counts_toward_gate": true' not in blob
+    assert '"l2_2_status": "PASS"' not in blob
+    assert '"clock_state": "WALL_OBSERVED"' not in blob
+    readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
+    decision = (ROOT / "docs" / "progress" / "l2_2" / "START_DECISION.md").read_text(encoding="utf-8")
+    checklist = (ROOT / "docs" / "progress" / "l2_2" / "R2_CHECKLIST.md").read_text(encoding="utf-8")
+    assert "process-boundary continuity" in readme
+    assert "not a start" in readme
+    assert "The offline process-boundary continuity gate is not a start." in decision
+    assert pre.classify_start_decision(decision)["start_decision"] == "not_given"
+    assert "Stitching sequential or restarted soak invocations" in checklist
+    assert "Recording that rule is not a start." in checklist
+    assert pre.classify_r2(checklist)["start_decision"] == "not_given"
+
+
+def test_forged_stitch_preflight_fails_closed():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    forged = json.loads(json.dumps(report))
+    forged["process_continuity"]["sequential_soaks_are_continuous"] = True
+    forged["process_continuity"]["stitched_processes_count_toward_gate"] = True
+    forged["process_continuity"]["counts_toward_gate"] = True
+    forged["process_continuity"]["l2_2_status"] = "PASS"
+    forged["process_continuity"]["clock_state"] = "STARTED"
+    forged["process_continuity"]["production_7x24"] = "ACCEPTED"
+    forged["process_continuity"]["can_start_clock"] = True
+    forged["process_continuity"]["binds_clock_start"] = True
+    forged["checks"]["process_continuity"] = json.loads(json.dumps(forged["process_continuity"]))
+    for item in forged["process_continuity"]["refused_stitches"]:
+        if item["label"] == "trio_86400_calendar_72h":
+            item["counts_toward_gate"] = True
+            item["sequential_soaks_are_continuous"] = True
+            item["stitched_processes_count_toward_gate"] = True
+    for item in forged["checks"]["process_continuity"]["refused_stitches"]:
+        if item["label"] == "trio_86400_calendar_72h":
+            item["counts_toward_gate"] = True
+            item["sequential_soaks_are_continuous"] = True
+            item["stitched_processes_count_toward_gate"] = True
+    names = set(pre.validate_report(forged))
+    assert "stitched_process_boundaries" in names
+    assert "status" in names
+    assert "clock_state" in names
+    assert "production_claim" in names
+    assert "forged_can_start_clock" in names
+    assert "stitch_as_start" in names
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["clock_effect"] == "none"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert report["process_continuity"]["stitched_processes_count_toward_gate"] is False
     assert report["documented_soak_argv_executed"] is False

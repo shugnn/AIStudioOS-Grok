@@ -7,8 +7,11 @@ The preflight classifies a synthetic fresh summary and a synthetic stale summary
 through the stall watchdog, and reads the committed Ubuntu-24H metrics file only
 as a historical SHORT specimen. That specimen is not the 72h gate and not the
 stall DUT. Ended SHORT walls are not additive: a sum of 24h walls, including
-86400 times 3, is not one continuous 72h soak. The hook is not a start and
-not L2-2 acceptance. The non-additivity gate is not a start.
+86400 times 3, is not one continuous 72h soak. Stitching sequential or
+restarted soak invocations is not one live process, even back-to-back on the
+same host and even when the stitched span reaches 259200. The hook is not a
+start and not L2-2 acceptance. The non-additivity gate is not a start. The
+process-boundary continuity gate is not a start.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -381,6 +384,10 @@ def assess_l2_2_offline(
                 "additive_as_start",
                 "non_additivity",
                 "non_additivity_mismatch",
+                "stitched_process_boundaries",
+                "stitch_as_start",
+                "process_continuity",
+                "process_continuity_mismatch",
             }:
                 _add(violations, name)
             else:
@@ -467,6 +474,50 @@ def assess_l2_2_offline(
                     _add(violations, "additive_historical_shorts")
                 if item.get("naive_sum_reaches_259200") is True and item.get("counts_toward_gate") is not False:
                     _add(violations, "additive_historical_shorts")
+        continuity = checks.get("process_continuity")
+        top_continuity = preflight_report.get("process_continuity")
+        if continuity != top_continuity:
+            _add(violations, "process_continuity_mismatch")
+        if (
+            not isinstance(continuity, dict)
+            or continuity.get("ok") is not True
+            or continuity.get("detail") != "stitches_not_continuous"
+            or continuity.get("rule") != "one_live_soak_process"
+            or continuity.get("sequential_soaks_are_continuous") is not False
+            or continuity.get("stitched_processes_count_toward_gate") is not False
+            or continuity.get("counts_toward_gate") is not False
+            or continuity.get("d1_windows_bound_as_specimen") is not False
+            or continuity.get("d1_windows_metrics_file") is not None
+            or continuity.get("l2_2_status") != "NOT_STARTED"
+            or continuity.get("clock_state") != "NOT_STARTED"
+            or continuity.get("clock_effect") != "none"
+            or continuity.get("soak_launched") is not False
+            or continuity.get("documented_soak_argv_executed") is not False
+            or continuity.get("production_7x24") != "NOT_ACCEPTED"
+            or any(continuity.get(key) is not False for key in GATE_KEYS)
+        ):
+            _add(violations, "process_continuity")
+        stitches = continuity.get("refused_stitches") if isinstance(continuity, dict) else None
+        if not isinstance(stitches, list) or not stitches:
+            _add(violations, "process_continuity")
+        else:
+            for item in stitches:
+                if not isinstance(item, dict):
+                    _add(violations, "stitched_process_boundaries")
+                    continue
+                if (
+                    item.get("counts_toward_gate") is not False
+                    or item.get("sequential_soaks_are_continuous") is not False
+                    or item.get("stitched_processes_count_toward_gate") is not False
+                    or item.get("single_live_process") is not False
+                ):
+                    _add(violations, "stitched_process_boundaries")
+                reaches = (
+                    item.get("stitched_duration_reaches_259200") is True
+                    or item.get("calendar_span_reaches_259200") is True
+                )
+                if reaches and item.get("counts_toward_gate") is not False:
+                    _add(violations, "stitched_process_boundaries")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -495,6 +546,18 @@ def assess_l2_2_offline(
                 or block.get("rule") != "one_continuous_monotonic_wall"
             ):
                 _add(violations, "additive_historical_shorts")
+        continuity = score_report.get("process_continuity")
+        if not isinstance(continuity, dict):
+            _add(violations, "process_continuity")
+        else:
+            if (
+                continuity.get("sequential_soaks_are_continuous") is not False
+                or continuity.get("stitched_processes_count_toward_gate") is not False
+                or continuity.get("counts_toward_gate") is not False
+                or continuity.get("stitch_claim") is not False
+                or continuity.get("rule") != "one_live_soak_process"
+            ):
+                _add(violations, "stitched_process_boundaries")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -508,7 +571,12 @@ def assess_l2_2_offline(
                 _add(violations, "forged_production_accepted")
             elif name == "status":
                 _add(violations, "l2_2_status")
-            elif name in {"additive_historical_shorts", "non_additivity"}:
+            elif name in {
+                "additive_historical_shorts",
+                "non_additivity",
+                "stitched_process_boundaries",
+                "process_continuity",
+            }:
                 _add(violations, name)
             else:
                 _add(violations, "score:" + name)
@@ -568,6 +636,8 @@ def assess_l2_2_offline(
         "ubuntu_24h_counts_as_72h": False,
         "historical_shorts_are_additive": False,
         "sum_of_shorts_counts_toward_gate": False,
+        "sequential_soaks_are_continuous": False,
+        "stitched_processes_count_toward_gate": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",
@@ -617,6 +687,8 @@ def l2_2_offline_step() -> dict:
         ubuntu_24h_counts_as_72h=False,
         historical_shorts_are_additive=False,
         sum_of_shorts_counts_toward_gate=False,
+        sequential_soaks_are_continuous=False,
+        stitched_processes_count_toward_gate=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
         stall_hook_is_l2_2_acceptance=False,
         gate_result="NOT_A_GATE",
@@ -705,6 +777,8 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "ubuntu_24h_counts_as_72h": False,
         "historical_shorts_are_additive": False,
         "sum_of_shorts_counts_toward_gate": False,
+        "sequential_soaks_are_continuous": False,
+        "stitched_processes_count_toward_gate": False,
         "ubuntu_24h_specimen": specimen,
         "stall_hook_is_l2_2_acceptance": False,
         "gate_result": "NOT_A_GATE",

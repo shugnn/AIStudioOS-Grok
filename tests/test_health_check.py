@@ -601,6 +601,121 @@ def test_summary_drops_a_forged_additive_claim():
     assert summary["soak_launched"] is False
 
 
+def test_honest_preflight_keeps_soaks_from_being_stitched():
+    preflight_report, scored, r2_text = _honest()
+    row = preflight_report["process_continuity"]
+    assert row["ok"] is True
+    assert row["sequential_soaks_are_continuous"] is False
+    assert row["stitched_processes_count_toward_gate"] is False
+    assert row["counts_toward_gate"] is False
+    assert row["d1_windows_metrics_file"] is None
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["clock_effect"] == "none"
+    assert row["documented_soak_argv_executed"] is False
+    pair = next(item for item in row["refused_stitches"] if item["label"] == "pair_86400_back_to_back")
+    assert pair["stitched_duration_seconds"] == 172800.0
+    assert pair["same_host"] is True
+    assert pair["counts_toward_gate"] is False
+    assert pair["sequential_soaks_are_continuous"] is False
+    trio = next(item for item in row["refused_stitches"] if item["label"] == "trio_86400_calendar_72h")
+    assert trio["stitched_duration_seconds"] == 259200.0
+    assert trio["calendar_span_seconds"] == 259200.0
+    assert trio["stitched_duration_reaches_259200"] is True
+    assert trio["counts_toward_gate"] is False
+    assert trio["stitched_processes_count_toward_gate"] is False
+    reset = next(item for item in row["refused_stitches"] if item["label"] == "wall_reset_three_86400")
+    assert reset["wall_reset"] is True
+    assert reset["stitched_duration_seconds"] == 259200.0
+    assert reset["counts_toward_gate"] is False
+    assert scored["process_continuity"]["stitch_claim"] is False
+    assert scored["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert scored["process_continuity"]["stitched_processes_count_toward_gate"] is False
+    assert scored["l2_2_status"] == "NOT_STARTED"
+    assert scored["clock_state"] == "NOT_STARTED"
+    result = _assess(preflight_report, scored, r2_text)
+    assert result["ok"] is True, result["violations"]
+    assert result["violations"] == []
+    assert result["l2_2_status"] == "NOT_STARTED"
+    assert result["clock_state"] == "NOT_STARTED"
+    assert result["sequential_soaks_are_continuous"] is False
+    assert result["stitched_processes_count_toward_gate"] is False
+    assert result["ubuntu_24h_counts_as_72h"] is False
+    assert result["ubuntu_24h_used_as_dut"] is False
+    assert result["production_7x24"] == "NOT_ACCEPTED"
+    _assert_gates_closed(result)
+
+
+def test_forged_stitch_report_fails_closed_without_opening_gates():
+    preflight_report, scored, r2_text = _honest()
+    forged = json.loads(json.dumps(preflight_report))
+    forged["process_continuity"]["sequential_soaks_are_continuous"] = True
+    forged["process_continuity"]["stitched_processes_count_toward_gate"] = True
+    forged["process_continuity"]["counts_toward_gate"] = True
+    forged["process_continuity"]["l2_2_status"] = "PASS"
+    forged["process_continuity"]["clock_state"] = "STARTED"
+    forged["process_continuity"]["can_start_clock"] = True
+    forged["process_continuity"]["production_7x24"] = "ACCEPTED"
+    forged["checks"]["process_continuity"] = json.loads(json.dumps(forged["process_continuity"]))
+    for item in forged["process_continuity"]["refused_stitches"]:
+        if item.get("stitched_duration_reaches_259200") is True or item.get("calendar_span_reaches_259200") is True:
+            item["counts_toward_gate"] = True
+            item["sequential_soaks_are_continuous"] = True
+    for item in forged["checks"]["process_continuity"]["refused_stitches"]:
+        if item.get("stitched_duration_reaches_259200") is True or item.get("calendar_span_reaches_259200") is True:
+            item["counts_toward_gate"] = True
+            item["sequential_soaks_are_continuous"] = True
+    forged_score = json.loads(json.dumps(scored))
+    forged_score["process_continuity"]["sequential_soaks_are_continuous"] = True
+    forged_score["process_continuity"]["stitched_processes_count_toward_gate"] = True
+    forged_score["process_continuity"]["counts_toward_gate"] = True
+    forged_score["process_continuity"]["stitch_claim"] = True
+    forged_score["l2_2_status"] = "PASS"
+    forged_score["clock_state"] = "WALL_OBSERVED"
+    forged_score["production_7x24"] = "ACCEPTED"
+    result = _assess(forged, forged_score, r2_text)
+    assert result["ok"] is False
+    for needle in (
+        "stitched_process_boundaries",
+        "process_continuity",
+        "forged_pass",
+        "forged_clock_start",
+        "forged_can_start_clock",
+        "forged_production_accepted",
+    ):
+        assert needle in result["violations"]
+    assert result["l2_2_status"] == "WITHHELD"
+    assert result["clock_state"] == "WITHHELD"
+    assert result["sequential_soaks_are_continuous"] is False
+    assert result["stitched_processes_count_toward_gate"] is False
+    assert result["ubuntu_24h_counts_as_72h"] is False
+    assert result["ubuntu_24h_used_as_dut"] is False
+    _assert_gates_closed(result)
+
+
+def test_summary_drops_a_forged_stitch_claim():
+    forged = {
+        "step": "l2_2_offline",
+        "ok": True,
+        "l2_2_status": "NOT_STARTED",
+        "clock_state": "NOT_STARTED",
+        "sequential_soaks_are_continuous": True,
+        "stitched_processes_count_toward_gate": True,
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+    }
+    summary = hc.summarize([forged], True)
+    assert summary["l2_2_status"] == "NOT_STARTED"
+    assert summary["clock_state"] == "NOT_STARTED"
+    assert summary["can_start_clock"] is False
+    assert summary["can_accept_l2_2"] is False
+    assert summary["can_close_l2_2"] is False
+    assert summary["sequential_soaks_are_continuous"] is False
+    assert summary["stitched_processes_count_toward_gate"] is False
+    assert summary["production_7x24"] == "NOT_ACCEPTED"
+    assert summary["soak_launched"] is False
+
+
 def test_docs_call_health_check_a_not_started_check():
     readme = (ROOT / "docs" / "progress" / "l2_2" / "README.md").read_text(encoding="utf-8")
     package = (ROOT / "docs" / "progress" / "EVIDENCE_PACKAGE.md").read_text(encoding="utf-8")

@@ -588,3 +588,204 @@ def test_forged_additive_report_fails_closed():
     assert "forged_close" in names
     assert honest["l2_2_status"] == "NOT_STARTED"
     assert honest["gates"]["can_start_clock"] is False
+
+
+def test_sequential_soaks_and_wall_resets_are_not_one_continuous_72h():
+    pair = l2.synthetic_sequential_soaks([86400.0, 86400.0], pid_base=8100)
+    assessed = l2.assess_process_continuity(pair)
+    assert assessed["invocation_count"] == 2
+    assert assessed["distinct_start_count"] == 2
+    assert assessed["distinct_process_count"] == 2
+    assert assessed["same_host"] is True
+    assert assessed["back_to_back"] is True
+    assert assessed["stitched_duration_seconds"] == 172800.0
+    assert assessed["calendar_span_seconds"] == 172800.0
+    assert assessed["stitched_duration_reaches_259200"] is False
+    assert assessed["counts_toward_gate"] is False
+    assert assessed["sequential_soaks_are_continuous"] is False
+    assert assessed["stitched_processes_count_toward_gate"] is False
+    assert assessed["single_live_process"] is False
+
+    trio = l2.assess_process_continuity(l2.synthetic_sequential_soaks([86400.0, 86400.0, 86400.0], pid_base=8200))
+    assert trio["invocation_count"] == 3
+    assert trio["stitched_duration_seconds"] == 259200.0
+    assert trio["calendar_span_seconds"] == 259200.0
+    assert trio["stitched_duration_reaches_259200"] is True
+    assert trio["calendar_span_reaches_259200"] is True
+    assert trio["same_host"] is True
+    assert trio["back_to_back"] is True
+    assert trio["counts_toward_gate"] is False
+    assert trio["sequential_soaks_are_continuous"] is False
+    assert trio["stitched_processes_count_toward_gate"] is False
+
+    reset = l2.assess_process_continuity([], wall_samples=[0.0, 86400.0, 0.0, 86400.0, 0.0, 86400.0])
+    assert reset["wall_reset"] is True
+    assert reset["segment_count"] == 3
+    assert reset["stitched_duration_seconds"] == 259200.0
+    assert reset["stitched_duration_reaches_259200"] is True
+    assert reset["calendar_span_seconds"] is None
+    assert reset["counts_toward_gate"] is False
+    assert reset["sequential_soaks_are_continuous"] is False
+    assert reset["stitched_processes_count_toward_gate"] is False
+
+    standing = l2.standing_process_continuity(None)
+    assert standing["stitch_claim"] is False
+    assert standing["sequential_soaks_are_continuous"] is False
+    assert standing["stitched_processes_count_toward_gate"] is False
+    assert standing["counts_toward_gate"] is False
+    report = l2.score(_load("scaffold_clock_not_started.json"))
+    assert report["process_continuity"] == standing
+    assert report["wall"]["stitch_claim"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+
+
+def _stitch_capture(invocations: list[dict] | None = None, *, elapsed: float = 259200.0) -> dict:
+    doc = _load("scaffold_full_wall_cannot_accept.json")
+    doc["note"] = "In-memory stitch of ended soak invocations. Not one live 72h process."
+    doc["wall"]["elapsed_seconds"] = elapsed
+    doc["wall"]["source"] = "monotonic"
+    doc["metrics"]["wall_elapsed_s"] = elapsed
+    if invocations is not None:
+        doc["wall"]["invocations"] = invocations
+    return doc
+
+
+def test_stitched_restarted_or_reset_wall_does_not_count_as_72h():
+    pair = _stitch_capture(l2.synthetic_sequential_soaks([86400.0, 86400.0], pid_base=8100), elapsed=172800.0)
+    report = l2.score(pair)
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["clock_state"] == "INCOMPLETE"
+    assert report["wall"]["counts_toward_gate"] is False
+    assert report["wall"]["elapsed_meets_259200"] is False
+    assert report["wall"]["stitch_claim"] is True
+    assert report["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert report["process_continuity"]["stitched_processes_count_toward_gate"] is False
+    assert report["process_continuity"]["counts_toward_gate"] is False
+    assert report["process_continuity"]["same_host"] is True
+    assert report["process_continuity"]["back_to_back"] is True
+    assert report["process_continuity"]["distinct_start_count"] == 2
+    assert report["process_continuity"]["distinct_process_count"] == 2
+    assert report["process_continuity"]["stitched_duration_seconds"] == 172800.0
+    assert report["process_continuity"]["stitched_duration_reaches_259200"] is False
+    assert "stitched_process_boundaries" in report["gates"]["blockers"]
+    assert report["gates"]["can_start_clock"] is False
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["gates"]["can_close_l2_2"] is False
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert l2.validate_report(report) == []
+
+    gapped = l2.synthetic_sequential_soaks([86400.0, 86400.0], pid_base=8300)
+    gapped[1]["start_utc"] = "2026-02-02T01:00:00Z"
+    gapped[1]["end_utc"] = "2026-02-03T01:00:00Z"
+    report = l2.score(_stitch_capture(gapped, elapsed=172800.0))
+    assert report["process_continuity"]["back_to_back"] is False
+    assert report["process_continuity"]["calendar_span_seconds"] == 176400.0
+    assert report["process_continuity"]["counts_toward_gate"] is False
+    assert report["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert report["clock_state"] == "INCOMPLETE"
+
+    trio = _stitch_capture(l2.synthetic_sequential_soaks([86400.0, 86400.0, 86400.0], pid_base=8200), elapsed=259200.0)
+    trio["wall"]["source"] = "stitched"
+    trio["claimed_l2_2_status"] = "PASS"
+    trio["claimed_production_7x24"] = "ACCEPTED"
+    report = l2.score(trio)
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["clock_state"] == "INCOMPLETE"
+    assert report["wall"]["counts_toward_gate"] is False
+    assert report["bars"]["wall_monotonic_72h"] is False
+    assert report["process_continuity"]["stitched_duration_seconds"] == 259200.0
+    assert report["process_continuity"]["calendar_span_seconds"] == 259200.0
+    assert report["process_continuity"]["stitched_duration_reaches_259200"] is True
+    assert report["process_continuity"]["calendar_span_reaches_259200"] is True
+    assert report["process_continuity"]["counts_toward_gate"] is False
+    assert report["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert report["process_continuity"]["stitched_processes_count_toward_gate"] is False
+    assert "stitched_process_boundaries" in report["gates"]["blockers"]
+    assert "forged_claim_ignored" in report["gates"]["blockers"]
+    assert report["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert l2.validate_report(report) == []
+
+    reset = _stitch_capture(elapsed=259200.0)
+    reset["wall"]["wall_samples"] = [0, 86400, 0, 86400, 0, 86400]
+    report = l2.score(reset)
+    assert report["process_continuity"]["wall_reset"] is True
+    assert report["process_continuity"]["segment_count"] == 3
+    assert report["process_continuity"]["stitched_duration_seconds"] == 259200.0
+    assert report["process_continuity"]["counts_toward_gate"] is False
+    assert report["wall"]["counts_toward_gate"] is False
+    assert report["clock_state"] == "INCOMPLETE"
+    assert report["l2_2_status"] == "INCOMPLETE"
+
+    pids = _stitch_capture(elapsed=259200.0)
+    pids["wall"]["pids"] = [4101, 4102]
+    report = l2.score(pids)
+    assert report["process_continuity"]["distinct_process_count"] == 2
+    assert report["process_continuity"]["stitch_claim"] is True
+    assert report["process_continuity"]["stitched_duration_reaches_259200"] is True
+    assert report["process_continuity"]["counts_toward_gate"] is False
+    assert report["process_continuity"]["stitched_processes_count_toward_gate"] is False
+    assert report["clock_state"] == "INCOMPLETE"
+
+    starts = _stitch_capture(elapsed=259200.0)
+    starts["wall"]["starts"] = ["2026-02-01T00:00:00Z", "2026-02-02T00:00:00Z"]
+    report = l2.score(starts)
+    assert report["process_continuity"]["distinct_start_count"] == 2
+    assert report["process_continuity"]["counts_toward_gate"] is False
+    assert report["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["gates"]["can_start_clock"] is False
+
+    single = _stitch_capture(
+        [
+            {
+                "start_utc": "2026-02-01T00:00:00Z",
+                "end_utc": "2026-02-04T00:00:00Z",
+                "pid": 1,
+                "wall_elapsed_s": 259200.004,
+                "host": "fixture-host",
+            }
+        ],
+        elapsed=259200.004,
+    )
+    report = l2.score(single)
+    assert report["process_continuity"]["stitch_claim"] is False
+    assert report["clock_state"] == "WALL_OBSERVED"
+    assert report["wall"]["counts_toward_gate"] is True
+    assert report["l2_2_status"] == "INCOMPLETE"
+    assert report["gates"]["can_accept_l2_2"] is False
+
+
+def test_forged_stitch_report_fails_closed():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    forged = json.loads(json.dumps(honest))
+    forged["process_continuity"]["sequential_soaks_are_continuous"] = True
+    forged["process_continuity"]["stitched_processes_count_toward_gate"] = True
+    forged["process_continuity"]["counts_toward_gate"] = True
+    forged["process_continuity"]["stitch_claim"] = True
+    forged["wall"]["invocations"] = l2.synthetic_sequential_soaks([86400.0, 86400.0, 86400.0], pid_base=8200)
+    forged["wall"]["counts_toward_gate"] = True
+    forged["wall"]["stitch_claim"] = True
+    forged["wall"]["source"] = "stitched"
+    forged["wall"]["elapsed_seconds"] = 259200
+    forged["l2_2_status"] = "PASS"
+    forged["clock_state"] = "WALL_OBSERVED"
+    forged["production_7x24"] = "ACCEPTED"
+    forged["gates"]["can_accept_l2_2"] = True
+    forged["gates"]["can_start_clock"] = True
+    forged["gates"]["can_close_l2_2"] = True
+    names = set(l2.validate_report(forged))
+    assert "stitched_process_boundaries" in names
+    assert "forged_pass" in names
+    assert "production_claim" in names
+    assert "forged_accept" in names
+    assert "forged_clock_start" in names
+    assert "forged_close" in names
+    assert honest["l2_2_status"] == "NOT_STARTED"
+    assert honest["clock_state"] == "NOT_STARTED"
+    assert honest["process_continuity"]["sequential_soaks_are_continuous"] is False
+    assert honest["process_continuity"]["stitched_processes_count_toward_gate"] is False
+    assert honest["gates"]["can_start_clock"] is False

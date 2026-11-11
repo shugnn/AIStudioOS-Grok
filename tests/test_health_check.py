@@ -787,6 +787,13 @@ def test_honest_preflight_records_the_supervisor_probe_as_not_condition_2():
     assert result["attributes_live_soak_failure"] is False
     assert result["dummy_tests_satisfy_condition_4"] is False
     assert result["implementation_satisfies_condition_4"] is False
+    assert result["classifies_or_validates_sample_public_pack_passed"] is True
+    assert result["local_only_pack_rejected"] is True
+    assert result["condition_3_satisfied"] is False
+    assert result["packs_live_soak_evidence"] is False
+    assert result["dummy_tests_satisfy_condition_3"] is False
+    assert result["implementation_satisfies_condition_3"] is False
+    assert result["scaffold_sha256sums_is_soak_evidence"] is False
     assert result["record_11s_later_meets_requirement"] is False
     assert result["l2_2_status"] == "NOT_STARTED"
     assert result["production_7x24"] == "NOT_ACCEPTED"

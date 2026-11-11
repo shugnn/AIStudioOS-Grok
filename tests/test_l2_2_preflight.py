@@ -1382,3 +1382,82 @@ def test_sample_failure_attribution_is_recorded_and_is_not_condition_4():
     assert report["gates"]["can_start_clock"] is False
     assert report["l2_2_status"] == "NOT_STARTED"
     assert report["clock_state"] == "NOT_STARTED"
+
+
+def test_sample_public_pack_is_recorded_and_is_not_condition_3():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    row = report["public_evidence_pack"]
+    assert row == report["checks"]["public_evidence_pack"]
+    assert row["ok"] is True
+    assert row["detail"] == "implementation_exists_sample_public_pack_validated"
+    assert row["tool"] == "scripts/public_evidence_pack.py"
+    assert row["action"] == "validate_sample_public_pack"
+    assert row["dut"] == "synthetic_sample_public_pack"
+    assert row["hasher"] == "scripts/evidence_sha256sums.py"
+    assert row["sample_only"] is True
+    assert row["offline"] is True
+    assert row["classifies_or_validates_sample_public_pack_passed"] is True
+    assert row["local_only_pack_rejected"] is True
+    assert row["missing_piece_rejected"] is True
+    assert row["scaffold_sha256sums_refused"] is True
+    assert row["committed_scaffold_sums_refused"] is True
+    assert row["condition_3_satisfied"] is False
+    assert row["packs_live_soak_evidence"] is False
+    assert row["dummy_tests_satisfy_condition_3"] is False
+    assert row["implementation_satisfies_condition_3"] is False
+    assert row["local_only_counts_as_public_evidence"] is False
+    assert row["scaffold_sha256sums_is_soak_evidence"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["soak_launched"] is False
+    by_id = {item["id"]: item for item in row["samples"]}
+    assert by_id["sample_public_complete"]["accepted"] is True
+    assert by_id["local_only_with_all_pieces"]["rejection"] == "local_only"
+    assert by_id["local_only_with_all_pieces"]["local_only_pack_rejected"] is True
+    assert by_id["missing_final_metrics"]["rejection"] == "missing_final_metrics"
+    assert by_id["missing_log_summary"]["rejection"] == "missing_log_summary"
+    assert by_id["missing_sha_list"]["rejection"] == "missing_sha_list"
+    assert by_id["scaffold_sha256sums"]["rejection"] == "scaffold_sha256sums_not_soak_evidence"
+    assert by_id["scaffold_sha256sums"]["scaffold_sha256sums_is_soak_evidence"] is False
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "sample_pack_called_condition_3",
+        "local_only_called_public_evidence",
+        "scaffold_sha256sums_called_soak_evidence",
+        "sample_called_live_soak_pack",
+    ]
+    for item in row["refused_claims"]:
+        assert item["condition_3_satisfied"] is False
+        assert item["packs_live_soak_evidence"] is False
+        assert item["local_only_counts_as_public_evidence"] is False
+        assert item["scaffold_sha256sums_is_soak_evidence"] is False
+        assert item["can_start_clock"] is False
+        assert item["l2_2_status"] == "NOT_STARTED"
+    assert "does not satisfy founder condition 3" in report["operator_note"]
+    assert any("founder condition 3" in step and "not a start" in step for step in report["next_steps"])
+    blob = json.dumps(report)
+    assert '"condition_3_satisfied": true' not in blob
+    assert '"packs_live_soak_evidence": true' not in blob
+    assert '"scaffold_sha256sums_is_soak_evidence": true' not in blob
+    assert '"can_start_clock": true' not in blob
+    forged = json.loads(blob)
+    forged["public_evidence_pack"]["condition_3_satisfied"] = True
+    forged["public_evidence_pack"]["packs_live_soak_evidence"] = True
+    forged["public_evidence_pack"]["scaffold_sha256sums_is_soak_evidence"] = True
+    forged["public_evidence_pack"]["can_start_clock"] = True
+    forged["public_evidence_pack"]["l2_2_status"] = "PASS"
+    forged["checks"]["public_evidence_pack"] = json.loads(json.dumps(forged["public_evidence_pack"]))
+    names = set(pre.validate_report(forged))
+    assert "condition_3_unsatisfied" in names
+    assert "scaffold_sha256sums_not_soak_evidence" in names
+    assert "forged_can_start_clock" in names
+    assert "forged_pass" in names
+    assert report["public_evidence_pack"]["condition_3_satisfied"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"

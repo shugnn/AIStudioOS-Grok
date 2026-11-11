@@ -122,6 +122,7 @@ def test_clock_not_started_is_the_canonical_report():
             "supervisor_watchdog_dummy_scaffold_is_not_condition_2",
             "supervision_cadence_offline_exercise_is_not_condition_2",
             "failure_attribution_sample_classification_is_not_condition_4",
+            "public_evidence_pack_sample_validation_is_not_condition_3",
         ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -1416,4 +1417,74 @@ def test_sample_failure_attribution_claim_does_not_satisfy_condition_4():
     assert "condition_4_unsatisfied" in report["gates"]["blockers"]
     assert "unknown_root_cause_refused" in report["gates"]["blockers"]
     assert "failure_attribution_sample_classification_is_not_condition_4" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+
+
+def test_sample_public_pack_claim_does_not_satisfy_condition_3():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    row = honest["public_evidence_pack"]
+    assert row["ok"] is True
+    assert row["classifies_or_validates_sample_public_pack_passed"] is True
+    assert row["local_only_pack_rejected"] is True
+    assert row["missing_piece_rejected"] is True
+    assert row["scaffold_sha256sums_refused"] is True
+    assert row["sample_only"] is True
+    assert row["offline"] is True
+    assert row["condition_3_satisfied"] is False
+    assert row["packs_live_soak_evidence"] is False
+    assert row["dummy_tests_satisfy_condition_3"] is False
+    assert row["implementation_satisfies_condition_3"] is False
+    assert row["local_only_counts_as_public_evidence"] is False
+    assert row["scaffold_sha256sums_is_soak_evidence"] is False
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert "public_evidence_pack_sample_validation_is_not_condition_3" in honest["gates"]["blockers"]
+    assert honest["founder_start_conditions"]["conditions_satisfied"] is False
+    assert honest["gates"]["can_start_clock"] is False
+    assert l2.validate_report(honest) == []
+    by_id = {item["id"]: item for item in row["samples"]}
+    assert by_id["sample_public_complete"]["accepted"] is True
+    assert by_id["local_only_with_all_pieces"]["rejection"] == "local_only"
+    assert by_id["missing_final_metrics"]["accepted"] is False
+    assert by_id["scaffold_sha256sums"]["rejection"] == "scaffold_sha256sums_not_soak_evidence"
+
+    claimed = _load("scaffold_clock_not_started.json")
+    claimed["public_evidence_pack_claim"] = {
+        "condition_3_satisfied": True,
+        "dummy_tests_satisfy_condition_3": True,
+        "implementation_satisfies_condition_3": True,
+        "packs_live_soak_evidence": True,
+        "local_only_counts_as_public_evidence": True,
+        "publication": "LOCAL_ONLY",
+        "scaffold_sha256sums_is_soak_evidence": True,
+        "l2_2_status": "PASS",
+        "clock_state": "STARTED",
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+    }
+    report = l2.score(claimed)
+    got = report["public_evidence_pack"]
+    assert got["sample_pack_claimed_as_condition_3"] is True
+    assert got["local_only_called_public_evidence"] is True
+    assert got["scaffold_sums_called_soak_evidence"] is True
+    assert got["live_soak_pack_claimed"] is True
+    assert got["pass_or_start_claimed"] is True
+    assert got["condition_3_satisfied"] is False
+    assert got["packs_live_soak_evidence"] is False
+    assert got["local_only_counts_as_public_evidence"] is False
+    assert got["scaffold_sha256sums_is_soak_evidence"] is False
+    assert got["classifies_or_validates_sample_public_pack_passed"] is True
+    assert got["local_only_pack_rejected"] is True
+    assert got["can_start_clock"] is False
+    assert got["l2_2_status"] == "NOT_STARTED"
+    assert got["clock_state"] == "NOT_STARTED"
+    assert got["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert "condition_3_unsatisfied" in report["gates"]["blockers"]
+    assert "local_only_evidence_refused" in report["gates"]["blockers"]
+    assert "scaffold_sha256sums_not_soak_evidence" in report["gates"]["blockers"]
+    assert "public_evidence_pack_sample_validation_is_not_condition_3" in report["gates"]["blockers"]
     assert l2.validate_report(report) == []

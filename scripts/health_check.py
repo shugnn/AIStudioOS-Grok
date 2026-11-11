@@ -29,6 +29,11 @@ bound. scripts/failure_attribution.py classifies sample records into business,
 host, or supervision and rejects unknown, empty, missing, free-text, and
 multi-class labels. That sample classification does not attribute a live soak
 failure and does not satisfy founder condition 4.
+scripts/public_evidence_pack.py validates a sample public-shaped pack that
+includes final metrics, a log summary, and a SHA list. LOCAL_ONLY is refused
+and does not count. A pack missing any of those pieces is refused.
+docs/progress/l2_2/SHA256SUMS.json is not live soak evidence. That sample
+validation does not satisfy founder condition 3 and is not a start.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -304,6 +309,16 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
             or node.get("attributes_live_soak_failure") is True
         ):
             _add(violations, "condition_4_unsatisfied")
+        if (
+            node.get("condition_3_satisfied") is True
+            or node.get("sample_pack_satisfies_condition_3") is True
+            or node.get("dummy_tests_satisfy_condition_3") is True
+            or node.get("implementation_satisfies_condition_3") is True
+            or node.get("packs_live_soak_evidence") is True
+        ):
+            _add(violations, "condition_3_unsatisfied")
+        if node.get("scaffold_sha256sums_is_soak_evidence") is True:
+            _add(violations, "scaffold_sha256sums_not_soak_evidence")
         if node.get("a_72h_pass_is_production_readiness") is True:
             _add(violations, "forged_production_accepted")
         for key in GATE_KEYS:
@@ -465,6 +480,48 @@ def _attribution_exercise_passed(preflight_report: Any, score_report: Any) -> bo
     if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
         return False
     return row_ok(preflight_report.get("failure_attribution")) and row_ok(score_report.get("failure_attribution"))
+
+
+def _pack_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
+    """True only when both reports record a closed sample pack validation that passed."""
+
+    def row_ok(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and row.get("ok") is True
+            and row.get("sample_only") is True
+            and row.get("offline") is True
+            and row.get("classifies_or_validates_sample_public_pack_passed") is True
+            and row.get("local_only_pack_rejected") is True
+            and row.get("missing_piece_rejected") is True
+            and row.get("scaffold_sha256sums_refused") is True
+            and row.get("condition_3_satisfied") is False
+            and row.get("packs_live_soak_evidence") is False
+            and row.get("dummy_tests_satisfy_condition_3") is False
+            and row.get("implementation_satisfies_condition_3") is False
+            and row.get("local_only_counts_as_public_evidence") is False
+            and row.get("scaffold_sha256sums_is_soak_evidence") is False
+            and row.get("l2_2_status") == "NOT_STARTED"
+            and row.get("clock_state") == "NOT_STARTED"
+            and row.get("can_start_clock") is False
+            and row.get("production_7x24") == "NOT_ACCEPTED"
+        )
+
+    if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
+        return False
+    return row_ok(preflight_report.get("public_evidence_pack")) and row_ok(score_report.get("public_evidence_pack"))
+
+
+def _pack_row_ok(row: Any) -> bool:
+    """True when the sample public-pack scaffold stays closed and the exercise passed."""
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import public_evidence_pack as evidence_pack
+    except Exception:
+        return False
+    return evidence_pack.scaffold_violations(row, require_success=True) == []
 
 
 def _attribution_row_ok(row: Any) -> bool:
@@ -669,7 +726,11 @@ def assess_l2_2_offline(
                 "supervision_cadence_writer_mismatch",
                 "failure_attribution",
                 "failure_attribution_mismatch",
+                "public_evidence_pack",
+                "public_evidence_pack_mismatch",
                 "condition_4_unsatisfied",
+                "condition_3_unsatisfied",
+                "scaffold_sha256sums_not_soak_evidence",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -895,6 +956,12 @@ def assess_l2_2_offline(
             _add(violations, "failure_attribution_mismatch")
         if not _attribution_row_ok(attribution):
             _add(violations, "failure_attribution")
+        evidence_pack = checks.get("public_evidence_pack")
+        top_evidence_pack = preflight_report.get("public_evidence_pack")
+        if evidence_pack != top_evidence_pack:
+            _add(violations, "public_evidence_pack_mismatch")
+        if not _pack_row_ok(evidence_pack):
+            _add(violations, "public_evidence_pack")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -967,6 +1034,9 @@ def assess_l2_2_offline(
         scored_attribution = score_report.get("failure_attribution")
         if not _attribution_row_ok(scored_attribution):
             _add(violations, "failure_attribution")
+        scored_pack = score_report.get("public_evidence_pack")
+        if not _pack_row_ok(scored_pack):
+            _add(violations, "public_evidence_pack")
         blockers = score_report.get("gates", {}).get("blockers") if isinstance(score_report.get("gates"), dict) else []
         if not isinstance(blockers, list) or "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_honesty")
@@ -979,6 +1049,11 @@ def assess_l2_2_offline(
             or "failure_attribution_sample_classification_is_not_condition_4" not in blockers
         ):
             _add(violations, "failure_attribution")
+        if (
+            not isinstance(blockers, list)
+            or "public_evidence_pack_sample_validation_is_not_condition_3" not in blockers
+        ):
+            _add(violations, "public_evidence_pack")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -1009,7 +1084,11 @@ def assess_l2_2_offline(
                 "supervision_cadence_writer",
                 "failure_attribution",
                 "failure_attribution_mismatch",
+                "public_evidence_pack",
+                "public_evidence_pack_mismatch",
                 "condition_4_unsatisfied",
+                "condition_3_unsatisfied",
+                "scaffold_sha256sums_not_soak_evidence",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -1102,6 +1181,15 @@ def assess_l2_2_offline(
         "attributes_live_soak_failure": False,
         "dummy_tests_satisfy_condition_4": False,
         "implementation_satisfies_condition_4": False,
+        "classifies_or_validates_sample_public_pack_passed": (
+            _pack_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "local_only_pack_rejected": _pack_exercise_passed(preflight_report, score_report) if ok else False,
+        "condition_3_satisfied": False,
+        "packs_live_soak_evidence": False,
+        "dummy_tests_satisfy_condition_3": False,
+        "implementation_satisfies_condition_3": False,
+        "scaffold_sha256sums_is_soak_evidence": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
@@ -1178,6 +1266,15 @@ def l2_2_offline_step() -> dict:
         attributes_live_soak_failure=False,
         dummy_tests_satisfy_condition_4=False,
         implementation_satisfies_condition_4=False,
+        classifies_or_validates_sample_public_pack_passed=assessment[
+            "classifies_or_validates_sample_public_pack_passed"
+        ],
+        local_only_pack_rejected=assessment["local_only_pack_rejected"],
+        condition_3_satisfied=False,
+        packs_live_soak_evidence=False,
+        dummy_tests_satisfy_condition_3=False,
+        implementation_satisfies_condition_3=False,
+        scaffold_sha256sums_is_soak_evidence=False,
         record_11s_later_meets_requirement=False,
         a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
@@ -1318,6 +1415,25 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "attributes_live_soak_failure": False,
         "dummy_tests_satisfy_condition_4": False,
         "implementation_satisfies_condition_4": False,
+        "classifies_or_validates_sample_public_pack_passed": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("classifies_or_validates_sample_public_pack_passed") is True
+            and l2.get("condition_3_satisfied") is not True
+            and l2.get("packs_live_soak_evidence") is not True
+        ),
+        "local_only_pack_rejected": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("local_only_pack_rejected") is True
+            and l2.get("local_only_counts_as_public_evidence") is not True
+            and l2.get("condition_3_satisfied") is not True
+        ),
+        "condition_3_satisfied": False,
+        "packs_live_soak_evidence": False,
+        "dummy_tests_satisfy_condition_3": False,
+        "implementation_satisfies_condition_3": False,
+        "scaffold_sha256sums_is_soak_evidence": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,

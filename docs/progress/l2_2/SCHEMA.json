@@ -86,6 +86,24 @@
     "l2_2_status": "NOT_STARTED",
     "clock_state": "NOT_STARTED"
   },
+  "public_evidence_pack": {
+    "tool": "scripts/public_evidence_pack.py",
+    "action": "validate_sample_public_pack",
+    "dut": "synthetic_sample_public_pack",
+    "hasher": "scripts/evidence_sha256sums.py",
+    "condition_3_satisfied": false,
+    "packs_live_soak_evidence": false,
+    "dummy_tests_satisfy_condition_3": false,
+    "implementation_satisfies_condition_3": false,
+    "local_only_counts_as_public_evidence": false,
+    "scaffold_sha256sums_is_soak_evidence": false,
+    "can_start_clock": false,
+    "can_accept_l2_2": false,
+    "can_close_l2_2": false,
+    "production_7x24": "NOT_ACCEPTED",
+    "l2_2_status": "NOT_STARTED",
+    "clock_state": "NOT_STARTED"
+  },
   "interactive_registration": "founder_gated_out_of_scope",
   "founder_start_conditions": {
     "approval_issue": 9,
@@ -149,6 +167,7 @@
     "scripts/supervisor_watchdog.py watches a pid and writes a crash record within 10 seconds. Dummy-process tests can pass that timing check. They do not satisfy founder condition 2, do not demonstrate a supervision write every 10 minutes, and are not a live L2-2 supervisor watchdog. A crash record 11 seconds later does not meet the requirement. Treating the scaffold, the dummy tests, the synthetic probe, or stall_watchdog.py as condition 2 fails closed.",
     "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is 600 seconds. A time-compressed offline exercise can show writes on a short interval. That exercise does not demonstrate a supervision write every 10 minutes, does not satisfy founder condition 2, and is not a start. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer.",
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start.",
+    "scripts/public_evidence_pack.py validates sample public-shaped packs only. A pack labeled sample/offline with publication public plus final metrics, a log summary, and a SHA list can validate. LOCAL_ONLY is refused and does not count. A pack missing any of the three pieces is refused. docs/progress/l2_2/SHA256SUMS.json binds scaffold bytes only and is not live soak evidence. That sample validation does not satisfy founder condition 3 and is not a start.",
     "product_l2_task_split NOT_STARTED means this duty-cycle report does not grant product L2. The observation-track product L2 status is CONDITIONAL, not granted, pending T3. T2 DS-T2-20261110 is ACCEPTED (Issue #9 comment 6765608469, 2026-11-10T11:00:40Z, PR #13 tip 9cac002). Comment 6767990189 (2026-11-10T13:00:44Z) accepted PR #14 tip 738b47a as derivation evidence and left L2 CONDITIONAL. No task_inbox/DS-T3 card is on main. PR #15 tip a07ec9f prepared the derive-then-execute path and is not a T3 run and not acceptance.",
     "The scorer never starts the clock and never registers Interactive console scheduled tasks.",
     "Registering Interactive duty is a founder major gate and is out of scope for the L2-2 scaffold.",

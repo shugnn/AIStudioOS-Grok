@@ -1,0 +1,25 @@
+{
+  "task_id": "DS-T4-20261112",
+  "kind": "observation-track submission",
+  "claim": {
+    "observation_track_acceptance": "NOT_CLAIMED",
+    "l3_acceptance": "NOT_CLAIMED",
+    "t4_acceptance": "NOT_CLAIMED",
+    "production_7x24": "NOT_ACCEPTED",
+    "l2_2_clock": "NOT_STARTED"
+  },
+  "paid_api_called": false,
+  "a6_cost_json": "BLOCKED_PENDING_FOUNDER_API_AUTHORIZATION",
+  "a6_note": "A-6 / cost.json is blocked pending founder API authorization in the founder chat",
+  "input": {
+    "path": "data/appts.csv",
+    "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+    "bytes": 12350,
+    "lines": 301
+  },
+  "product_verifier_verdict_v1": "REJECTED",
+  "product_verifier_verdict_v2": "ACCEPTED",
+  "product_verifier_checks_v2": 4,
+  "a4_separate_steps": true,
+  "note": "product_verifier_verdict_v2 ACCEPTED is the contract judgment of candidate_v2. It is not observation-track acceptance and not production 7x24 acceptance."
+}

@@ -1,0 +1,128 @@
+{
+  "task_id": "DS-T4-20261112",
+  "parent_pid": 2297,
+  "a4": "Verifier and Worker are separate operating-system processes. The Worker does not write verdict files. The Verifier does not write candidate_v2.json. verify_v1 and verify_v2 are two invocations of control_plane.contract_verifier. prepare_input and revise are two invocations of scripts/worker_run_task.py.",
+  "paid_api_called": false,
+  "ok": true,
+  "steps": [
+    {
+      "step": "prepare_input",
+      "role": "worker",
+      "argv": [
+        "/usr/bin/python3",
+        "/agent/repos/AIStudioOS-Grok/scripts/worker_run_task.py",
+        "--task-id",
+        "DS-T4-20261112",
+        "--inbox",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112",
+        "--step",
+        "prepare_input"
+      ],
+      "pid": 2298,
+      "reported_pid": 2298,
+      "exit_code": 0,
+      "started_utc": "2026-11-11T23:39:40Z",
+      "finished_utc": "2026-11-11T23:39:40Z",
+      "ok": true,
+      "wrote": [
+        "data/appts.csv"
+      ],
+      "verdict": null,
+      "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+      "bytes": 12350,
+      "lines": 301
+    },
+    {
+      "step": "verify_v1",
+      "role": "verifier",
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "control_plane.contract_verifier",
+        "--candidate",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/candidate_v1.json",
+        "--csv",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/data/appts.csv",
+        "--contract",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/contract.json",
+        "--out",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/deliverables/verdict_v1.json",
+        "--step",
+        "verify_v1"
+      ],
+      "pid": 2299,
+      "reported_pid": 2299,
+      "exit_code": 0,
+      "started_utc": "2026-11-11T23:39:40Z",
+      "finished_utc": "2026-11-11T23:39:40Z",
+      "ok": true,
+      "wrote": [
+        "deliverables/verdict_v1.json"
+      ],
+      "verdict": "REJECTED",
+      "sha256": null,
+      "bytes": null,
+      "lines": null
+    },
+    {
+      "step": "revise",
+      "role": "worker",
+      "argv": [
+        "/usr/bin/python3",
+        "/agent/repos/AIStudioOS-Grok/scripts/worker_run_task.py",
+        "--task-id",
+        "DS-T4-20261112",
+        "--inbox",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112",
+        "--step",
+        "revise"
+      ],
+      "pid": 2300,
+      "reported_pid": 2300,
+      "exit_code": 0,
+      "started_utc": "2026-11-11T23:39:40Z",
+      "finished_utc": "2026-11-11T23:39:40Z",
+      "ok": true,
+      "wrote": [
+        "deliverables/candidate_v2.json",
+        "deliverables/revision_log.json"
+      ],
+      "verdict": null,
+      "sha256": null,
+      "bytes": null,
+      "lines": null
+    },
+    {
+      "step": "verify_v2",
+      "role": "verifier",
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "control_plane.contract_verifier",
+        "--candidate",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/deliverables/candidate_v2.json",
+        "--csv",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/data/appts.csv",
+        "--contract",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/contract.json",
+        "--out",
+        "/agent/repos/AIStudioOS-Grok/task_inbox/DS-T4-20261112/deliverables/verdict_v2.json",
+        "--step",
+        "verify_v2"
+      ],
+      "pid": 2301,
+      "reported_pid": 2301,
+      "exit_code": 0,
+      "started_utc": "2026-11-11T23:39:40Z",
+      "finished_utc": "2026-11-11T23:39:40Z",
+      "ok": true,
+      "wrote": [
+        "deliverables/verdict_v2.json"
+      ],
+      "verdict": "ACCEPTED",
+      "sha256": null,
+      "bytes": null,
+      "lines": null
+    }
+  ]
+}

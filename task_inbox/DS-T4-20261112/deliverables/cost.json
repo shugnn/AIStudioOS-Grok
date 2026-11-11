@@ -1,0 +1,15 @@
+{
+  "record_type": "blocked_pending_not_a_paid_run",
+  "status": "BLOCKED",
+  "blocked": true,
+  "completed_paid_run": false,
+  "paid_api_called": false,
+  "a6": "A-6 / cost.json is blocked pending founder API authorization in the founder chat",
+  "pending": "founder API authorization in the founder chat",
+  "model": null,
+  "calls": null,
+  "prompt_tokens": null,
+  "completion_tokens": null,
+  "estimated_cny": null,
+  "note": "Unpaid run. No model API was called. Token counts and CNY were not measured and are null on purpose. This file is not a completed paid-run cost record."
+}

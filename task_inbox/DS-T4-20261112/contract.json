@@ -1,0 +1,15 @@
+{
+  "task_id": "DS-T4-20261112",
+  "source_comment": "6802795658",
+  "generator_comment": "6804688982",
+  "byte_count_comment": "6804695605",
+  "rules": {
+    "R1": "every amount is a two-decimal string (e.g. \"1234.50\"), never a float",
+    "R2": "by_dept must contain all four departments med/surg/ped/derm (include a department even if count is 0)",
+    "R3": "by_month keys must be in ascending month order",
+    "R4": "only status=completed rows count toward counts and revenue; cancelled and no_show do not"
+  },
+  "departments": ["med", "surg", "ped", "derm"],
+  "count_status": "completed",
+  "ignored_statuses": ["cancelled", "no_show"]
+}

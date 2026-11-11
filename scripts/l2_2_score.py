@@ -19,6 +19,9 @@ is not a live soak attribution and does not satisfy founder condition 4.
 A sample public evidence pack from scripts/public_evidence_pack.py is not
 live soak evidence and does not satisfy founder condition 3. LOCAL_ONLY does
 not count. docs/progress/l2_2/SHA256SUMS.json is not that pack.
+A sample supervision-policy check from scripts/supervision_policy.py is not
+the pre-start policy gate and does not satisfy founder condition 1. Yellow
+stays 13s through 300s inclusive. Red stays strictly above 300s.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -246,6 +249,7 @@ NEXT_STEPS = (
     "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is at most 600 seconds. The offline exercise uses a short time-compressed interval. Writes on that short schedule do not demonstrate a supervision write at least once every 10 minutes and do not satisfy founder condition 2. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer. A report that treats the short exercise as the 10-minute cadence, as condition 2, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start. A report that treats it as condition 4, as a live soak attribution, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/public_evidence_pack.py validates sample public-shaped packs only. A pack labeled sample/offline with publication public plus final metrics, a log summary, and a SHA list can validate. LOCAL_ONLY is refused and does not count. A pack missing any of the three pieces is refused. docs/progress/l2_2/SHA256SUMS.json binds scaffold bytes only and is not live soak evidence. That sample validation does not satisfy founder condition 3 and is not a start. A report that treats it as condition 3, as a live soak evidence pack, as permission to count LOCAL_ONLY, or as PASS, started, ACCEPTED, or production 7x24 fails closed.",
+    "scripts/supervision_policy.py checks sample bands and sample monotonic sequences only. Yellow is 13s through 300s inclusive. Red is strictly above 300s. Sample gaps are classified by coverage_gap_log.classify_band. A backward timestamp or mono_seconds jump is rejected. A wall clock that goes backwards is not monotonic. Yellow starting at 10s, or red at 300s inclusive, is refused. That sample check does not satisfy founder condition 1 and is not a start. Matching the committed 13/300 constants is not the pre-start policy gate. A report that treats it as condition 1, as a started clock, PASS, ACCEPTED, or production 7x24 fails closed.",
     "Issue #9 comment 6776483825 (2026-11-10T19:00:37Z) recorded an observation-track acceptance of T3 and product L2, void if plan.json was handwritten to fool the check. This scorer does not re-claim that verdict, does not accept L2-2, and does not start the clock. Production 7x24 stays NOT ACCEPTED.",
 )
 
@@ -415,6 +419,10 @@ def validate_capture(doc: dict[str, Any]) -> None:
         doc["public_evidence_pack_claim"], dict
     ):
         raise CaptureError("public_evidence_pack_claim must be an object or null")
+    if "supervision_policy_claim" in doc and doc["supervision_policy_claim"] is not None and not isinstance(
+        doc["supervision_policy_claim"], dict
+    ):
+        raise CaptureError("supervision_policy_claim must be an object or null")
 
     if evidence == "scaffold":
         _reject_scaffold_incident_dates(doc)
@@ -1658,6 +1666,29 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     if evidence_pack.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
         blockers.append("forged_pass")
 
+    policy_claim = (
+        doc.get("supervision_policy_claim") if isinstance(doc.get("supervision_policy_claim"), dict) else None
+    )
+    supervision_policy = supervision_policy_scaffold(policy_claim)
+    blockers.append("supervision_policy_sample_check_is_not_condition_1")
+    if (
+        supervision_policy.get("sample_policy_claimed_as_condition_1") is True
+        or supervision_policy.get("committed_constants_claimed_as_condition_1") is True
+    ) and "condition_1_unsatisfied" not in blockers:
+        blockers.append("condition_1_unsatisfied")
+    if (
+        supervision_policy.get("alternate_bands_called_founder_policy") is True
+        and "supervision_policy_band_refused" not in blockers
+    ):
+        blockers.append("supervision_policy_band_refused")
+    if (
+        supervision_policy.get("backward_clock_called_monotonic") is True
+        and "supervision_policy_clock_not_monotonic" not in blockers
+    ):
+        blockers.append("supervision_policy_clock_not_monotonic")
+    if supervision_policy.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
+        blockers.append("forged_pass")
+
     stopped = metrics.get("stopped_early") if isinstance(metrics, dict) else None
     supervision_fault = bool(ended_watch or red_gaps or (started and not r2))
     if started and not watch_live and not runner_bad and not ended_watch:
@@ -1716,6 +1747,9 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
                 "does not pack live soak evidence and does not satisfy founder "
                 "condition 3. LOCAL_ONLY does not count. "
                 "docs/progress/l2_2/SHA256SUMS.json is not that pack. "
+                "A sample supervision-policy check from scripts/supervision_policy.py "
+                "does not satisfy founder condition 1 and does not start the clock. "
+                "Yellow stays 13s through 300s inclusive. Red stays strictly above 300s. "
                 "A 72h result is not production readiness."
             ),
         },
@@ -1738,6 +1772,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         "supervision_cadence_writer": cadence,
         "failure_attribution": attribution,
         "public_evidence_pack": evidence_pack,
+        "supervision_policy": supervision_policy,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -2411,6 +2446,34 @@ def _public_pack_report_violations(block: Any) -> list[str]:
     return evidence_pack.scaffold_violations(block, require_success=True)
 
 
+def supervision_policy_scaffold(claim: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Sample policy result. Passing it does not satisfy founder condition 1."""
+    try:
+        import supervision_policy as policy
+    except Exception:
+        return {
+            "ok": False,
+            "detail": "import_failed",
+            "condition_1_satisfied": False,
+            "classifies_sample_policy_bands_passed": False,
+            "monotonic_sample_sequence_passed": False,
+            "declared_bands_match_founder_policy": False,
+            "committed_constants_satisfy_condition_1": False,
+        }
+    block = policy.stable_scaffold_status()
+    policy.annotate_scaffold_claim(block, claim if isinstance(claim, dict) else None)
+    policy.apply_closed_flags(block)
+    return block
+
+
+def _supervision_policy_report_violations(block: Any) -> list[str]:
+    try:
+        import supervision_policy as policy
+    except Exception:
+        return ["supervision_policy"]
+    return policy.scaffold_violations(block, require_success=True)
+
+
 def _scaffold_report_violations(block: Any) -> list[str]:
     try:
         import supervisor_watchdog as watchdog
@@ -2551,6 +2614,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_cadence_report_violations(report.get("supervision_cadence_writer")))
     violations.extend(_attribution_report_violations(report.get("failure_attribution")))
     violations.extend(_public_pack_report_violations(report.get("public_evidence_pack")))
+    violations.extend(_supervision_policy_report_violations(report.get("supervision_policy")))
     blockers = gates.get("blockers") if isinstance(gates.get("blockers"), list) else []
     if "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
         violations.append("supervisor_watchdog_honesty")
@@ -2562,6 +2626,8 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         violations.append("failure_attribution")
     if "public_evidence_pack_sample_validation_is_not_condition_3" not in blockers:
         violations.append("public_evidence_pack")
+    if "supervision_policy_sample_check_is_not_condition_1" not in blockers:
+        violations.append("supervision_policy")
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

@@ -34,6 +34,10 @@ includes final metrics, a log summary, and a SHA list. LOCAL_ONLY is refused
 and does not count. A pack missing any of those pieces is refused.
 docs/progress/l2_2/SHA256SUMS.json is not live soak evidence. That sample
 validation does not satisfy founder condition 3 and is not a start.
+scripts/supervision_policy.py checks the committed bands (yellow 13s through
+300s inclusive, red strictly above 300s) and sample monotonic sequences. A
+backward jump is rejected. That sample check does not satisfy founder
+condition 1 and is not a start.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -319,6 +323,18 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
             _add(violations, "condition_3_unsatisfied")
         if node.get("scaffold_sha256sums_is_soak_evidence") is True:
             _add(violations, "scaffold_sha256sums_not_soak_evidence")
+        if (
+            node.get("condition_1_satisfied") is True
+            or node.get("sample_policy_satisfies_condition_1") is True
+            or node.get("dummy_tests_satisfy_condition_1") is True
+            or node.get("implementation_satisfies_condition_1") is True
+            or node.get("committed_constants_satisfy_condition_1") is True
+        ):
+            _add(violations, "condition_1_unsatisfied")
+        if node.get("alternate_bands_accepted") is True:
+            _add(violations, "supervision_policy_band_refused")
+        if node.get("backward_clock_is_monotonic") is True:
+            _add(violations, "supervision_policy_clock_not_monotonic")
         if node.get("a_72h_pass_is_production_readiness") is True:
             _add(violations, "forged_production_accepted")
         for key in GATE_KEYS:
@@ -480,6 +496,51 @@ def _attribution_exercise_passed(preflight_report: Any, score_report: Any) -> bo
     if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
         return False
     return row_ok(preflight_report.get("failure_attribution")) and row_ok(score_report.get("failure_attribution"))
+
+
+def _policy_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
+    """True only when both reports record a closed sample policy check that passed."""
+
+    def row_ok(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and row.get("ok") is True
+            and row.get("sample_only") is True
+            and row.get("offline") is True
+            and row.get("classifies_sample_policy_bands_passed") is True
+            and row.get("monotonic_sample_sequence_passed") is True
+            and row.get("declared_bands_match_founder_policy") is True
+            and row.get("backward_jump_rejected") is True
+            and row.get("alternate_bands_rejected") is True
+            and row.get("red_inclusive_rejected") is True
+            and row.get("condition_1_satisfied") is False
+            and row.get("dummy_tests_satisfy_condition_1") is False
+            and row.get("implementation_satisfies_condition_1") is False
+            and row.get("committed_constants_satisfy_condition_1") is False
+            and row.get("condition_2_satisfied") is False
+            and row.get("condition_3_satisfied") is False
+            and row.get("condition_4_satisfied") is False
+            and row.get("l2_2_status") == "NOT_STARTED"
+            and row.get("clock_state") == "NOT_STARTED"
+            and row.get("can_start_clock") is False
+            and row.get("production_7x24") == "NOT_ACCEPTED"
+        )
+
+    if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
+        return False
+    return row_ok(preflight_report.get("supervision_policy")) and row_ok(score_report.get("supervision_policy"))
+
+
+def _policy_row_ok(row: Any) -> bool:
+    """True when the sample policy scaffold stays closed and the exercise passed."""
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import supervision_policy as policy
+    except Exception:
+        return False
+    return policy.scaffold_violations(row, require_success=True) == []
 
 
 def _pack_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
@@ -728,6 +789,11 @@ def assess_l2_2_offline(
                 "failure_attribution_mismatch",
                 "public_evidence_pack",
                 "public_evidence_pack_mismatch",
+                "supervision_policy",
+                "supervision_policy_mismatch",
+                "condition_1_unsatisfied",
+                "supervision_policy_band_refused",
+                "supervision_policy_clock_not_monotonic",
                 "condition_4_unsatisfied",
                 "condition_3_unsatisfied",
                 "scaffold_sha256sums_not_soak_evidence",
@@ -962,6 +1028,12 @@ def assess_l2_2_offline(
             _add(violations, "public_evidence_pack_mismatch")
         if not _pack_row_ok(evidence_pack):
             _add(violations, "public_evidence_pack")
+        policy = checks.get("supervision_policy")
+        top_policy = preflight_report.get("supervision_policy")
+        if policy != top_policy:
+            _add(violations, "supervision_policy_mismatch")
+        if not _policy_row_ok(policy):
+            _add(violations, "supervision_policy")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -1037,6 +1109,9 @@ def assess_l2_2_offline(
         scored_pack = score_report.get("public_evidence_pack")
         if not _pack_row_ok(scored_pack):
             _add(violations, "public_evidence_pack")
+        scored_policy = score_report.get("supervision_policy")
+        if not _policy_row_ok(scored_policy):
+            _add(violations, "supervision_policy")
         blockers = score_report.get("gates", {}).get("blockers") if isinstance(score_report.get("gates"), dict) else []
         if not isinstance(blockers, list) or "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_honesty")
@@ -1054,6 +1129,11 @@ def assess_l2_2_offline(
             or "public_evidence_pack_sample_validation_is_not_condition_3" not in blockers
         ):
             _add(violations, "public_evidence_pack")
+        if (
+            not isinstance(blockers, list)
+            or "supervision_policy_sample_check_is_not_condition_1" not in blockers
+        ):
+            _add(violations, "supervision_policy")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -1086,6 +1166,11 @@ def assess_l2_2_offline(
                 "failure_attribution_mismatch",
                 "public_evidence_pack",
                 "public_evidence_pack_mismatch",
+                "supervision_policy",
+                "supervision_policy_mismatch",
+                "condition_1_unsatisfied",
+                "supervision_policy_band_refused",
+                "supervision_policy_clock_not_monotonic",
                 "condition_4_unsatisfied",
                 "condition_3_unsatisfied",
                 "scaffold_sha256sums_not_soak_evidence",
@@ -1190,6 +1275,19 @@ def assess_l2_2_offline(
         "dummy_tests_satisfy_condition_3": False,
         "implementation_satisfies_condition_3": False,
         "scaffold_sha256sums_is_soak_evidence": False,
+        "classifies_sample_policy_bands_passed": (
+            _policy_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "monotonic_sample_sequence_passed": (
+            _policy_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "declared_bands_match_founder_policy": (
+            _policy_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "condition_1_satisfied": False,
+        "dummy_tests_satisfy_condition_1": False,
+        "implementation_satisfies_condition_1": False,
+        "committed_constants_satisfy_condition_1": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
@@ -1275,6 +1373,13 @@ def l2_2_offline_step() -> dict:
         dummy_tests_satisfy_condition_3=False,
         implementation_satisfies_condition_3=False,
         scaffold_sha256sums_is_soak_evidence=False,
+        classifies_sample_policy_bands_passed=assessment["classifies_sample_policy_bands_passed"],
+        monotonic_sample_sequence_passed=assessment["monotonic_sample_sequence_passed"],
+        declared_bands_match_founder_policy=assessment["declared_bands_match_founder_policy"],
+        condition_1_satisfied=False,
+        dummy_tests_satisfy_condition_1=False,
+        implementation_satisfies_condition_1=False,
+        committed_constants_satisfy_condition_1=False,
         record_11s_later_meets_requirement=False,
         a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
@@ -1434,6 +1539,31 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "dummy_tests_satisfy_condition_3": False,
         "implementation_satisfies_condition_3": False,
         "scaffold_sha256sums_is_soak_evidence": False,
+        "classifies_sample_policy_bands_passed": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("classifies_sample_policy_bands_passed") is True
+            and l2.get("condition_1_satisfied") is not True
+            and l2.get("committed_constants_satisfy_condition_1") is not True
+        ),
+        "monotonic_sample_sequence_passed": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("monotonic_sample_sequence_passed") is True
+            and l2.get("condition_1_satisfied") is not True
+            and l2.get("backward_clock_is_monotonic") is not True
+        ),
+        "declared_bands_match_founder_policy": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("declared_bands_match_founder_policy") is True
+            and l2.get("condition_1_satisfied") is not True
+            and l2.get("committed_constants_satisfy_condition_1") is not True
+        ),
+        "condition_1_satisfied": False,
+        "dummy_tests_satisfy_condition_1": False,
+        "implementation_satisfies_condition_1": False,
+        "committed_constants_satisfy_condition_1": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,

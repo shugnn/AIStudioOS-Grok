@@ -123,6 +123,7 @@ def test_clock_not_started_is_the_canonical_report():
             "supervision_cadence_offline_exercise_is_not_condition_2",
             "failure_attribution_sample_classification_is_not_condition_4",
             "public_evidence_pack_sample_validation_is_not_condition_3",
+            "supervision_policy_sample_check_is_not_condition_1",
         ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -1487,4 +1488,79 @@ def test_sample_public_pack_claim_does_not_satisfy_condition_3():
     assert "local_only_evidence_refused" in report["gates"]["blockers"]
     assert "scaffold_sha256sums_not_soak_evidence" in report["gates"]["blockers"]
     assert "public_evidence_pack_sample_validation_is_not_condition_3" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+
+
+def test_sample_supervision_policy_claim_does_not_satisfy_condition_1():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    row = honest["supervision_policy"]
+    assert row["ok"] is True
+    assert row["classifies_sample_policy_bands_passed"] is True
+    assert row["monotonic_sample_sequence_passed"] is True
+    assert row["declared_bands_match_founder_policy"] is True
+    assert row["backward_jump_rejected"] is True
+    assert row["alternate_bands_rejected"] is True
+    assert row["red_inclusive_rejected"] is True
+    assert row["sample_only"] is True
+    assert row["offline"] is True
+    assert row["condition_1_satisfied"] is False
+    assert row["dummy_tests_satisfy_condition_1"] is False
+    assert row["implementation_satisfies_condition_1"] is False
+    assert row["committed_constants_satisfy_condition_1"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["condition_3_satisfied"] is False
+    assert row["condition_4_satisfied"] is False
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert "supervision_policy_sample_check_is_not_condition_1" in honest["gates"]["blockers"]
+    assert honest["founder_start_conditions"]["conditions_satisfied"] is False
+    assert honest["gates"]["can_start_clock"] is False
+    assert l2.validate_report(honest) == []
+    by_id = {item["id"]: item for item in row["samples"]}
+    assert by_id["gap_12_ok"]["band"] == "ok"
+    assert by_id["gap_300_yellow"]["band"] == "yellow"
+    assert by_id["gap_just_above_300_red"]["band"] == "red"
+    assert by_id["wall_clock_backward"]["rejection"] == "backward_jump"
+    assert by_id["yellow_starts_at_10"]["rejection"] == "band_mismatch"
+    assert by_id["red_inclusive_at_300"]["rejection"] == "red_inclusive"
+
+    claimed = _load("scaffold_clock_not_started.json")
+    claimed["supervision_policy_claim"] = {
+        "condition_1_satisfied": True,
+        "dummy_tests_satisfy_condition_1": True,
+        "implementation_satisfies_condition_1": True,
+        "committed_constants_satisfy_condition_1": True,
+        "yellow_min_seconds": 10.0,
+        "red_inclusive": True,
+        "clock": "wall",
+        "l2_2_status": "PASS",
+        "clock_state": "STARTED",
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+    }
+    report = l2.score(claimed)
+    got = report["supervision_policy"]
+    assert got["sample_policy_claimed_as_condition_1"] is True
+    assert got["committed_constants_claimed_as_condition_1"] is True
+    assert got["alternate_bands_called_founder_policy"] is True
+    assert got["backward_clock_called_monotonic"] is True
+    assert got["pass_or_start_claimed"] is True
+    assert got["condition_1_satisfied"] is False
+    assert got["committed_constants_satisfy_condition_1"] is False
+    assert got["dummy_tests_satisfy_condition_1"] is False
+    assert got["implementation_satisfies_condition_1"] is False
+    assert got["classifies_sample_policy_bands_passed"] is True
+    assert got["declared_bands_match_founder_policy"] is True
+    assert got["can_start_clock"] is False
+    assert got["l2_2_status"] == "NOT_STARTED"
+    assert got["clock_state"] == "NOT_STARTED"
+    assert got["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert "condition_1_unsatisfied" in report["gates"]["blockers"]
+    assert "supervision_policy_band_refused" in report["gates"]["blockers"]
+    assert "supervision_policy_clock_not_monotonic" in report["gates"]["blockers"]
+    assert "supervision_policy_sample_check_is_not_condition_1" in report["gates"]["blockers"]
     assert l2.validate_report(report) == []

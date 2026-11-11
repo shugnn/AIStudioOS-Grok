@@ -61,6 +61,8 @@ L2-4 closed as **INCOMPLETE**: supervision misconfiguration (wrong target) + hos
 
 `scripts/failure_attribution.py` can classify sample records into these three classes and reject unknown, empty, missing, free-text, and multi-class labels. That exercise does not attribute a live soak failure, does not satisfy founder condition 4, and does not start the clock.
 
+`scripts/supervision_policy.py` can check the committed R2 bands (yellow 13s through 300s inclusive, red strictly above 300s) and sample monotonic sequences. That exercise does not satisfy founder condition 1 and does not start the clock.
+
 ## R8 — Host health
 
 Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster). **No new high-frequency Interactive console long-run** without explicit founder approve after host status register.
@@ -74,6 +76,7 @@ Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster)
 | `scripts/soak_2h.py` | DUT metrics; `max_wall_seconds`; finally metrics |
 | `scripts/l2_2_score.py` | Offline 72h bundle scorer. Does not start a clock and does not register Interactive tasks |
 | `scripts/coverage_gap_log.py` | Append-only gap line: `timestamp`, `gap_seconds`, `band` (`ok` / `yellow` / `red`), `source`. Does not complete a soak |
+| `scripts/supervision_policy.py` | Sample/offline check that the committed bands are yellow from 13s through 300s inclusive and red strictly above 300s, and that sample timestamp / `mono_seconds` sequences are non-decreasing. A different band is refused. That check does not satisfy founder condition 1 and does not start the clock |
 | `scripts/supervision_monitor.py` | Calls the logger. `--live-dut` is required before the source is `soak_summary_live` or `runner_glob_live` |
 | `docs/progress/l2_2/R2_CHECKLIST.md` | Blank R2 note. Points at the logger. Does not start the clock |
 | `docs/progress/EMERGENCY_STOP` | Human red stop |

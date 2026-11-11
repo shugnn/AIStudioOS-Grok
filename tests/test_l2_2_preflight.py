@@ -1461,3 +1461,84 @@ def test_sample_public_pack_is_recorded_and_is_not_condition_3():
     assert report["gates"]["can_start_clock"] is False
     assert report["l2_2_status"] == "NOT_STARTED"
     assert report["clock_state"] == "NOT_STARTED"
+
+
+def test_sample_supervision_policy_is_recorded_and_is_not_condition_1():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    row = report["supervision_policy"]
+    assert row == report["checks"]["supervision_policy"]
+    assert row["ok"] is True
+    assert row["detail"] == "implementation_exists_sample_policy_classified"
+    assert row["tool"] == "scripts/supervision_policy.py"
+    assert row["action"] == "classify_sample_policy"
+    assert row["dut"] == "synthetic_sample_policy"
+    assert row["gap_logger"] == "scripts/coverage_gap_log.py"
+    assert row["sample_only"] is True
+    assert row["offline"] is True
+    assert row["classifies_sample_policy_bands_passed"] is True
+    assert row["monotonic_sample_sequence_passed"] is True
+    assert row["declared_bands_match_founder_policy"] is True
+    assert row["backward_jump_rejected"] is True
+    assert row["alternate_bands_rejected"] is True
+    assert row["red_inclusive_rejected"] is True
+    assert row["yellow_min_seconds"] == 13.0
+    assert row["yellow_max_seconds"] == 300.0
+    assert row["red_exclusive_min_seconds"] == 300.0
+    assert row["red_boundary"] == "exclusive"
+    assert row["condition_1_satisfied"] is False
+    assert row["dummy_tests_satisfy_condition_1"] is False
+    assert row["implementation_satisfies_condition_1"] is False
+    assert row["committed_constants_satisfy_condition_1"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["condition_3_satisfied"] is False
+    assert row["condition_4_satisfied"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["soak_launched"] is False
+    by_id = {item["id"]: item for item in row["samples"]}
+    assert by_id["gap_12_ok"]["band"] == "ok"
+    assert by_id["gap_13_yellow"]["band"] == "yellow"
+    assert by_id["gap_300_yellow"]["band"] == "yellow"
+    assert by_id["gap_just_above_300_red"]["band"] == "red"
+    assert by_id["wall_clock_backward"]["rejection"] == "backward_jump"
+    assert by_id["mono_seconds_backward"]["rejection"] == "backward_jump"
+    assert by_id["yellow_starts_at_10"]["rejection"] == "band_mismatch"
+    assert by_id["red_inclusive_at_300"]["rejection"] == "red_inclusive"
+    assert by_id["constants_called_condition_1"]["condition_1_satisfied"] is False
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "sample_policy_called_condition_1",
+        "committed_constants_called_condition_1",
+        "alternate_bands_called_founder_policy",
+        "backward_clock_called_monotonic",
+    ]
+    for item in row["refused_claims"]:
+        assert item["condition_1_satisfied"] is False
+        assert item["committed_constants_satisfy_condition_1"] is False
+        assert item["can_start_clock"] is False
+        assert item["l2_2_status"] == "NOT_STARTED"
+    assert "does not satisfy founder condition 1" in report["operator_note"]
+    assert any("founder condition 1" in step and "not a start" in step for step in report["next_steps"])
+    blob = json.dumps(report)
+    assert '"condition_1_satisfied": true' not in blob
+    assert '"committed_constants_satisfy_condition_1": true' not in blob
+    assert '"can_start_clock": true' not in blob
+    forged = json.loads(blob)
+    forged["supervision_policy"]["condition_1_satisfied"] = True
+    forged["supervision_policy"]["committed_constants_satisfy_condition_1"] = True
+    forged["supervision_policy"]["can_start_clock"] = True
+    forged["supervision_policy"]["l2_2_status"] = "PASS"
+    forged["checks"]["supervision_policy"] = json.loads(json.dumps(forged["supervision_policy"]))
+    names = set(pre.validate_report(forged))
+    assert "condition_1_unsatisfied" in names
+    assert "forged_can_start_clock" in names
+    assert "forged_pass" in names
+    assert report["supervision_policy"]["condition_1_satisfied"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"

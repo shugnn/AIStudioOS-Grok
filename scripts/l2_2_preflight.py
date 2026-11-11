@@ -35,7 +35,14 @@ can validate. LOCAL_ONLY is refused and does not count. A pack missing any of
 the three pieces is refused. docs/progress/l2_2/SHA256SUMS.json binds scaffold
 bytes only and is not live soak evidence. That sample validation does not
 satisfy founder condition 3, does not pack live soak evidence, and is not a
-start. A report that treats
+start. Checks the committed supervision bands and sample monotonic sequences
+through scripts/supervision_policy.py. Yellow is 13s through 300s inclusive.
+Red is strictly above 300s. Sample gaps go through coverage_gap_log.classify_band
+(12s ok, 13s yellow, 300s yellow, just above 300s red). A backward timestamp
+or mono_seconds jump is rejected. A wall clock that goes backwards is not
+monotonic. A policy that starts yellow at 10s, or that treats 300s as red, is
+refused. That sample check does not satisfy founder condition 1, does not
+declare the pre-start policy gate, and is not a start. A report that treats
 the probe, the dummy exercise, the short cadence exercise, or the soak-DUT stall hook as that watchdog, or
 that claims condition 2, or that treats the sample classification as condition 4,
 or that treats the sample public pack or the scaffold SHA256SUMS file as founder
@@ -202,6 +209,7 @@ REQUIRED_PATHS = (
     "scripts/supervision_cadence.py",
     "scripts/failure_attribution.py",
     "scripts/public_evidence_pack.py",
+    "scripts/supervision_policy.py",
     "scripts/stall_watchdog.py",
     "scripts/soak_2h.py",
     "docs/progress/l2_2/R2_CHECKLIST.md",
@@ -223,6 +231,7 @@ REQUIRED_PATHS = (
     "tests/test_supervision_cadence.py",
     "tests/test_failure_attribution.py",
     "tests/test_public_evidence_pack.py",
+    "tests/test_supervision_policy.py",
 )
 
 CHECK_ORDER = (
@@ -245,6 +254,7 @@ CHECK_ORDER = (
     "supervision_cadence_writer",
     "failure_attribution",
     "public_evidence_pack",
+    "supervision_policy",
     "scorer_refuses",
 )
 
@@ -268,6 +278,7 @@ OPERATOR_NOTE = (
     "The supervision cadence writer can emit records on a configured interval whose production bound is 600 seconds. The preflight exercise uses a short time-compressed interval. That exercise is not a start, does not demonstrate a supervision write every 10 minutes, and does not satisfy founder condition 2. A write later than 600 seconds does not meet the cadence bound. "
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision and rejects unknown, empty, missing, free-text, and multi-class labels. That sample classification is not a start, does not attribute a live soak failure, and does not satisfy founder condition 4. "
     "scripts/public_evidence_pack.py validates a sample public-shaped pack that includes final metrics, a log summary, and a SHA list. LOCAL_ONLY is refused and does not count. A pack missing any of those pieces is refused. docs/progress/l2_2/SHA256SUMS.json is not live soak evidence. That sample validation is not a start, does not pack live soak evidence, and does not satisfy founder condition 3. "
+    "scripts/supervision_policy.py checks the committed bands (yellow 13s through 300s inclusive, red strictly above 300s) and sample monotonic sequences. A backward timestamp or mono_seconds jump is rejected. A different band, including yellow starting at 10s or red at 300s inclusive, is refused. That sample check is not a start, does not declare the pre-start policy gate, and does not satisfy founder condition 1. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -300,6 +311,7 @@ NEXT_STEPS = (
     "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is 600 seconds. The preflight exercise uses a short time-compressed interval. Writes on that short schedule do not demonstrate a supervision write every 10 minutes, do not satisfy founder condition 2, and are not a start. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer. A report that treats the short exercise as the 10-minute cadence or as condition 2 fails closed.",
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start. A report that treats it as condition 4, as a live soak attribution, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/public_evidence_pack.py validates sample public-shaped packs only. A pack labeled sample/offline with publication public plus final metrics, a log summary, and a SHA list can validate. LOCAL_ONLY is refused and does not count. A pack missing any of the three pieces is refused. docs/progress/l2_2/SHA256SUMS.json binds scaffold bytes only and is not live soak evidence. That sample validation does not satisfy founder condition 3 and is not a start. A report that treats it as condition 3, as a live soak evidence pack, as permission to count LOCAL_ONLY, or as PASS, started, ACCEPTED, or production 7x24 fails closed.",
+    "scripts/supervision_policy.py checks sample bands and sample monotonic sequences only. Yellow is 13s through 300s inclusive. Red is strictly above 300s. Sample gaps are classified by coverage_gap_log.classify_band. A backward timestamp or mono_seconds jump is rejected. A wall clock that goes backwards is not monotonic. Yellow starting at 10s, or red at 300s inclusive, is refused. classifies_sample_policy_bands_passed, monotonic_sample_sequence_passed, and declared_bands_match_founder_policy may be true for that sample check only. condition_1_satisfied stays false. Matching the committed 13/300 constants does not satisfy founder condition 1 and is not a start. A report that treats it as condition 1, as a started clock, PASS, ACCEPTED, or production 7x24 fails closed.",
     "Production 7x24 stays NOT ACCEPTED. A 72h result is not production readiness. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -793,7 +805,29 @@ def _check_contract(root: Path) -> dict[str, Any]:
         and evidence_pack.get("l2_2_status") == "NOT_STARTED"
         and evidence_pack.get("clock_state") == "NOT_STARTED"
     )
-    ok = ok and founder_ok and watchdog_ok and implementation_ok and cadence_ok and attribution_ok and evidence_pack_ok
+    policy = doc.get("supervision_policy") if isinstance(doc.get("supervision_policy"), dict) else {}
+    policy_ok = (
+        policy.get("tool") == "scripts/supervision_policy.py"
+        and policy.get("action") == "classify_sample_policy"
+        and policy.get("dut") == "synthetic_sample_policy"
+        and policy.get("gap_logger") == "scripts/coverage_gap_log.py"
+        and policy.get("yellow_min_seconds") == 13.0
+        and policy.get("yellow_max_seconds") == 300.0
+        and policy.get("red_exclusive_min_seconds") == 300.0
+        and policy.get("red_boundary") == "exclusive"
+        and policy.get("clock") == "monotonic"
+        and policy.get("condition_1_satisfied") is False
+        and policy.get("dummy_tests_satisfy_condition_1") is False
+        and policy.get("implementation_satisfies_condition_1") is False
+        and policy.get("committed_constants_satisfy_condition_1") is False
+        and policy.get("can_start_clock") is False
+        and policy.get("can_accept_l2_2") is False
+        and policy.get("can_close_l2_2") is False
+        and policy.get("production_7x24") == "NOT_ACCEPTED"
+        and policy.get("l2_2_status") == "NOT_STARTED"
+        and policy.get("clock_state") == "NOT_STARTED"
+    )
+    ok = ok and founder_ok and watchdog_ok and implementation_ok and cadence_ok and attribution_ok and evidence_pack_ok and policy_ok
     return {
         "ok": ok,
         "preflight_schema": doc.get("preflight_schema") if doc.get("preflight_schema") == SCHEMA else "mismatch",
@@ -2819,6 +2853,42 @@ def _public_pack_preflight_violations(row: Any) -> list[str]:
     return evidence_pack.scaffold_violations(row, require_success=False)
 
 
+def _check_supervision_policy(root: Path) -> dict[str, Any]:
+    """Classify sample bands and sequences when the script is in this root.
+
+    An empty root skips the exercise. A passing sample check does not
+    satisfy founder condition 1 and does not start the clock.
+    """
+    try:
+        import supervision_policy as policy
+    except Exception:
+        return {
+            "ok": False,
+            "tool": "scripts/supervision_policy.py",
+            "detail": "import_failed",
+            "condition_1_satisfied": False,
+            "classifies_sample_policy_bands_passed": False,
+            "monotonic_sample_sequence_passed": False,
+            "declared_bands_match_founder_policy": False,
+            "committed_constants_satisfy_condition_1": False,
+            "l2_2_status": "NOT_STARTED",
+            "clock_state": "NOT_STARTED",
+            "can_start_clock": False,
+            "production_7x24": "NOT_ACCEPTED",
+            "soak_launched": False,
+        }
+    present = (root / "scripts" / "supervision_policy.py").is_file()
+    return policy.scaffold_status_for_root(present)
+
+
+def _supervision_policy_preflight_violations(row: Any) -> list[str]:
+    try:
+        import supervision_policy as policy
+    except Exception:
+        return ["supervision_policy"]
+    return policy.scaffold_violations(row, require_success=False)
+
+
 def _check_supervisor_watchdog_implementation(root: Path) -> dict[str, Any]:
     """Run the dummy watchdog exercise when the script is in this root.
 
@@ -2887,6 +2957,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "supervision_cadence_writer": checks["supervision_cadence_writer"],
         "failure_attribution": checks["failure_attribution"],
         "public_evidence_pack": checks["public_evidence_pack"],
+        "supervision_policy": checks["supervision_policy"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -2944,6 +3015,7 @@ def preflight(
             "supervision_cadence_writer": _check_supervision_cadence_writer(repo),
             "failure_attribution": _check_failure_attribution(repo),
             "public_evidence_pack": _check_public_evidence_pack(repo),
+            "supervision_policy": _check_supervision_policy(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -3133,6 +3205,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_public_pack_preflight_violations(top_evidence_pack))
     if evidence_pack != top_evidence_pack:
         violations.append("public_evidence_pack_mismatch")
+    policy = checks.get("supervision_policy")
+    top_policy = report.get("supervision_policy")
+    violations.extend(_supervision_policy_preflight_violations(policy))
+    violations.extend(_supervision_policy_preflight_violations(top_policy))
+    if policy != top_policy:
+        violations.append("supervision_policy_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

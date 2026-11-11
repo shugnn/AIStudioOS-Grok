@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """L1 Minimal Runner — local, $0 LLM, OS-held exclusive lock (cross-platform).
 
+`heartbeat`, `status_line`, and `task_entry` sync Issue #9 comments via
+`scripts/ds_issue9.py` before they emit a note. They do not start the L2-2
+clock and do not claim production 7×24.
+
 PLATFORM:
 - POSIX (Linux/macOS): fcntl.flock(LOCK_EX | LOCK_NB)
 - Windows: msvcrt.locking on a fixed region of the lock file
@@ -129,23 +133,23 @@ class OSFileLock:
             self.fd = None
 
 
-def run_heartbeat(token: str | None) -> dict:
+def _run_script(job: str, script_name: str, token: str | None, timeout: int = 90) -> dict:
     import subprocess
 
     if not token:
-        return {"job": "heartbeat", "ok": False, "rc": 2, "error": "no GH_TOKEN"}
+        return {"job": job, "ok": False, "rc": 2, "error": "no GH_TOKEN"}
     env = os.environ.copy()
     env["GH_TOKEN"] = token
     r = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "l1_heartbeat.py")],
+        [sys.executable, str(ROOT / "scripts" / script_name)],
         cwd=str(ROOT),
         env=env,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=timeout,
     )
     return {
-        "job": "heartbeat",
+        "job": job,
         "ok": r.returncode == 0,
         "rc": r.returncode,
         "stdout_tail": (r.stdout or "")[-500:],
@@ -153,11 +157,26 @@ def run_heartbeat(token: str | None) -> dict:
     }
 
 
+def run_heartbeat(token: str | None) -> dict:
+    return _run_script("heartbeat", "l1_heartbeat.py", token)
+
+
+def run_status_line(token: str | None) -> dict:
+    return _run_script("status_line", "status_line.py", token)
+
+
+def run_task_entry(token: str | None) -> dict:
+    return _run_script("task_entry", "task_entry.py", token)
+
+
 def run_dry_protocol_check() -> dict:
     required = [
         ROOT / "docs" / "05-cross-team-communication-protocol.md",
         ROOT / "docs" / "06-l1-runner-design.md",
         ROOT / "scripts" / "l1_heartbeat.py",
+        ROOT / "scripts" / "ds_issue9.py",
+        ROOT / "scripts" / "status_line.py",
+        ROOT / "scripts" / "task_entry.py",
         ROOT / "control_plane" / "control_plane.py",
     ]
     missing = [str(p) for p in required if not p.exists()]
@@ -193,7 +212,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--job",
-        choices=["heartbeat", "dry_protocol_check", "auto_loop_once", "auto"],
+        choices=["heartbeat", "status_line", "task_entry", "dry_protocol_check", "auto_loop_once", "auto"],
         default="auto",
     )
     ap.add_argument("--simulate-hang", type=int, default=0)
@@ -265,6 +284,10 @@ def main() -> int:
         for j in jobs:
             if j == "heartbeat":
                 result = run_heartbeat(token)
+            elif j == "status_line":
+                result = run_status_line(token)
+            elif j == "task_entry":
+                result = run_task_entry(token)
             elif j == "dry_protocol_check":
                 result = run_dry_protocol_check()
             elif j == "auto_loop_once":

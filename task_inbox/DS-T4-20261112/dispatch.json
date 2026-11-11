@@ -1,0 +1,15 @@
+{
+  "task_id": "DS-T4-20261112",
+  "card_published_utc": "2026-11-11T17:33:23Z",
+  "source_comments": ["6802795658", "6804688982", "6804695605"],
+  "inbox": "task_inbox/DS-T4-20261112/",
+  "mode": "reject_then_revise",
+  "worker": "task_inbox/DS-T4-20261112/worker_jobs.py via scripts/worker_run_task.py",
+  "verifier": "python -m control_plane.contract_verifier",
+  "network": false,
+  "paid": false,
+  "cost_policy": "blocked_pending_founder_api_authorization",
+  "l2_2_clock": "NOT_STARTED",
+  "production_7x24": "NOT_ACCEPTED",
+  "observation_track_acceptance": "NOT_CLAIMED"
+}

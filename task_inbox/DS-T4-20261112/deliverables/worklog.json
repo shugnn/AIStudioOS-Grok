@@ -1,0 +1,40 @@
+{
+  "task_id": "DS-T4-20261112",
+  "worker_entry": "scripts/worker_run_task.py",
+  "mode": "reject_then_revise",
+  "paid_api_called": false,
+  "started_utc": "2026-11-11T23:39:40Z",
+  "finished_utc": "2026-11-11T23:39:40Z",
+  "result": {
+    "ok": true,
+    "task_id": "DS-T4-20261112",
+    "input_sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+    "input_bytes": 12350,
+    "input_lines": 301,
+    "verdict_v1": "REJECTED",
+    "verdict_v2": "ACCEPTED",
+    "a6": "BLOCKED_PENDING_FOUNDER_API_AUTHORIZATION",
+    "steps": [
+      {
+        "step": "prepare_input",
+        "role": "worker",
+        "pid": 2298
+      },
+      {
+        "step": "verify_v1",
+        "role": "verifier",
+        "pid": 2299
+      },
+      {
+        "step": "revise",
+        "role": "worker",
+        "pid": 2300
+      },
+      {
+        "step": "verify_v2",
+        "role": "verifier",
+        "pid": 2301
+      }
+    ]
+  }
+}

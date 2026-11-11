@@ -1,0 +1,29 @@
+{
+  "task_id": "DS-T4-20261112",
+  "entries": [
+    {
+      "rule": "R1",
+      "reason": "Every amount must be a two-decimal string such as \"1234.50\", never a float. Non-conforming: total_revenue (float: 186035.32), by_dept.med.revenue (float: 33498.79), by_dept.surg.revenue (float: 28287.69), by_dept.ped.revenue (float: 45038.37), by_month.2026-09 (float: 20496.67), by_month.2026-08 (float: 21920.41), by_month.2026-07 (float: 18093.9), by_month.2026-06 (float: 20402.47), by_month.2026-05 (float: 21446.12), by_month.2026-04 (float: 21942.87), by_month.2026-03 (float: 21773.7), by_month.2026-02 (float: 17468.05), by_month.2026-01 (float: 22491.13).",
+      "addressed": true,
+      "change": "Addressed R1: 13 amount field(s) in the rejected candidate were not two-decimal strings. candidate_v2 writes 14 amount field(s) as two-decimal strings, formatted from integer fee_cents."
+    },
+    {
+      "rule": "R2",
+      "reason": "by_dept must contain all four departments med/surg/ped/derm (include a department even if count is 0). missing derm. Found keys ['med', 'surg', 'ped'].",
+      "addressed": true,
+      "change": "Addressed R2: by_dept keys were ['med', 'surg', 'ped']. Missing departments ['derm'] are present in candidate_v2. by_dept now contains ['med', 'surg', 'ped', 'derm']."
+    },
+    {
+      "rule": "R3",
+      "reason": "by_month keys must be in ascending month order. Found ['2026-09', '2026-08', '2026-07', '2026-06', '2026-05', '2026-04', '2026-03', '2026-02', '2026-01']. Ascending order is ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'].",
+      "addressed": true,
+      "change": "Addressed R3: by_month key order was ['2026-09', '2026-08', '2026-07', '2026-06', '2026-05', '2026-04', '2026-03', '2026-02', '2026-01']. candidate_v2 key order is ascending: ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']."
+    },
+    {
+      "rule": "R4",
+      "reason": "Only status=completed rows count toward counts and revenue. total_revenue is 186035.32 but completed fee_cents sum to 142586.10. total_revenue equals fee_cents summed over every status, including cancelled and no_show. by_dept.derm is absent so its 56 completed row(s) (35761.25) are not counted. by_month revenue does not equal status=completed rows grouped by YYYY-MM. by_month revenue matches every status, including cancelled and no_show.",
+      "addressed": true,
+      "change": "Addressed R4: counts and revenue were recomputed from appts.csv. Only rows with status=completed are included. cancelled and no_show rows contribute nothing. total_revenue changed from 186035.32 to 142586.10. by_dept counts and revenue, and by_month revenue, were rewritten from those completed fee_cents."
+    }
+  ]
+}

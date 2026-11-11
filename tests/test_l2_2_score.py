@@ -118,10 +118,11 @@ def test_clock_not_started_is_the_canonical_report():
         "scaffold_fixture_not_host_evidence",
         "clock_not_started",
         "founder_start_conditions_unsatisfied",
-        "supervisor_watchdog_offline_probe_is_not_condition_2",
-        "supervisor_watchdog_dummy_scaffold_is_not_condition_2",
-        "supervision_cadence_offline_exercise_is_not_condition_2",
-    ]
+            "supervisor_watchdog_offline_probe_is_not_condition_2",
+            "supervisor_watchdog_dummy_scaffold_is_not_condition_2",
+            "supervision_cadence_offline_exercise_is_not_condition_2",
+            "failure_attribution_sample_classification_is_not_condition_4",
+        ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
     assert report["l2_4"]["tip"] == l2.L2_4_CROSSLINK["tip"]
@@ -1350,4 +1351,69 @@ def test_time_compressed_cadence_claim_does_not_satisfy_condition_2():
     assert "condition_2_unsatisfied" in report["gates"]["blockers"]
     assert "supervision_cadence_writer" in report["gates"]["blockers"]
     assert "supervision_cadence_offline_exercise_is_not_condition_2" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+
+
+def test_sample_failure_attribution_claim_does_not_satisfy_condition_4():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    row = honest["failure_attribution"]
+    assert row["ok"] is True
+    assert row["classifies_sample_attributions_passed"] is True
+    assert row["unknown_root_cause_rejected"] is True
+    assert row["condition_4_satisfied"] is False
+    assert row["attributes_live_soak_failure"] is False
+    assert row["dummy_tests_satisfy_condition_4"] is False
+    assert row["implementation_satisfies_condition_4"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["demonstrates_10_minute_supervision_cadence"] is False
+    assert row["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert "failure_attribution_sample_classification_is_not_condition_4" in honest["gates"]["blockers"]
+    assert honest["founder_start_conditions"]["conditions_satisfied"] is False
+    assert honest["gates"]["can_start_clock"] is False
+    assert l2.validate_report(honest) == []
+    classes = {item["terminal_class"] for item in row["samples"] if item["accepted"] is True}
+    assert classes == {"business", "host", "supervision"}
+
+    claimed = _load("scaffold_clock_not_started.json")
+    claimed["failure_attribution_claim"] = {
+        "condition_4_satisfied": True,
+        "dummy_tests_satisfy_condition_4": True,
+        "implementation_satisfies_condition_4": True,
+        "attributes_live_soak_failure": True,
+        "unknown_root_cause_allowed": True,
+        "classes": ["business", "host"],
+        "l2_2_status": "PASS",
+        "clock_state": "STARTED",
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+    }
+    report = l2.score(claimed)
+    got = report["failure_attribution"]
+    assert got["sample_classification_claimed_as_condition_4"] is True
+    assert got["unknown_root_cause_called_terminal"] is True
+    assert got["multiple_classes_called_terminal"] is True
+    assert got["live_soak_attribution_claimed"] is True
+    assert got["pass_or_start_claimed"] is True
+    assert got["condition_4_satisfied"] is False
+    assert got["attributes_live_soak_failure"] is False
+    assert got["dummy_tests_satisfy_condition_4"] is False
+    assert got["implementation_satisfies_condition_4"] is False
+    assert got["classifies_sample_attributions_passed"] is True
+    assert got["can_start_clock"] is False
+    assert got["l2_2_status"] == "NOT_STARTED"
+    assert got["clock_state"] == "NOT_STARTED"
+    assert got["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["gates"]["can_accept_l2_2"] is False
+    assert report["gates"]["can_close_l2_2"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert "condition_4_unsatisfied" in report["gates"]["blockers"]
+    assert "unknown_root_cause_refused" in report["gates"]["blockers"]
+    assert "failure_attribution_sample_classification_is_not_condition_4" in report["gates"]["blockers"]
     assert l2.validate_report(report) == []

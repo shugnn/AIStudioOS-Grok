@@ -59,6 +59,8 @@ Paths + hashes on #9. Missing projection → joint acceptance discounted.
 
 L2-4 closed as **INCOMPLETE**: supervision misconfiguration (wrong target) + host reboot — **not** scored as business FAIL.
 
+`scripts/failure_attribution.py` can classify sample records into these three classes and reject unknown, empty, missing, free-text, and multi-class labels. That exercise does not attribute a live soak failure, does not satisfy founder condition 4, and does not start the clock.
+
 ## R8 — Host health
 
 Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster). **No new high-frequency Interactive console long-run** without explicit founder approve after host status register.
@@ -67,6 +69,7 @@ Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster)
 
 | Piece | Role |
 |-------|------|
+| `scripts/failure_attribution.py` | Classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. Sample classification is not a live soak attribution, does not satisfy founder condition 4, and does not start the clock |
 | `scripts/stall_watchdog.py` | Progress age check; `--runner-glob` for L1 |
 | `scripts/soak_2h.py` | DUT metrics; `max_wall_seconds`; finally metrics |
 | `scripts/l2_2_score.py` | Offline 72h bundle scorer. Does not start a clock and does not register Interactive tasks |

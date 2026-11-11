@@ -1311,3 +1311,74 @@ def test_short_cadence_exercise_is_recorded_and_is_not_condition_2():
     assert report["supervision_cadence_writer"]["demonstrates_10_minute_supervision_cadence"] is False
     assert report["gates"]["can_start_clock"] is False
     assert '"demonstrates_10_minute_supervision_cadence": true' not in json.dumps(report)
+
+
+def test_sample_failure_attribution_is_recorded_and_is_not_condition_4():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    row = report["failure_attribution"]
+    assert row == report["checks"]["failure_attribution"]
+    assert row["ok"] is True
+    assert row["detail"] == "implementation_exists_sample_attributions_classified"
+    assert row["tool"] == "scripts/failure_attribution.py"
+    assert row["action"] == "classify_sample_records"
+    assert row["dut"] == "synthetic_attribution_records"
+    assert row["classifies_sample_attributions_passed"] is True
+    assert row["unknown_root_cause_rejected"] is True
+    assert row["empty_root_cause_rejected"] is True
+    assert row["missing_root_cause_rejected"] is True
+    assert row["free_text_root_cause_rejected"] is True
+    assert row["multiple_classes_rejected"] is True
+    assert row["condition_4_satisfied"] is False
+    assert row["attributes_live_soak_failure"] is False
+    assert row["dummy_tests_satisfy_condition_4"] is False
+    assert row["implementation_satisfies_condition_4"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["demonstrates_10_minute_supervision_cadence"] is False
+    assert row["is_supervisor_watchdog_of_live_supervisor"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["soak_launched"] is False
+    classes = {item["terminal_class"] for item in row["samples"] if item["accepted"] is True}
+    assert classes == {"business", "host", "supervision"}
+    rejected = {item["id"]: item["rejection"] for item in row["samples"] if item["accepted"] is False}
+    assert rejected["unknown_label"] == "unknown"
+    assert rejected["empty_terminal"] == "empty"
+    assert rejected["missing_record"] == "missing"
+    assert rejected["multiple_classes_without_terminal"] == "multiple_classes"
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "sample_classification_called_condition_4",
+        "unknown_root_cause_called_terminal",
+        "multiple_classes_called_single_terminal",
+        "sample_called_live_soak_attribution",
+    ]
+    for item in row["refused_claims"]:
+        assert item["condition_4_satisfied"] is False
+        assert item["attributes_live_soak_failure"] is False
+        assert item["can_start_clock"] is False
+        assert item["l2_2_status"] == "NOT_STARTED"
+    assert "does not satisfy founder condition 4" in report["operator_note"]
+    assert any("founder condition 4" in step and "not a start" in step for step in report["next_steps"])
+    blob = json.dumps(report)
+    assert '"condition_4_satisfied": true' not in blob
+    assert '"attributes_live_soak_failure": true' not in blob
+    assert '"can_start_clock": true' not in blob
+    forged = json.loads(blob)
+    forged["failure_attribution"]["condition_4_satisfied"] = True
+    forged["failure_attribution"]["attributes_live_soak_failure"] = True
+    forged["failure_attribution"]["can_start_clock"] = True
+    forged["failure_attribution"]["l2_2_status"] = "PASS"
+    forged["checks"]["failure_attribution"] = json.loads(json.dumps(forged["failure_attribution"]))
+    names = set(pre.validate_report(forged))
+    assert "condition_4_unsatisfied" in names
+    assert "forged_can_start_clock" in names
+    assert "forged_pass" in names
+    assert report["failure_attribution"]["condition_4_satisfied"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"

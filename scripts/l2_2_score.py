@@ -14,7 +14,8 @@ An offline synthetic supervisor probe is not that watchdog either, does not
 satisfy founder condition 2, and is not a start. A dummy-process exercise of
 scripts/supervisor_watchdog.py is not that watchdog either. A time-compressed
 exercise of scripts/supervision_cadence.py is not the 10-minute supervision
-cadence either.
+cadence either. A sample classification from scripts/failure_attribution.py
+is not a live soak attribution and does not satisfy founder condition 4.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -240,6 +241,7 @@ NEXT_STEPS = (
     "Issue #9 comment 6761044915 (2026-11-10T06:50:14Z) is a conditional founder approval for PR #12. That approval is not a start, not a PASS, and it does not set can_start_clock. The five conditions stay unsatisfied until a later explicit declaration: supervision policy (yellow 13s through 300s, red above 300s, monotonic clock), supervision writes at least once every 10 minutes and a separate process records a supervisor crash within 10s (the soak-DUT stall watchdog is not that watchdog; an offline synthetic supervisor-alive versus supervisor-crash-unrecorded probe is not that watchdog either and does not satisfy condition 2), public evidence of final metrics plus a log summary plus a SHA list (LOCAL_ONLY does not count), three-way failure attribution (business, host, supervision; unknown root cause is not a terminal attribution), and no production 7x24 claim. A 72h result is not production readiness. This scorer does not post the L2-2 START line.",
     "scripts/supervisor_watchdog.py can watch a pid and write a crash record within 10 seconds. Offline dummy-process tests are not a live L2-2 supervisor watchdog, do not demonstrate a supervision write every 10 minutes, and do not satisfy founder condition 2. The synthetic-file probe and scripts/stall_watchdog.py do not satisfy it either. A report that treats the scaffold, the dummy tests, the synthetic probe, or the stall hook as condition 2, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is at most 600 seconds. The offline exercise uses a short time-compressed interval. Writes on that short schedule do not demonstrate a supervision write at least once every 10 minutes and do not satisfy founder condition 2. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer. A report that treats the short exercise as the 10-minute cadence, as condition 2, PASS, started, ACCEPTED, or production 7x24 fails closed.",
+    "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start. A report that treats it as condition 4, as a live soak attribution, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "Issue #9 comment 6776483825 (2026-11-10T19:00:37Z) recorded an observation-track acceptance of T3 and product L2, void if plan.json was handwritten to fool the check. This scorer does not re-claim that verdict, does not accept L2-2, and does not start the clock. Production 7x24 stays NOT ACCEPTED.",
 )
 
@@ -401,6 +403,10 @@ def validate_capture(doc: dict[str, Any]) -> None:
         doc["supervisor_watchdog_claim"], dict
     ):
         raise CaptureError("supervisor_watchdog_claim must be an object or null")
+    if "failure_attribution_claim" in doc and doc["failure_attribution_claim"] is not None and not isinstance(
+        doc["failure_attribution_claim"], dict
+    ):
+        raise CaptureError("failure_attribution_claim must be an object or null")
 
     if evidence == "scaffold":
         _reject_scaffold_incident_dates(doc)
@@ -1607,6 +1613,23 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     if cadence.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
         blockers.append("forged_pass")
 
+    attribution_claim = (
+        doc.get("failure_attribution_claim") if isinstance(doc.get("failure_attribution_claim"), dict) else None
+    )
+    attribution = failure_attribution_scaffold(attribution_claim)
+    blockers.append("failure_attribution_sample_classification_is_not_condition_4")
+    if (
+        attribution.get("sample_classification_claimed_as_condition_4") is True
+        or attribution.get("live_soak_attribution_claimed") is True
+    ) and "condition_4_unsatisfied" not in blockers:
+        blockers.append("condition_4_unsatisfied")
+    if attribution.get("unknown_root_cause_called_terminal") is True and "unknown_root_cause_refused" not in blockers:
+        blockers.append("unknown_root_cause_refused")
+    if attribution.get("multiple_classes_called_terminal") is True and "condition_4_unsatisfied" not in blockers:
+        blockers.append("condition_4_unsatisfied")
+    if attribution.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
+        blockers.append("forged_pass")
+
     stopped = metrics.get("stopped_early") if isinstance(metrics, dict) else None
     supervision_fault = bool(ended_watch or red_gaps or (started and not r2))
     if started and not watch_live and not runner_bad and not ended_watch:
@@ -1658,6 +1681,9 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
                 "can write on a short interval. That exercise does not demonstrate "
                 "a supervision write every 10 minutes and does not satisfy founder "
                 "condition 2. A write later than 600 seconds does not meet the cadence bound. "
+                "A sample classification from scripts/failure_attribution.py "
+                "does not attribute a live soak failure and does not satisfy founder "
+                "condition 4. "
                 "A 72h result is not production readiness."
             ),
         },
@@ -1678,6 +1704,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         "supervisor_watchdog_honesty": supervisor_honesty,
         "supervisor_watchdog_implementation": scaffold,
         "supervision_cadence_writer": cadence,
+        "failure_attribution": attribution,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -2298,6 +2325,32 @@ def _cadence_report_violations(block: Any) -> list[str]:
     return cadence.scaffold_violations(block, require_success=True)
 
 
+def failure_attribution_scaffold(claim: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Sample attribution result. Passing it does not satisfy founder condition 4."""
+    try:
+        import failure_attribution as attribution
+    except Exception:
+        return {
+            "ok": False,
+            "detail": "import_failed",
+            "condition_4_satisfied": False,
+            "classifies_sample_attributions_passed": False,
+            "attributes_live_soak_failure": False,
+        }
+    block = attribution.stable_scaffold_status()
+    attribution.annotate_scaffold_claim(block, claim if isinstance(claim, dict) else None)
+    attribution.apply_closed_flags(block)
+    return block
+
+
+def _attribution_report_violations(block: Any) -> list[str]:
+    try:
+        import failure_attribution as attribution
+    except Exception:
+        return ["failure_attribution"]
+    return attribution.scaffold_violations(block, require_success=True)
+
+
 def _scaffold_report_violations(block: Any) -> list[str]:
     try:
         import supervisor_watchdog as watchdog
@@ -2436,6 +2489,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_supervisor_watchdog_honesty_violations(report.get("supervisor_watchdog_honesty")))
     violations.extend(_scaffold_report_violations(report.get("supervisor_watchdog_implementation")))
     violations.extend(_cadence_report_violations(report.get("supervision_cadence_writer")))
+    violations.extend(_attribution_report_violations(report.get("failure_attribution")))
     blockers = gates.get("blockers") if isinstance(gates.get("blockers"), list) else []
     if "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
         violations.append("supervisor_watchdog_honesty")
@@ -2443,6 +2497,8 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         violations.append("supervisor_watchdog_implementation")
     if "supervision_cadence_offline_exercise_is_not_condition_2" not in blockers:
         violations.append("supervision_cadence_writer")
+    if "failure_attribution_sample_classification_is_not_condition_4" not in blockers:
+        violations.append("failure_attribution")
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

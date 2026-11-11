@@ -23,9 +23,15 @@ does not demonstrate a supervision write every 10 minutes. Runs
 scripts/supervision_cadence.py for a short time-compressed interval. Those
 writes can land on that short schedule. They do not demonstrate a supervision
 write at least once every 10 minutes, and they do not satisfy founder condition
-2. A write later than 600 seconds does not meet the cadence bound. A report that treats
+2. A write later than 600 seconds does not meet the cadence bound. Classifies sample
+failure-attribution records through scripts/failure_attribution.py. Accepted
+terminal classes are business, host, and supervision. Unknown, empty, missing,
+free-text, and multi-class labels are rejected. That classification does not
+satisfy founder condition 4, does not attribute a live soak failure, and is
+not a start. A report that treats
 the probe, the dummy exercise, the short cadence exercise, or the soak-DUT stall hook as that watchdog, or
-that claims condition 2, PASS, started, ACCEPTED, or production 7x24, fails closed.
+that claims condition 2, or that treats the sample classification as condition 4,
+PASS, started, ACCEPTED, or production 7x24, fails closed.
 Does not launch soak_2h.py, does not point the stall hook at the committed
 Ubuntu-24H soak files, does not start the 72h clock, does not post an L2-2
 START line, and does not register scheduled tasks.
@@ -185,6 +191,7 @@ REQUIRED_PATHS = (
     "scripts/supervision_monitor.py",
     "scripts/supervisor_watchdog.py",
     "scripts/supervision_cadence.py",
+    "scripts/failure_attribution.py",
     "scripts/stall_watchdog.py",
     "scripts/soak_2h.py",
     "docs/progress/l2_2/R2_CHECKLIST.md",
@@ -204,6 +211,7 @@ REQUIRED_PATHS = (
     "tests/test_coverage_gap_log.py",
     "tests/test_supervisor_watchdog.py",
     "tests/test_supervision_cadence.py",
+    "tests/test_failure_attribution.py",
 )
 
 CHECK_ORDER = (
@@ -224,6 +232,7 @@ CHECK_ORDER = (
     "supervisor_watchdog_honesty",
     "supervisor_watchdog_implementation",
     "supervision_cadence_writer",
+    "failure_attribution",
     "scorer_refuses",
 )
 
@@ -245,6 +254,7 @@ OPERATOR_NOTE = (
     "The offline supervisor-watchdog probe is not a start and does not satisfy founder condition 2. It is not a watchdog of a live supervisor. "
     "The dummy supervisor-watchdog exercise is not a start and does not satisfy founder condition 2. It is not a live L2-2 supervisor watchdog and it does not demonstrate a supervision write every 10 minutes. "
     "The supervision cadence writer can emit records on a configured interval whose production bound is 600 seconds. The preflight exercise uses a short time-compressed interval. That exercise is not a start, does not demonstrate a supervision write every 10 minutes, and does not satisfy founder condition 2. A write later than 600 seconds does not meet the cadence bound. "
+    "scripts/failure_attribution.py classifies sample records into business, host, or supervision and rejects unknown, empty, missing, free-text, and multi-class labels. That sample classification is not a start, does not attribute a live soak failure, and does not satisfy founder condition 4. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -275,6 +285,7 @@ NEXT_STEPS = (
     "The offline supervisor-watchdog probe classifies synthetic supervisor-alive and supervisor-crash-unrecorded temp files only. It does not satisfy founder condition 2, it is not a watchdog of a live supervisor, and it is not a start. scripts/stall_watchdog.py watches a soak DUT and is not that watchdog. A report that treats either one as the required supervisor watchdog, or that claims condition 2 is satisfied, or that claims PASS, started, ACCEPTED, or production 7x24, fails closed.",
     "scripts/supervisor_watchdog.py watches a pid and writes a crash record within 10 seconds. The preflight exercise uses a dummy process it spawned. That dummy success does not satisfy founder condition 2, does not demonstrate a supervision write every 10 minutes, and is not a start. A crash record 11 seconds later does not meet the 10-second requirement. A report that treats this scaffold or those dummy tests as condition 2 fails closed.",
     "scripts/supervision_cadence.py writes supervision records on a configured interval. The intended production bound is 600 seconds. The preflight exercise uses a short time-compressed interval. Writes on that short schedule do not demonstrate a supervision write every 10 minutes, do not satisfy founder condition 2, and are not a start. A write later than 600 seconds does not meet the cadence bound. scripts/stall_watchdog.py and scripts/supervisor_watchdog.py are not this writer. A report that treats the short exercise as the 10-minute cadence or as condition 2 fails closed.",
+    "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start. A report that treats it as condition 4, as a live soak attribution, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "Production 7x24 stays NOT ACCEPTED. A 72h result is not production readiness. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -728,7 +739,28 @@ def _check_contract(root: Path) -> dict[str, Any]:
         and cadence.get("l2_2_status") == "NOT_STARTED"
         and cadence.get("clock_state") == "NOT_STARTED"
     )
-    ok = ok and founder_ok and watchdog_ok and implementation_ok and cadence_ok
+    attribution = doc.get("failure_attribution") if isinstance(doc.get("failure_attribution"), dict) else {}
+    attribution_ok = (
+        attribution.get("tool") == "scripts/failure_attribution.py"
+        and attribution.get("action") == "classify_sample_records"
+        and attribution.get("dut") == "synthetic_attribution_records"
+        and attribution.get("condition_4_satisfied") is False
+        and attribution.get("attributes_live_soak_failure") is False
+        and attribution.get("dummy_tests_satisfy_condition_4") is False
+        and attribution.get("implementation_satisfies_condition_4") is False
+        and attribution.get("sample_classification_satisfies_condition_4") is False
+        and attribution.get("unknown_root_cause_allowed") is False
+        and attribution.get("condition_2_satisfied") is False
+        and attribution.get("demonstrates_10_minute_supervision_cadence") is False
+        and attribution.get("is_supervisor_watchdog_of_live_supervisor") is False
+        and attribution.get("can_start_clock") is False
+        and attribution.get("can_accept_l2_2") is False
+        and attribution.get("can_close_l2_2") is False
+        and attribution.get("production_7x24") == "NOT_ACCEPTED"
+        and attribution.get("l2_2_status") == "NOT_STARTED"
+        and attribution.get("clock_state") == "NOT_STARTED"
+    )
+    ok = ok and founder_ok and watchdog_ok and implementation_ok and cadence_ok and attribution_ok
     return {
         "ok": ok,
         "preflight_schema": doc.get("preflight_schema") if doc.get("preflight_schema") == SCHEMA else "mismatch",
@@ -2683,6 +2715,41 @@ def _cadence_preflight_violations(row: Any) -> list[str]:
     return cadence.scaffold_violations(row, require_success=False)
 
 
+def _check_failure_attribution(root: Path) -> dict[str, Any]:
+    """Classify sample records when the script is in this root.
+
+    An empty root skips the exercise. A passing classification does not
+    satisfy founder condition 4 and does not attribute a live soak failure.
+    """
+    try:
+        import failure_attribution as attribution
+    except Exception:
+        return {
+            "ok": False,
+            "tool": "scripts/failure_attribution.py",
+            "detail": "import_failed",
+            "condition_4_satisfied": False,
+            "classifies_sample_attributions_passed": False,
+            "unknown_root_cause_rejected": False,
+            "attributes_live_soak_failure": False,
+            "l2_2_status": "NOT_STARTED",
+            "clock_state": "NOT_STARTED",
+            "can_start_clock": False,
+            "production_7x24": "NOT_ACCEPTED",
+            "soak_launched": False,
+        }
+    present = (root / "scripts" / "failure_attribution.py").is_file()
+    return attribution.scaffold_status_for_root(present)
+
+
+def _attribution_preflight_violations(row: Any) -> list[str]:
+    try:
+        import failure_attribution as attribution
+    except Exception:
+        return ["failure_attribution"]
+    return attribution.scaffold_violations(row, require_success=False)
+
+
 def _check_supervisor_watchdog_implementation(root: Path) -> dict[str, Any]:
     """Run the dummy watchdog exercise when the script is in this root.
 
@@ -2749,6 +2816,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "supervisor_watchdog_honesty": checks["supervisor_watchdog_honesty"],
         "supervisor_watchdog_implementation": checks["supervisor_watchdog_implementation"],
         "supervision_cadence_writer": checks["supervision_cadence_writer"],
+        "failure_attribution": checks["failure_attribution"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -2804,6 +2872,7 @@ def preflight(
             "supervisor_watchdog_honesty": _check_supervisor_watchdog_honesty(repo),
             "supervisor_watchdog_implementation": _check_supervisor_watchdog_implementation(repo),
             "supervision_cadence_writer": _check_supervision_cadence_writer(repo),
+            "failure_attribution": _check_failure_attribution(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -2981,6 +3050,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_cadence_preflight_violations(top_cadence))
     if cadence != top_cadence:
         violations.append("supervision_cadence_writer_mismatch")
+    attribution = checks.get("failure_attribution")
+    top_attribution = report.get("failure_attribution")
+    violations.extend(_attribution_preflight_violations(attribution))
+    violations.extend(_attribution_preflight_violations(top_attribution))
+    if attribution != top_attribution:
+        violations.append("failure_attribution_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

@@ -25,7 +25,10 @@ scripts/supervision_cadence.py can write supervision records on a short
 time-compressed interval. That exercise does not demonstrate a real
 supervision write at least once every 10 minutes, and it does not satisfy
 founder condition 2. A write later than 600 seconds does not meet the cadence
-bound.
+bound. scripts/failure_attribution.py classifies sample records into business,
+host, or supervision and rejects unknown, empty, missing, free-text, and
+multi-class labels. That sample classification does not attribute a live soak
+failure and does not satisfy founder condition 4.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -293,6 +296,14 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
             _add(violations, "offline_probe_is_not_supervisor_watchdog")
         if node.get("offline_probe_is_a_start") is True or node.get("is_a_start") is True:
             _add(violations, "offline_probe_is_not_a_start")
+        if (
+            node.get("condition_4_satisfied") is True
+            or node.get("sample_classification_satisfies_condition_4") is True
+            or node.get("dummy_tests_satisfy_condition_4") is True
+            or node.get("implementation_satisfies_condition_4") is True
+            or node.get("attributes_live_soak_failure") is True
+        ):
+            _add(violations, "condition_4_unsatisfied")
         if node.get("a_72h_pass_is_production_readiness") is True:
             _add(violations, "forged_production_accepted")
         for key in GATE_KEYS:
@@ -427,6 +438,45 @@ def _cadence_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
     return row_ok(preflight_report.get("supervision_cadence_writer")) and row_ok(
         score_report.get("supervision_cadence_writer")
     )
+
+
+def _attribution_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
+    """True only when both reports record a closed sample classification that passed."""
+
+    def row_ok(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and row.get("ok") is True
+            and row.get("classifies_sample_attributions_passed") is True
+            and row.get("unknown_root_cause_rejected") is True
+            and row.get("condition_4_satisfied") is False
+            and row.get("attributes_live_soak_failure") is False
+            and row.get("dummy_tests_satisfy_condition_4") is False
+            and row.get("implementation_satisfies_condition_4") is False
+            and row.get("condition_2_satisfied") is False
+            and row.get("demonstrates_10_minute_supervision_cadence") is False
+            and row.get("is_supervisor_watchdog_of_live_supervisor") is False
+            and row.get("l2_2_status") == "NOT_STARTED"
+            and row.get("clock_state") == "NOT_STARTED"
+            and row.get("can_start_clock") is False
+            and row.get("production_7x24") == "NOT_ACCEPTED"
+        )
+
+    if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
+        return False
+    return row_ok(preflight_report.get("failure_attribution")) and row_ok(score_report.get("failure_attribution"))
+
+
+def _attribution_row_ok(row: Any) -> bool:
+    """True when the sample attribution scaffold stays closed and the exercise passed."""
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import failure_attribution as attribution
+    except Exception:
+        return False
+    return attribution.scaffold_violations(row, require_success=True) == []
 
 
 def _cadence_row_ok(row: Any) -> bool:
@@ -617,6 +667,9 @@ def assess_l2_2_offline(
                 "supervisor_watchdog_implementation_mismatch",
                 "supervision_cadence_writer",
                 "supervision_cadence_writer_mismatch",
+                "failure_attribution",
+                "failure_attribution_mismatch",
+                "condition_4_unsatisfied",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -836,6 +889,12 @@ def assess_l2_2_offline(
             _add(violations, "supervision_cadence_writer_mismatch")
         if not _cadence_row_ok(cadence):
             _add(violations, "supervision_cadence_writer")
+        attribution = checks.get("failure_attribution")
+        top_attribution = preflight_report.get("failure_attribution")
+        if attribution != top_attribution:
+            _add(violations, "failure_attribution_mismatch")
+        if not _attribution_row_ok(attribution):
+            _add(violations, "failure_attribution")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -905,6 +964,9 @@ def assess_l2_2_offline(
         scored_cadence = score_report.get("supervision_cadence_writer")
         if not _cadence_row_ok(scored_cadence):
             _add(violations, "supervision_cadence_writer")
+        scored_attribution = score_report.get("failure_attribution")
+        if not _attribution_row_ok(scored_attribution):
+            _add(violations, "failure_attribution")
         blockers = score_report.get("gates", {}).get("blockers") if isinstance(score_report.get("gates"), dict) else []
         if not isinstance(blockers, list) or "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_honesty")
@@ -912,6 +974,11 @@ def assess_l2_2_offline(
             _add(violations, "supervisor_watchdog_implementation")
         if not isinstance(blockers, list) or "supervision_cadence_offline_exercise_is_not_condition_2" not in blockers:
             _add(violations, "supervision_cadence_writer")
+        if (
+            not isinstance(blockers, list)
+            or "failure_attribution_sample_classification_is_not_condition_4" not in blockers
+        ):
+            _add(violations, "failure_attribution")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -940,6 +1007,9 @@ def assess_l2_2_offline(
                 "supervisor_watchdog_honesty",
                 "supervisor_watchdog_implementation",
                 "supervision_cadence_writer",
+                "failure_attribution",
+                "failure_attribution_mismatch",
+                "condition_4_unsatisfied",
                 "condition_2_unsatisfied",
                 "offline_probe_is_not_supervisor_watchdog",
                 "offline_probe_is_not_a_start",
@@ -1022,6 +1092,16 @@ def assess_l2_2_offline(
         "demonstrates_10_minute_supervision_cadence": False,
         "writes_on_schedule_passed": _cadence_exercise_passed(preflight_report, score_report) if ok else False,
         "late_write_meets_cadence": False,
+        "classifies_sample_attributions_passed": (
+            _attribution_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "unknown_root_cause_rejected": (
+            _attribution_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "condition_4_satisfied": False,
+        "attributes_live_soak_failure": False,
+        "dummy_tests_satisfy_condition_4": False,
+        "implementation_satisfies_condition_4": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
@@ -1092,6 +1172,12 @@ def l2_2_offline_step() -> dict:
         demonstrates_10_minute_supervision_cadence=False,
         writes_on_schedule_passed=assessment["writes_on_schedule_passed"],
         late_write_meets_cadence=False,
+        classifies_sample_attributions_passed=assessment["classifies_sample_attributions_passed"],
+        unknown_root_cause_rejected=assessment["unknown_root_cause_rejected"],
+        condition_4_satisfied=False,
+        attributes_live_soak_failure=False,
+        dummy_tests_satisfy_condition_4=False,
+        implementation_satisfies_condition_4=False,
         record_11s_later_meets_requirement=False,
         a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
@@ -1214,6 +1300,24 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
             and l2.get("condition_2_satisfied") is not True
         ),
         "late_write_meets_cadence": False,
+        "classifies_sample_attributions_passed": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("classifies_sample_attributions_passed") is True
+            and l2.get("condition_4_satisfied") is not True
+            and l2.get("attributes_live_soak_failure") is not True
+        ),
+        "unknown_root_cause_rejected": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("unknown_root_cause_rejected") is True
+            and l2.get("unknown_root_cause_allowed") is not True
+            and l2.get("condition_4_satisfied") is not True
+        ),
+        "condition_4_satisfied": False,
+        "attributes_live_soak_failure": False,
+        "dummy_tests_satisfy_condition_4": False,
+        "implementation_satisfies_condition_4": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,

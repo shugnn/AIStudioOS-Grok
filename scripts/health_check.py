@@ -38,6 +38,11 @@ scripts/supervision_policy.py checks the committed bands (yellow 13s through
 300s inclusive, red strictly above 300s) and sample monotonic sequences. A
 backward jump is rejected. That sample check does not satisfy founder
 condition 1 and is not a start.
+scripts/start_readiness.py aggregates those sample checkers and refuses a
+sample report that claims production 7x24 or that treats a 72h result or the
+Ubuntu-24H 86400.001s SHORT wall as production readiness. Sample-pass flags
+do not satisfy any founder condition and do not allow can_start_clock. That
+aggregate is not a start.
 Optionally runs the unit suite. That suite is not L2-2 acceptance.
 
 Exit 0 only if all steps ok (and not emergency-stopped).
@@ -335,6 +340,17 @@ def _walk_claims(node: Any, violations: list[str]) -> None:
             _add(violations, "supervision_policy_band_refused")
         if node.get("backward_clock_is_monotonic") is True:
             _add(violations, "supervision_policy_clock_not_monotonic")
+        if (
+            node.get("condition_5_satisfied") is True
+            or node.get("dummy_tests_satisfy_condition_5") is True
+            or node.get("implementation_satisfies_condition_5") is True
+            or node.get("all_five_conditions_satisfied") is True
+        ):
+            _add(violations, "condition_5_unsatisfied")
+        if node.get("sample_passes_satisfy_any_founder_condition") is True:
+            _add(violations, "sample_passes_do_not_satisfy_conditions")
+        if node.get("a_72h_result_is_production_readiness") is True or node.get("ubuntu_24h_short_wall_is_production_readiness") is True:
+            _add(violations, "forged_production_accepted")
         if node.get("a_72h_pass_is_production_readiness") is True:
             _add(violations, "forged_production_accepted")
         for key in GATE_KEYS:
@@ -529,6 +545,52 @@ def _policy_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
     if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
         return False
     return row_ok(preflight_report.get("supervision_policy")) and row_ok(score_report.get("supervision_policy"))
+
+
+def _readiness_exercise_passed(preflight_report: Any, score_report: Any) -> bool:
+    """True only when both reports record a closed sample aggregate that passed."""
+
+    def row_ok(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and row.get("ok") is True
+            and row.get("sample_only") is True
+            and row.get("offline") is True
+            and row.get("aggregates_sample_checkers_passed") is True
+            and row.get("rejects_production_claim_from_sample") is True
+            and row.get("refuses_72h_as_production_readiness") is True
+            and row.get("or_composition_refused") is True
+            and row.get("and_composition_refused") is True
+            and row.get("condition_1_satisfied") is False
+            and row.get("condition_2_satisfied") is False
+            and row.get("condition_3_satisfied") is False
+            and row.get("condition_4_satisfied") is False
+            and row.get("condition_5_satisfied") is False
+            and row.get("all_five_conditions_satisfied") is False
+            and row.get("sample_passes_satisfy_any_founder_condition") is False
+            and row.get("dummy_tests_satisfy_condition_5") is False
+            and row.get("implementation_satisfies_condition_5") is False
+            and row.get("l2_2_status") == "NOT_STARTED"
+            and row.get("clock_state") == "NOT_STARTED"
+            and row.get("can_start_clock") is False
+            and row.get("production_7x24") == "NOT_ACCEPTED"
+        )
+
+    if not isinstance(preflight_report, dict) or not isinstance(score_report, dict):
+        return False
+    return row_ok(preflight_report.get("start_readiness")) and row_ok(score_report.get("start_readiness"))
+
+
+def _readiness_row_ok(row: Any) -> bool:
+    """True when the sample aggregate stays closed and the exercise passed."""
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import start_readiness as readiness
+    except Exception:
+        return False
+    return readiness.scaffold_violations(row, require_success=True) == []
 
 
 def _policy_row_ok(row: Any) -> bool:
@@ -791,9 +853,13 @@ def assess_l2_2_offline(
                 "public_evidence_pack_mismatch",
                 "supervision_policy",
                 "supervision_policy_mismatch",
+                "start_readiness",
+                "start_readiness_mismatch",
                 "condition_1_unsatisfied",
                 "supervision_policy_band_refused",
                 "supervision_policy_clock_not_monotonic",
+                "condition_5_unsatisfied",
+                "sample_passes_do_not_satisfy_conditions",
                 "condition_4_unsatisfied",
                 "condition_3_unsatisfied",
                 "scaffold_sha256sums_not_soak_evidence",
@@ -1034,6 +1100,12 @@ def assess_l2_2_offline(
             _add(violations, "supervision_policy_mismatch")
         if not _policy_row_ok(policy):
             _add(violations, "supervision_policy")
+        readiness = checks.get("start_readiness")
+        top_readiness = preflight_report.get("start_readiness")
+        if readiness != top_readiness:
+            _add(violations, "start_readiness_mismatch")
+        if not _readiness_row_ok(readiness):
+            _add(violations, "start_readiness")
 
     if score_mod is not None and isinstance(score_report, dict):
         if score_report.get("schema") != score_mod.SCHEMA_REPORT:
@@ -1112,6 +1184,9 @@ def assess_l2_2_offline(
         scored_policy = score_report.get("supervision_policy")
         if not _policy_row_ok(scored_policy):
             _add(violations, "supervision_policy")
+        scored_readiness = score_report.get("start_readiness")
+        if not _readiness_row_ok(scored_readiness):
+            _add(violations, "start_readiness")
         blockers = score_report.get("gates", {}).get("blockers") if isinstance(score_report.get("gates"), dict) else []
         if not isinstance(blockers, list) or "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
             _add(violations, "supervisor_watchdog_honesty")
@@ -1134,6 +1209,11 @@ def assess_l2_2_offline(
             or "supervision_policy_sample_check_is_not_condition_1" not in blockers
         ):
             _add(violations, "supervision_policy")
+        if (
+            not isinstance(blockers, list)
+            or "start_readiness_sample_aggregation_is_not_a_start" not in blockers
+        ):
+            _add(violations, "start_readiness")
         for name in score_mod.validate_report(score_report):
             if name == "forged_pass":
                 _add(violations, "forged_pass")
@@ -1168,9 +1248,13 @@ def assess_l2_2_offline(
                 "public_evidence_pack_mismatch",
                 "supervision_policy",
                 "supervision_policy_mismatch",
+                "start_readiness",
+                "start_readiness_mismatch",
                 "condition_1_unsatisfied",
                 "supervision_policy_band_refused",
                 "supervision_policy_clock_not_monotonic",
+                "condition_5_unsatisfied",
+                "sample_passes_do_not_satisfy_conditions",
                 "condition_4_unsatisfied",
                 "condition_3_unsatisfied",
                 "scaffold_sha256sums_not_soak_evidence",
@@ -1288,6 +1372,20 @@ def assess_l2_2_offline(
         "dummy_tests_satisfy_condition_1": False,
         "implementation_satisfies_condition_1": False,
         "committed_constants_satisfy_condition_1": False,
+        "aggregates_sample_checkers_passed": (
+            _readiness_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "rejects_production_claim_from_sample": (
+            _readiness_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "refuses_72h_as_production_readiness": (
+            _readiness_exercise_passed(preflight_report, score_report) if ok else False
+        ),
+        "sample_passes_satisfy_any_founder_condition": False,
+        "all_five_conditions_satisfied": False,
+        "condition_5_satisfied": False,
+        "dummy_tests_satisfy_condition_5": False,
+        "implementation_satisfies_condition_5": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen_view if ok else _specimen_view(None),
@@ -1380,6 +1478,14 @@ def l2_2_offline_step() -> dict:
         dummy_tests_satisfy_condition_1=False,
         implementation_satisfies_condition_1=False,
         committed_constants_satisfy_condition_1=False,
+        aggregates_sample_checkers_passed=assessment["aggregates_sample_checkers_passed"],
+        rejects_production_claim_from_sample=assessment["rejects_production_claim_from_sample"],
+        refuses_72h_as_production_readiness=assessment["refuses_72h_as_production_readiness"],
+        sample_passes_satisfy_any_founder_condition=False,
+        all_five_conditions_satisfied=False,
+        condition_5_satisfied=False,
+        dummy_tests_satisfy_condition_5=False,
+        implementation_satisfies_condition_5=False,
         record_11s_later_meets_requirement=False,
         a_72h_pass_is_production_readiness=False,
         ubuntu_24h_specimen=assessment["ubuntu_24h_specimen"],
@@ -1564,6 +1670,35 @@ def summarize(results: list[dict], overall: bool) -> dict[str, Any]:
         "dummy_tests_satisfy_condition_1": False,
         "implementation_satisfies_condition_1": False,
         "committed_constants_satisfy_condition_1": False,
+        "aggregates_sample_checkers_passed": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("aggregates_sample_checkers_passed") is True
+            and l2.get("condition_5_satisfied") is not True
+            and l2.get("all_five_conditions_satisfied") is not True
+            and l2.get("sample_passes_satisfy_any_founder_condition") is not True
+            and l2.get("can_start_clock") is not True
+        ),
+        "rejects_production_claim_from_sample": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("rejects_production_claim_from_sample") is True
+            and l2.get("condition_5_satisfied") is not True
+            and l2.get("production_7x24") != "ACCEPTED"
+        ),
+        "refuses_72h_as_production_readiness": (
+            l2 is not None
+            and l2.get("ok") is True
+            and l2.get("refuses_72h_as_production_readiness") is True
+            and l2.get("a_72h_result_is_production_readiness") is not True
+            and l2.get("ubuntu_24h_short_wall_is_production_readiness") is not True
+            and l2.get("condition_5_satisfied") is not True
+        ),
+        "sample_passes_satisfy_any_founder_condition": False,
+        "all_five_conditions_satisfied": False,
+        "condition_5_satisfied": False,
+        "dummy_tests_satisfy_condition_5": False,
+        "implementation_satisfies_condition_5": False,
         "record_11s_later_meets_requirement": False,
         "a_72h_pass_is_production_readiness": False,
         "ubuntu_24h_specimen": specimen,

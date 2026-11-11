@@ -42,11 +42,22 @@ Red is strictly above 300s. Sample gaps go through coverage_gap_log.classify_ban
 or mono_seconds jump is rejected. A wall clock that goes backwards is not
 monotonic. A policy that starts yellow at 10s, or that treats 300s as red, is
 refused. That sample check does not satisfy founder condition 1, does not
-declare the pre-start policy gate, and is not a start. A report that treats
+declare the pre-start policy gate, and is not a start. Aggregates those
+sample checkers through scripts/start_readiness.py and applies a sample guard
+for founder condition 5. An honest sample says production 7x24 is NOT_ACCEPTED
+and a 72h wall, or a 72h-shaped sample, is not production readiness. A claim
+of production 7x24 ACCEPTED, PASS, or ready is refused. A 72h result treated
+as production readiness is refused. The Ubuntu-24H wall of 86400.001s is a
+historical SHORT specimen. Treating that wall as production readiness is
+refused. Sample-pass flags are not OR-ed or AND-ed into any condition or into
+can_start_clock. That aggregate does not satisfy any founder condition and is
+not a start. A report that treats
 the probe, the dummy exercise, the short cadence exercise, or the soak-DUT stall hook as that watchdog, or
 that claims condition 2, or that treats the sample classification as condition 4,
 or that treats the sample public pack or the scaffold SHA256SUMS file as founder
-condition 3 or as live soak evidence,
+condition 3 or as live soak evidence, or that treats the sample aggregate or
+the condition-5 guard as satisfying any founder condition or as allowing
+can_start_clock,
 PASS, started, ACCEPTED, or production 7x24, fails closed.
 Does not launch soak_2h.py, does not point the stall hook at the committed
 Ubuntu-24H soak files, does not start the 72h clock, does not post an L2-2
@@ -210,6 +221,7 @@ REQUIRED_PATHS = (
     "scripts/failure_attribution.py",
     "scripts/public_evidence_pack.py",
     "scripts/supervision_policy.py",
+    "scripts/start_readiness.py",
     "scripts/stall_watchdog.py",
     "scripts/soak_2h.py",
     "docs/progress/l2_2/R2_CHECKLIST.md",
@@ -232,6 +244,7 @@ REQUIRED_PATHS = (
     "tests/test_failure_attribution.py",
     "tests/test_public_evidence_pack.py",
     "tests/test_supervision_policy.py",
+    "tests/test_start_readiness.py",
 )
 
 CHECK_ORDER = (
@@ -255,6 +268,7 @@ CHECK_ORDER = (
     "failure_attribution",
     "public_evidence_pack",
     "supervision_policy",
+    "start_readiness",
     "scorer_refuses",
 )
 
@@ -279,6 +293,7 @@ OPERATOR_NOTE = (
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision and rejects unknown, empty, missing, free-text, and multi-class labels. That sample classification is not a start, does not attribute a live soak failure, and does not satisfy founder condition 4. "
     "scripts/public_evidence_pack.py validates a sample public-shaped pack that includes final metrics, a log summary, and a SHA list. LOCAL_ONLY is refused and does not count. A pack missing any of those pieces is refused. docs/progress/l2_2/SHA256SUMS.json is not live soak evidence. That sample validation is not a start, does not pack live soak evidence, and does not satisfy founder condition 3. "
     "scripts/supervision_policy.py checks the committed bands (yellow 13s through 300s inclusive, red strictly above 300s) and sample monotonic sequences. A backward timestamp or mono_seconds jump is rejected. A different band, including yellow starting at 10s or red at 300s inclusive, is refused. That sample check is not a start, does not declare the pre-start policy gate, and does not satisfy founder condition 1. "
+    "scripts/start_readiness.py aggregates those sample checkers and refuses a sample report that claims production 7x24 or that treats a 72h result or the Ubuntu-24H 86400.001s SHORT wall as production readiness. That aggregate does not satisfy any founder condition and does not allow can_start_clock. That aggregate is not a start. "
     "Exit 0 is an honest NOT_STARTED report, not a gate PASS, and it does not launch soak_2h.py."
 )
 
@@ -312,6 +327,7 @@ NEXT_STEPS = (
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start. A report that treats it as condition 4, as a live soak attribution, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/public_evidence_pack.py validates sample public-shaped packs only. A pack labeled sample/offline with publication public plus final metrics, a log summary, and a SHA list can validate. LOCAL_ONLY is refused and does not count. A pack missing any of the three pieces is refused. docs/progress/l2_2/SHA256SUMS.json binds scaffold bytes only and is not live soak evidence. That sample validation does not satisfy founder condition 3 and is not a start. A report that treats it as condition 3, as a live soak evidence pack, as permission to count LOCAL_ONLY, or as PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/supervision_policy.py checks sample bands and sample monotonic sequences only. Yellow is 13s through 300s inclusive. Red is strictly above 300s. Sample gaps are classified by coverage_gap_log.classify_band. A backward timestamp or mono_seconds jump is rejected. A wall clock that goes backwards is not monotonic. Yellow starting at 10s, or red at 300s inclusive, is refused. classifies_sample_policy_bands_passed, monotonic_sample_sequence_passed, and declared_bands_match_founder_policy may be true for that sample check only. condition_1_satisfied stays false. Matching the committed 13/300 constants does not satisfy founder condition 1 and is not a start. A report that treats it as condition 1, as a started clock, PASS, ACCEPTED, or production 7x24 fails closed.",
+    "scripts/start_readiness.py aggregates the sample checkers for conditions 1-4 and applies a sample guard for condition 5. aggregates_sample_checkers_passed, rejects_production_claim_from_sample, and refuses_72h_as_production_readiness may be true for that sample/offline composition only. sample_passes_satisfy_any_founder_condition, all_five_conditions_satisfied, and condition_1_satisfied through condition_5_satisfied stay false. A report that ORs or ANDs sample-pass flags into any condition or into can_start_clock fails closed. A 72h result is not production readiness. The Ubuntu-24H 86400.001s SHORT wall is not production readiness. This aggregate is not a start.",
     "Production 7x24 stays NOT ACCEPTED. A 72h result is not production readiness. The observation track accepts or rejects. This preflight does not.",
 )
 
@@ -827,7 +843,31 @@ def _check_contract(root: Path) -> dict[str, Any]:
         and policy.get("l2_2_status") == "NOT_STARTED"
         and policy.get("clock_state") == "NOT_STARTED"
     )
-    ok = ok and founder_ok and watchdog_ok and implementation_ok and cadence_ok and attribution_ok and evidence_pack_ok and policy_ok
+    readiness = doc.get("start_readiness") if isinstance(doc.get("start_readiness"), dict) else {}
+    readiness_ok = (
+        readiness.get("tool") == "scripts/start_readiness.py"
+        and readiness.get("action") == "aggregate_sample_checkers"
+        and readiness.get("dut") == "synthetic_sample_readiness"
+        and readiness.get("founder_condition_id") == "not_production_7x24"
+        and readiness.get("condition_1_satisfied") is False
+        and readiness.get("condition_2_satisfied") is False
+        and readiness.get("condition_3_satisfied") is False
+        and readiness.get("condition_4_satisfied") is False
+        and readiness.get("condition_5_satisfied") is False
+        and readiness.get("all_five_conditions_satisfied") is False
+        and readiness.get("sample_passes_satisfy_any_founder_condition") is False
+        and readiness.get("dummy_tests_satisfy_condition_5") is False
+        and readiness.get("implementation_satisfies_condition_5") is False
+        and readiness.get("can_start_clock") is False
+        and readiness.get("can_accept_l2_2") is False
+        and readiness.get("can_close_l2_2") is False
+        and readiness.get("production_7x24") == "NOT_ACCEPTED"
+        and readiness.get("l2_2_status") == "NOT_STARTED"
+        and readiness.get("clock_state") == "NOT_STARTED"
+        and readiness.get("ubuntu_24h_wall_seconds") == 86400.001
+        and readiness.get("wall_72h_seconds") == 259200
+    )
+    ok = ok and founder_ok and watchdog_ok and implementation_ok and cadence_ok and attribution_ok and evidence_pack_ok and policy_ok and readiness_ok
     return {
         "ok": ok,
         "preflight_schema": doc.get("preflight_schema") if doc.get("preflight_schema") == SCHEMA else "mismatch",
@@ -2889,6 +2929,47 @@ def _supervision_policy_preflight_violations(row: Any) -> list[str]:
     return policy.scaffold_violations(row, require_success=False)
 
 
+def _check_start_readiness(root: Path) -> dict[str, Any]:
+    """Aggregate sample checkers when the script is in this root.
+
+    An empty root skips the exercise. A passing aggregate does not satisfy
+    any founder condition and does not start the clock.
+    """
+    try:
+        import start_readiness as readiness
+    except Exception:
+        return {
+            "ok": False,
+            "tool": "scripts/start_readiness.py",
+            "detail": "import_failed",
+            "condition_1_satisfied": False,
+            "condition_2_satisfied": False,
+            "condition_3_satisfied": False,
+            "condition_4_satisfied": False,
+            "condition_5_satisfied": False,
+            "all_five_conditions_satisfied": False,
+            "sample_passes_satisfy_any_founder_condition": False,
+            "aggregates_sample_checkers_passed": False,
+            "rejects_production_claim_from_sample": False,
+            "refuses_72h_as_production_readiness": False,
+            "l2_2_status": "NOT_STARTED",
+            "clock_state": "NOT_STARTED",
+            "can_start_clock": False,
+            "production_7x24": "NOT_ACCEPTED",
+            "soak_launched": False,
+        }
+    present = (root / "scripts" / "start_readiness.py").is_file()
+    return readiness.scaffold_status_for_root(present)
+
+
+def _start_readiness_preflight_violations(row: Any) -> list[str]:
+    try:
+        import start_readiness as readiness
+    except Exception:
+        return ["start_readiness"]
+    return readiness.scaffold_violations(row, require_success=False)
+
+
 def _check_supervisor_watchdog_implementation(root: Path) -> dict[str, Any]:
     """Run the dummy watchdog exercise when the script is in this root.
 
@@ -2958,6 +3039,7 @@ def _assemble(checks: dict[str, Any]) -> dict[str, Any]:
         "failure_attribution": checks["failure_attribution"],
         "public_evidence_pack": checks["public_evidence_pack"],
         "supervision_policy": checks["supervision_policy"],
+        "start_readiness": checks["start_readiness"],
         "checks": checks,
         "failures": failures,
         "documented_soak_argv": list(DOCUMENTED_ARGV),
@@ -3016,6 +3098,7 @@ def preflight(
             "failure_attribution": _check_failure_attribution(repo),
             "public_evidence_pack": _check_public_evidence_pack(repo),
             "supervision_policy": _check_supervision_policy(repo),
+            "start_readiness": _check_start_readiness(repo),
             "scorer_refuses": _check_scorer(repo),
         }
     except Exception as exc:
@@ -3211,6 +3294,12 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_supervision_policy_preflight_violations(top_policy))
     if policy != top_policy:
         violations.append("supervision_policy_mismatch")
+    readiness = checks.get("start_readiness")
+    top_readiness = report.get("start_readiness")
+    violations.extend(_start_readiness_preflight_violations(readiness))
+    violations.extend(_start_readiness_preflight_violations(top_readiness))
+    if readiness != top_readiness:
+        violations.append("start_readiness_mismatch")
     if not isinstance(report.get("next_steps"), list) or not report.get("next_steps"):
         violations.append("next_steps")
     if "not a start decision" not in str(report.get("operator_note")):

@@ -1542,3 +1542,92 @@ def test_sample_supervision_policy_is_recorded_and_is_not_condition_1():
     assert report["gates"]["can_start_clock"] is False
     assert report["l2_2_status"] == "NOT_STARTED"
     assert report["clock_state"] == "NOT_STARTED"
+
+
+def test_sample_start_readiness_is_recorded_and_is_not_a_start():
+    report = pre.preflight()
+    _assert_not_a_start(report)
+    row = report["start_readiness"]
+    assert row == report["checks"]["start_readiness"]
+    assert row["ok"] is True
+    assert row["detail"] == "implementation_exists_sample_checkers_aggregated"
+    assert row["tool"] == "scripts/start_readiness.py"
+    assert row["action"] == "aggregate_sample_checkers"
+    assert row["dut"] == "synthetic_sample_readiness"
+    assert row["founder_condition_id"] == "not_production_7x24"
+    assert row["sample_only"] is True
+    assert row["offline"] is True
+    assert row["aggregates_sample_checkers_passed"] is True
+    assert row["rejects_production_claim_from_sample"] is True
+    assert row["refuses_72h_as_production_readiness"] is True
+    assert row["or_composition_refused"] is True
+    assert row["and_composition_refused"] is True
+    assert row["condition_1_satisfied"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["condition_3_satisfied"] is False
+    assert row["condition_4_satisfied"] is False
+    assert row["condition_5_satisfied"] is False
+    assert row["dummy_tests_satisfy_condition_5"] is False
+    assert row["implementation_satisfies_condition_5"] is False
+    assert row["sample_passes_satisfy_any_founder_condition"] is False
+    assert row["all_five_conditions_satisfied"] is False
+    assert row["can_start_clock"] is False
+    assert row["can_accept_l2_2"] is False
+    assert row["can_close_l2_2"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["soak_launched"] is False
+    assert row["ubuntu_24h_wall_seconds"] == 86400.001
+    assert row["wall_72h_seconds"] == 259200
+    by_id = {item["id"]: item for item in row["samples"]}
+    assert by_id["honest_not_accepted"]["accepted"] is True
+    assert by_id["production_accepted"]["rejection"] == "production_claim"
+    assert by_id["production_pass"]["rejection"] == "production_claim"
+    assert by_id["production_ready"]["rejection"] == "production_claim"
+    assert by_id["seventy_two_hour_called_readiness"]["rejection"] == "72h_as_production_readiness"
+    assert by_id["ubuntu_short_called_readiness"]["rejection"] == "short_wall_as_production_readiness"
+    assert by_id["honest_ubuntu_short_is_not_production"]["ubuntu_24h_counts_as_72h"] is False
+    for item in row["compositions"]:
+        assert item["accepted"] is False
+        assert item["rejection"] == "sample_passes_promoted"
+        assert item["promoted_can_start_clock"] is True
+        assert item["can_start_clock"] is False
+        assert item["condition_5_satisfied"] is False
+    labels = [item["label"] for item in row["refused_claims"]]
+    assert labels == [
+        "production_accepted_called_ready",
+        "72h_called_production_readiness",
+        "ubuntu_24h_short_called_production_readiness",
+        "or_sample_passes_called_conditions",
+        "and_sample_passes_called_can_start_clock",
+    ]
+    for item in row["refused_claims"]:
+        assert item["condition_5_satisfied"] is False
+        assert item["all_five_conditions_satisfied"] is False
+        assert item["can_start_clock"] is False
+        assert item["l2_2_status"] == "NOT_STARTED"
+        assert item["production_7x24"] == "NOT_ACCEPTED"
+    assert "does not satisfy any founder condition" in report["operator_note"]
+    assert any("can_start_clock" in step and "not a start" in step for step in report["next_steps"])
+    blob = json.dumps(report)
+    assert '"condition_5_satisfied": true' not in blob
+    assert '"all_five_conditions_satisfied": true' not in blob
+    assert '"sample_passes_satisfy_any_founder_condition": true' not in blob
+    assert '"can_start_clock": true' not in blob
+    forged = json.loads(blob)
+    forged["start_readiness"]["condition_5_satisfied"] = True
+    forged["start_readiness"]["all_five_conditions_satisfied"] = True
+    forged["start_readiness"]["sample_passes_satisfy_any_founder_condition"] = True
+    forged["start_readiness"]["can_start_clock"] = True
+    forged["start_readiness"]["l2_2_status"] = "PASS"
+    forged["checks"]["start_readiness"] = json.loads(json.dumps(forged["start_readiness"]))
+    names = set(pre.validate_report(forged))
+    assert "condition_5_unsatisfied" in names
+    assert "sample_passes_do_not_satisfy_conditions" in names
+    assert "forged_can_start_clock" in names
+    assert "forged_pass" in names
+    assert report["start_readiness"]["condition_5_satisfied"] is False
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert report["clock_state"] == "NOT_STARTED"

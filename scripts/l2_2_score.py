@@ -22,6 +22,11 @@ not count. docs/progress/l2_2/SHA256SUMS.json is not that pack.
 A sample supervision-policy check from scripts/supervision_policy.py is not
 the pre-start policy gate and does not satisfy founder condition 1. Yellow
 stays 13s through 300s inclusive. Red stays strictly above 300s.
+scripts/start_readiness.py aggregates those sample checkers and applies a
+sample guard for condition 5. Sample-pass flags do not satisfy any founder
+condition and do not allow can_start_clock. A 72h result is not production
+readiness. The Ubuntu-24H wall of 86400.001s is a historical SHORT specimen,
+not 72h and not production.
 
 Exit 0: an honest NOT_STARTED or INCOMPLETE report was produced.
 Exit 2: the capture or the report failed validation.
@@ -250,6 +255,7 @@ NEXT_STEPS = (
     "scripts/failure_attribution.py classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. That sample classification does not attribute a live soak failure, does not satisfy founder condition 4, and is not a start. A report that treats it as condition 4, as a live soak attribution, PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/public_evidence_pack.py validates sample public-shaped packs only. A pack labeled sample/offline with publication public plus final metrics, a log summary, and a SHA list can validate. LOCAL_ONLY is refused and does not count. A pack missing any of the three pieces is refused. docs/progress/l2_2/SHA256SUMS.json binds scaffold bytes only and is not live soak evidence. That sample validation does not satisfy founder condition 3 and is not a start. A report that treats it as condition 3, as a live soak evidence pack, as permission to count LOCAL_ONLY, or as PASS, started, ACCEPTED, or production 7x24 fails closed.",
     "scripts/supervision_policy.py checks sample bands and sample monotonic sequences only. Yellow is 13s through 300s inclusive. Red is strictly above 300s. Sample gaps are classified by coverage_gap_log.classify_band. A backward timestamp or mono_seconds jump is rejected. A wall clock that goes backwards is not monotonic. Yellow starting at 10s, or red at 300s inclusive, is refused. That sample check does not satisfy founder condition 1 and is not a start. Matching the committed 13/300 constants is not the pre-start policy gate. A report that treats it as condition 1, as a started clock, PASS, ACCEPTED, or production 7x24 fails closed.",
+    "scripts/start_readiness.py aggregates the sample checkers for conditions 1-4 and applies a sample guard for condition 5. aggregates_sample_checkers_passed, rejects_production_claim_from_sample, and refuses_72h_as_production_readiness may be true for that sample/offline composition only. sample_passes_satisfy_any_founder_condition, all_five_conditions_satisfied, and condition_1_satisfied through condition_5_satisfied stay false. A report that ORs or ANDs sample-pass flags into any condition or into can_start_clock fails closed. A 72h result is not production readiness. The Ubuntu-24H 86400.001s SHORT wall is not production readiness. This aggregate is not a start.",
     "Issue #9 comment 6776483825 (2026-11-10T19:00:37Z) recorded an observation-track acceptance of T3 and product L2, void if plan.json was handwritten to fool the check. This scorer does not re-claim that verdict, does not accept L2-2, and does not start the clock. Production 7x24 stays NOT ACCEPTED.",
 )
 
@@ -423,6 +429,10 @@ def validate_capture(doc: dict[str, Any]) -> None:
         doc["supervision_policy_claim"], dict
     ):
         raise CaptureError("supervision_policy_claim must be an object or null")
+    if "start_readiness_claim" in doc and doc["start_readiness_claim"] is not None and not isinstance(
+        doc["start_readiness_claim"], dict
+    ):
+        raise CaptureError("start_readiness_claim must be an object or null")
 
     if evidence == "scaffold":
         _reject_scaffold_incident_dates(doc)
@@ -1689,6 +1699,32 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
     if supervision_policy.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
         blockers.append("forged_pass")
 
+    readiness_claim = (
+        doc.get("start_readiness_claim") if isinstance(doc.get("start_readiness_claim"), dict) else None
+    )
+    start_readiness = start_readiness_scaffold(readiness_claim)
+    blockers.append("start_readiness_sample_aggregation_is_not_a_start")
+    if (
+        start_readiness.get("sample_passes_or_into_condition") is True
+        or start_readiness.get("sample_passes_and_into_clock") is True
+    ) and "sample_passes_do_not_satisfy_conditions" not in blockers:
+        blockers.append("sample_passes_do_not_satisfy_conditions")
+    if (
+        start_readiness.get("condition_5_claimed") is True
+        or start_readiness.get("production_claim_from_sample") is True
+        or start_readiness.get("seventy_two_hour_called_production_readiness") is True
+        or start_readiness.get("short_wall_called_production_readiness") is True
+    ) and "condition_5_unsatisfied" not in blockers:
+        blockers.append("condition_5_unsatisfied")
+    if (
+        start_readiness.get("production_claim_from_sample") is True
+        or start_readiness.get("seventy_two_hour_called_production_readiness") is True
+        or start_readiness.get("short_wall_called_production_readiness") is True
+    ) and "production_claim" not in blockers:
+        blockers.append("production_claim")
+    if start_readiness.get("pass_or_start_claimed") is True and "forged_pass" not in blockers:
+        blockers.append("forged_pass")
+
     stopped = metrics.get("stopped_early") if isinstance(metrics, dict) else None
     supervision_fault = bool(ended_watch or red_gaps or (started and not r2))
     if started and not watch_live and not runner_bad and not ended_watch:
@@ -1750,7 +1786,10 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
                 "A sample supervision-policy check from scripts/supervision_policy.py "
                 "does not satisfy founder condition 1 and does not start the clock. "
                 "Yellow stays 13s through 300s inclusive. Red stays strictly above 300s. "
-                "A 72h result is not production readiness."
+                "scripts/start_readiness.py aggregates those sample checkers. "
+                "Sample-pass flags do not satisfy any founder condition and do not "
+                "allow can_start_clock. A 72h result is not production readiness. "
+                "The Ubuntu-24H wall of 86400.001s is not production readiness."
             ),
         },
         "bars": bars,
@@ -1773,6 +1812,7 @@ def score(doc: dict[str, Any]) -> dict[str, Any]:
         "failure_attribution": attribution,
         "public_evidence_pack": evidence_pack,
         "supervision_policy": supervision_policy,
+        "start_readiness": start_readiness,
         "reconciliation": reconciliation,
         "coverage_gaps": {
             "yellow": yellow_gaps,
@@ -2474,6 +2514,43 @@ def _supervision_policy_report_violations(block: Any) -> list[str]:
     return policy.scaffold_violations(block, require_success=True)
 
 
+def start_readiness_scaffold(claim: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Sample aggregate. Passing it does not satisfy any founder condition."""
+    try:
+        import start_readiness as readiness
+    except Exception:
+        return {
+            "ok": False,
+            "detail": "import_failed",
+            "condition_1_satisfied": False,
+            "condition_2_satisfied": False,
+            "condition_3_satisfied": False,
+            "condition_4_satisfied": False,
+            "condition_5_satisfied": False,
+            "all_five_conditions_satisfied": False,
+            "sample_passes_satisfy_any_founder_condition": False,
+            "aggregates_sample_checkers_passed": False,
+            "rejects_production_claim_from_sample": False,
+            "refuses_72h_as_production_readiness": False,
+            "can_start_clock": False,
+            "l2_2_status": "NOT_STARTED",
+            "clock_state": "NOT_STARTED",
+            "production_7x24": "NOT_ACCEPTED",
+        }
+    block = readiness.stable_scaffold_status()
+    readiness.annotate_scaffold_claim(block, claim if isinstance(claim, dict) else None)
+    readiness.apply_closed_flags(block)
+    return block
+
+
+def _start_readiness_report_violations(block: Any) -> list[str]:
+    try:
+        import start_readiness as readiness
+    except Exception:
+        return ["start_readiness"]
+    return readiness.scaffold_violations(block, require_success=True)
+
+
 def _scaffold_report_violations(block: Any) -> list[str]:
     try:
         import supervisor_watchdog as watchdog
@@ -2615,6 +2692,7 @@ def validate_report(report: dict[str, Any]) -> list[str]:
     violations.extend(_attribution_report_violations(report.get("failure_attribution")))
     violations.extend(_public_pack_report_violations(report.get("public_evidence_pack")))
     violations.extend(_supervision_policy_report_violations(report.get("supervision_policy")))
+    violations.extend(_start_readiness_report_violations(report.get("start_readiness")))
     blockers = gates.get("blockers") if isinstance(gates.get("blockers"), list) else []
     if "supervisor_watchdog_offline_probe_is_not_condition_2" not in blockers:
         violations.append("supervisor_watchdog_honesty")
@@ -2628,6 +2706,8 @@ def validate_report(report: dict[str, Any]) -> list[str]:
         violations.append("public_evidence_pack")
     if "supervision_policy_sample_check_is_not_condition_1" not in blockers:
         violations.append("supervision_policy")
+    if "start_readiness_sample_aggregation_is_not_a_start" not in blockers:
+        violations.append("start_readiness")
     label = report.get("label")
     if report.get("evidence_class") == "scaffold" and label != "scaffold":
         violations.append("label")

@@ -801,6 +801,14 @@ def test_honest_preflight_records_the_supervisor_probe_as_not_condition_2():
     assert result["dummy_tests_satisfy_condition_1"] is False
     assert result["implementation_satisfies_condition_1"] is False
     assert result["committed_constants_satisfy_condition_1"] is False
+    assert result["aggregates_sample_checkers_passed"] is True
+    assert result["rejects_production_claim_from_sample"] is True
+    assert result["refuses_72h_as_production_readiness"] is True
+    assert result["sample_passes_satisfy_any_founder_condition"] is False
+    assert result["all_five_conditions_satisfied"] is False
+    assert result["condition_5_satisfied"] is False
+    assert result["dummy_tests_satisfy_condition_5"] is False
+    assert result["implementation_satisfies_condition_5"] is False
     assert result["record_11s_later_meets_requirement"] is False
     assert result["l2_2_status"] == "NOT_STARTED"
     assert result["production_7x24"] == "NOT_ACCEPTED"

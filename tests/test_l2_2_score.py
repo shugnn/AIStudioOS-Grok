@@ -124,6 +124,7 @@ def test_clock_not_started_is_the_canonical_report():
             "failure_attribution_sample_classification_is_not_condition_4",
             "public_evidence_pack_sample_validation_is_not_condition_3",
             "supervision_policy_sample_check_is_not_condition_1",
+            "start_readiness_sample_aggregation_is_not_a_start",
         ]
     assert report["l2_4"]["status"] == "INCOMPLETE"
     assert report["l2_4"]["relitigated"] is False
@@ -1563,4 +1564,85 @@ def test_sample_supervision_policy_claim_does_not_satisfy_condition_1():
     assert "supervision_policy_band_refused" in report["gates"]["blockers"]
     assert "supervision_policy_clock_not_monotonic" in report["gates"]["blockers"]
     assert "supervision_policy_sample_check_is_not_condition_1" in report["gates"]["blockers"]
+    assert l2.validate_report(report) == []
+
+
+def test_sample_start_readiness_claim_does_not_satisfy_any_condition():
+    honest = l2.score(_load("scaffold_clock_not_started.json"))
+    row = honest["start_readiness"]
+    assert row["ok"] is True
+    assert row["aggregates_sample_checkers_passed"] is True
+    assert row["rejects_production_claim_from_sample"] is True
+    assert row["refuses_72h_as_production_readiness"] is True
+    assert row["or_composition_refused"] is True
+    assert row["and_composition_refused"] is True
+    assert row["sample_only"] is True
+    assert row["offline"] is True
+    assert row["condition_1_satisfied"] is False
+    assert row["condition_2_satisfied"] is False
+    assert row["condition_3_satisfied"] is False
+    assert row["condition_4_satisfied"] is False
+    assert row["condition_5_satisfied"] is False
+    assert row["dummy_tests_satisfy_condition_5"] is False
+    assert row["implementation_satisfies_condition_5"] is False
+    assert row["sample_passes_satisfy_any_founder_condition"] is False
+    assert row["all_five_conditions_satisfied"] is False
+    assert row["can_start_clock"] is False
+    assert row["l2_2_status"] == "NOT_STARTED"
+    assert row["clock_state"] == "NOT_STARTED"
+    assert row["production_7x24"] == "NOT_ACCEPTED"
+    assert row["ubuntu_24h_wall_seconds"] == 86400.001
+    assert "start_readiness_sample_aggregation_is_not_a_start" in honest["gates"]["blockers"]
+    assert honest["founder_start_conditions"]["conditions_satisfied"] is False
+    assert honest["gates"]["can_start_clock"] is False
+    assert honest["l2_2_status"] == "NOT_STARTED"
+    assert l2.validate_report(honest) == []
+
+    claimed = _load("scaffold_clock_not_started.json")
+    claimed["start_readiness_claim"] = {
+        "composition": "or",
+        "aggregates_sample_checkers_passed": True,
+        "classifies_sample_policy_bands_passed": True,
+        "rejects_production_claim_from_sample": True,
+        "refuses_72h_as_production_readiness": True,
+        "condition_1_satisfied": True,
+        "condition_5_satisfied": True,
+        "all_five_conditions_satisfied": True,
+        "sample_passes_satisfy_any_founder_condition": True,
+        "dummy_tests_satisfy_condition_5": True,
+        "implementation_satisfies_condition_5": True,
+        "can_start_clock": True,
+        "production_7x24": "ACCEPTED",
+        "wall_seconds": 86400.001,
+        "experiment": "UBUNTU-24H",
+        "ubuntu_24h_short_wall_is_production_readiness": True,
+        "a_72h_result_is_production_readiness": True,
+        "l2_2_status": "PASS",
+        "clock_state": "STARTED",
+    }
+    report = l2.score(claimed)
+    got = report["start_readiness"]
+    assert got["sample_passes_or_into_condition"] is True
+    assert got["sample_passes_and_into_clock"] is True
+    assert got["condition_5_claimed"] is True
+    assert got["production_claim_from_sample"] is True
+    assert got["short_wall_called_production_readiness"] is True
+    assert got["seventy_two_hour_called_production_readiness"] is True
+    assert got["pass_or_start_claimed"] is True
+    assert got["condition_5_satisfied"] is False
+    assert got["all_five_conditions_satisfied"] is False
+    assert got["sample_passes_satisfy_any_founder_condition"] is False
+    assert got["can_start_clock"] is False
+    assert got["aggregates_sample_checkers_passed"] is True
+    assert got["rejects_production_claim_from_sample"] is True
+    assert got["refuses_72h_as_production_readiness"] is True
+    assert got["l2_2_status"] == "NOT_STARTED"
+    assert got["clock_state"] == "NOT_STARTED"
+    assert got["production_7x24"] == "NOT_ACCEPTED"
+    assert report["gates"]["can_start_clock"] is False
+    assert report["l2_2_status"] == "NOT_STARTED"
+    assert "condition_5_unsatisfied" in report["gates"]["blockers"]
+    assert "sample_passes_do_not_satisfy_conditions" in report["gates"]["blockers"]
+    assert "production_claim" in report["gates"]["blockers"]
+    assert "start_readiness_sample_aggregation_is_not_a_start" in report["gates"]["blockers"]
     assert l2.validate_report(report) == []

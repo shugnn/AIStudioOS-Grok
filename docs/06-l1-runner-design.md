@@ -23,13 +23,16 @@ l1_runner.py
     │  file lock (fcntl / lockfile)
     ▼
 observe: list open issues both repos (read-only API)
-select:  only eligible local jobs (heartbeat | dry_metrics_fill)
+         AND sync Issue #9 comments (scripts/ds_issue9.py) before any note
+select:  only eligible local jobs (heartbeat | status_line | task_entry | dry_protocol_check)
 lock:    exclusive lockfile; skip if held
 execute: allowed actions only
 verify:  independent checks (files exist, JSON valid, no forbidden actions attempted)
 checkpoint: write docs/progress/runner-*.json
 report:  optional git-friendly artifact (no auto-push required)
 ```
+
+`task_inbox/` remains an input. It is not the only task entry: official DS task cards published as Issue #9 comments count even when no inbox folder exists. See `docs/progress/DS_ISSUE9_SYNC.md`.
 
 ## Parameters (defaults)
 
@@ -46,9 +49,11 @@ report:  optional git-friendly artifact (no auto-push required)
 
 ## Eligible jobs (whitelist)
 
-1. `heartbeat` — run `l1_heartbeat.py` logic; write timestamped JSON
-2. `dry_protocol_check` — validate local protocol schema files exist
-3. *(future, gated)* `exp_repro` — re-run Exp-01 only if explicitly enabled via env `AISTUDIO_ALLOW_EXP_REPRO=1`
+1. `heartbeat` — run `l1_heartbeat.py`; sync Issue #9 comments, then write a gated `status_note`
+2. `status_line` — run `status_line.py`; same sync, one gated line
+3. `task_entry` — run `task_entry.py`; inbox folders ∪ official DS task cards
+4. `dry_protocol_check` — validate local protocol schema files exist
+5. *(future, gated)* `exp_repro` — re-run Exp-01 only if explicitly enabled via env `AISTUDIO_ALLOW_EXP_REPRO=1`
 
 ## Idempotency
 

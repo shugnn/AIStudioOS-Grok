@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """L1 Heartbeat — local, zero paid API beyond existing GitHub PAT.
 
-Scans both tracks' open issues, writes a timestamped heartbeat artifact.
+Syncs official DS rulings and task cards from Issue #9 comments before it
+writes ``status_note``. Scans open issues, writes a timestamped artifact.
 Does NOT execute Manager/Worker. Does NOT spend LLM budget.
+Does NOT start the L2-2 clock or claim production 7×24.
+Does NOT stop grok.com / grok-by-xai from posting its own notes.
 """
 from __future__ import annotations
 
@@ -10,10 +13,13 @@ import json
 import os
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import ds_issue9
+
 OUT_DIR = ROOT / "docs" / "progress"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -39,11 +45,27 @@ def gh_get(url: str, token: str) -> object:
 def main() -> int:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
+        sync = ds_issue9.sync_issue9(None)
         print("GH_TOKEN required", file=sys.stderr)
+        print(json.dumps(sync.to_dict(), ensure_ascii=False))
         return 2
 
     ts = datetime.now(timezone.utc)
     ts_str = ts.strftime("%Y%m%d-%H%M%S")
+    sync = ds_issue9.sync_issue9(token)
+    inbox_ids = ds_issue9.inbox_task_ids(ROOT / "task_inbox")
+    next_wake = (ts + timedelta(hours=1)).isoformat()
+    note_rejected = None
+    try:
+        status_note = ds_issue9.build_heartbeat_note(
+            sync,
+            inbox_ids,
+            utc=ts.isoformat(),
+            next_wake=next_wake,
+        )
+    except ds_issue9.StaleNoteError as exc:
+        status_note = None
+        note_rejected = {"reason": exc.reason}
     report = {
         "type": "l1_heartbeat",
         "track": "AIStudioOS-Grok",
@@ -51,7 +73,16 @@ def main() -> int:
         "repos": {},
         "blockers": [],
         "approval_needed": [],
-        "notes": "L1 scan only — no task execution, no LLM spend",
+        "notes": (
+            "L1 scan only — no task execution, no LLM spend. "
+            "status_note is gated on Issue #9 comment sync. "
+            "This file does not stop grok.com / grok-by-xai from posting its own notes."
+        ),
+        "status_note": status_note,
+        "note_rejected": note_rejected,
+        "issue9_sync": sync.to_dict(),
+        "task_entries": ds_issue9.task_entries(sync, inbox_ids),
+        "production_7x24": ds_issue9.PRODUCTION_7X24,
     }
 
     for key, repo in REPOS:
@@ -94,7 +125,14 @@ def main() -> int:
         "blockers": report["blockers"],
         "approval_needed": report["approval_needed"],
         "counts": {k: v.get("open_issues", v.get("error")) for k, v in report["repos"].items()},
+        "status_note": report["status_note"],
+        "note_rejected": report["note_rejected"],
+        "issue9_sync_ok": sync.ok,
+        "issue9_sync_error": sync.error_code,
+        "production_7x24": ds_issue9.PRODUCTION_7X24,
     }, indent=2))
+    if note_rejected is not None or not sync.ok:
+        return 1
     return 1 if report["blockers"] else 0
 
 

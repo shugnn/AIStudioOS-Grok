@@ -19,6 +19,8 @@ python -m pytest tests/ -q
 python scripts/health_check.py
 ```
 
+这两条都不是 72h 开工，也不是 L2-2 验收。`health_check.py` 退出码 0 只表示本地检查和未开工脚手架检查通过（`NOT_STARTED`，门控保持 false，生产 7×24 仍为 **NOT ACCEPTED**）。
+
 ## 3. 人类直操：急停
 
 ```bash

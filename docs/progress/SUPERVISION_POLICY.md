@@ -12,7 +12,7 @@
 | Watch period | Check every **60–180 s** in a dedicated monitor process *or* document schtasks interval |
 | **Yellow** | Signal gap **13 s – 5 min**: log `coverage_gap`, **do not** FAIL the business run |
 | **Red** | Signal gap **> 5 min**: stop DUT if still owned by this monitor, seal metrics, attribute **supervision failure** (unless pre-declared tighter policy with proof) |
-| On yellow | Continue; append gap record with UTC + monotonic delta |
+| On yellow | Continue; append one `scripts/coverage_gap_log.py` record (`timestamp`, `gap_seconds`, `band=yellow`, `source`, monotonic `mono_seconds`). Yellow is not a business FAIL |
 | On red | Stop + seal; report under R7 as supervision failure |
 | Who decides business vs supervision | **Business:** task ACCEPTED/exit metrics, with_work counts. **Supervision:** missing/late progress signals, monitor crash, wrong watch target. **Host:** reboot, OOM, shell crash, power |
 
@@ -59,6 +59,12 @@ Paths + hashes on #9. Missing projection → joint acceptance discounted.
 
 L2-4 closed as **INCOMPLETE**: supervision misconfiguration (wrong target) + host reboot — **not** scored as business FAIL.
 
+`scripts/failure_attribution.py` can classify sample records into these three classes and reject unknown, empty, missing, free-text, and multi-class labels. That exercise does not attribute a live soak failure, does not satisfy founder condition 4, and does not start the clock.
+
+`scripts/supervision_policy.py` can check the committed R2 bands (yellow 13s through 300s inclusive, red strictly above 300s) and sample monotonic sequences. That exercise does not satisfy founder condition 1 and does not start the clock.
+
+`scripts/start_readiness.py` can aggregate the sample checkers for founder conditions 1–4, including this policy check, and refuse a sample report that claims production 7×24 or that treats a 72h result or the Ubuntu-24H 86400.001s SHORT wall as production readiness. `aggregates_sample_checkers_passed`, `rejects_production_claim_from_sample`, and `refuses_72h_as_production_readiness` may be true only as sample/offline composition. `condition_1_satisfied` through `condition_5_satisfied`, `all_five_conditions_satisfied`, `can_start_clock`, `can_accept_l2_2`, and `can_close_l2_2` stay false. That aggregate does not satisfy any founder condition and does not start the clock. Production 7×24 stays **NOT ACCEPTED**.
+
 ## R8 — Host health
 
 Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster). **No new high-frequency Interactive console long-run** without explicit founder approve after host status register.
@@ -67,10 +73,20 @@ Known crash storm on founder Windows (2026-11-04 Application Error 1000 cluster)
 
 | Piece | Role |
 |-------|------|
+| `scripts/failure_attribution.py` | Classifies sample records into business, host, or supervision. Unknown, empty, missing, free-text, and multi-class labels are rejected. Sample classification is not a live soak attribution, does not satisfy founder condition 4, and does not start the clock |
 | `scripts/stall_watchdog.py` | Progress age check; `--runner-glob` for L1 |
 | `scripts/soak_2h.py` | DUT metrics; `max_wall_seconds`; finally metrics |
+| `scripts/l2_2_score.py` | Offline 72h bundle scorer. Does not start a clock and does not register Interactive tasks |
+| `scripts/coverage_gap_log.py` | Append-only gap line: `timestamp`, `gap_seconds`, `band` (`ok` / `yellow` / `red`), `source`. Does not complete a soak |
+| `scripts/supervision_policy.py` | Sample/offline check that the committed bands are yellow from 13s through 300s inclusive and red strictly above 300s, and that sample timestamp / `mono_seconds` sequences are non-decreasing. A different band is refused. That check does not satisfy founder condition 1 and does not start the clock |
+| `scripts/start_readiness.py` | Sample/offline aggregate of the condition 1–4 checkers, plus a condition-5 guard. It refuses a sample report that claims production 7×24 or that treats a 72h result or the Ubuntu-24H 86400.001s SHORT wall as production readiness. Sample-pass flags may be true only as sample/offline composition. `condition_1_satisfied` through `condition_5_satisfied` stay false. That aggregate does not satisfy any founder condition and does not start the clock |
+| `scripts/supervision_monitor.py` | Calls the logger. `--live-dut` is required before the source is `soak_summary_live` or `runner_glob_live` |
+| `docs/progress/l2_2/R2_CHECKLIST.md` | Blank R2 note. Points at the logger. Does not start the clock |
 | `docs/progress/EMERGENCY_STOP` | Human red stop |
-| Yellow gap logger | **TODO** thin `coverage_gap` append helper before next long run |
+
+## L2-2 scaffold
+
+`docs/progress/l2_2/` defines the 72h duty as monotonic wall 259200s on the existing soak path. The clock is **NOT STARTED**. A missing R3 receipt stays supervision-unverified. Interactive console scheduled tasks stay out of scope (founder major gate, not requested here). The gap logger is `scripts/coverage_gap_log.py`. A gap line has `clock_effect: none` and does not replace the start decision in `docs/progress/l2_2/R2_CHECKLIST.md`. `scripts/start_readiness.py` aggregates the sample checkers and refuses a sample production 7×24 claim. That aggregate is not a start. Production 7×24 stays **NOT ACCEPTED**.
 
 ## D1 historical note
 

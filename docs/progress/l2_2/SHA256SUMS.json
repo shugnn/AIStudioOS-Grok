@@ -1,0 +1,37 @@
+{
+  "utc": "2026-11-11T04:11:11.089249+00:00",
+  "git_head": "860a9d73f99adc1246fadf744ebce4e37226163c",
+  "count": 6,
+  "files": [
+    {
+      "path": "docs/progress/l2_2/R2_CHECKLIST.md",
+      "sha256": "b446b97aabf9b6eb93476366b690e4f04ce6e98d31502d4d902ee855b6aa7e5c",
+      "bytes": 5544
+    },
+    {
+      "path": "docs/progress/l2_2/README.md",
+      "sha256": "c46f80533e31d63f38c0d434e72cffc3856e96af17e5060542dacdf7bfe15654",
+      "bytes": 29296
+    },
+    {
+      "path": "docs/progress/l2_2/SCHEMA.json",
+      "sha256": "d0dfe8c4e8a5b7d254f6013026ae8df1f396c76d90d3573791e784c6450e0be5",
+      "bytes": 15137
+    },
+    {
+      "path": "docs/progress/l2_2/START_DECISION.md",
+      "sha256": "e2332e75a1310a9bafee8fbb74655989f2c41c0130b62c02c742bf88ca8127e4",
+      "bytes": 7716
+    },
+    {
+      "path": "docs/progress/l2_2/scaffold/preflight.json",
+      "sha256": "84a93a370879d4795da45b0e405b5ef850d8ee61c2079bc2efc7c2fe4c4df8c6",
+      "bytes": 322872
+    },
+    {
+      "path": "docs/progress/l2_2/scaffold/report.json",
+      "sha256": "9bb6ae16c0d66fb8f45da349ddb753112e4d873377d4a3016d1f85894f7bdb7d",
+      "bytes": 146604
+    }
+  ]
+}

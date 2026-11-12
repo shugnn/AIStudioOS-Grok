@@ -3,12 +3,15 @@
 
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T1-20261108
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T4-20261112
+  PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T5-20261112
 
 DS-T4 reject-then-revise mode spawns the Worker and the Verifier as separate
 processes. The parent records the result. It does not judge the candidate and
 it does not call a model API.
 
-Does not use network.
+DS-T5 model-involved semantic revision likewise spawns Worker and Verifier as
+separate processes. Only the interpret_complaint Worker step may call the
+model API, and only when the founder has confirmed a paid run.
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ BLOCKED_TASK_IDS = frozenset(
         "DS-T3-20261111",
     }
 )
+WORKER_STEPS = ("prepare_input", "verify_input", "interpret_complaint", "revise")
 
 
 def utc() -> str:
@@ -51,7 +55,7 @@ def _emit_worker(step: str, result: dict) -> int:
     payload["role"] = "worker"
     payload["step"] = step
     payload["pid"] = os.getpid()
-    print(json.dumps(payload))
+    print(json.dumps(payload, ensure_ascii=False))
     return 0 if payload.get("ok") else 1
 
 
@@ -62,6 +66,10 @@ def _run_worker_step(inbox: Path, task_id: str, step: str) -> int:
     try:
         if step == "prepare_input":
             result = mod.prepare_input(inbox=inbox)
+        elif step == "verify_input":
+            result = mod.verify_input(inbox=inbox)
+        elif step == "interpret_complaint":
+            result = mod.interpret_complaint(inbox=inbox)
         elif step == "revise":
             result = mod.revise(inbox=inbox, task_id=task_id)
         else:
@@ -98,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-id", required=True)
     parser.add_argument("--inbox", default=None)
-    parser.add_argument("--step", choices=("all", "prepare_input", "revise"), default="all")
+    parser.add_argument("--step", choices=("all",) + WORKER_STEPS, default="all")
     args = parser.parse_args(argv)
     tid = args.task_id
     inbox = Path(args.inbox).resolve() if args.inbox else (ROOT / "task_inbox" / tid)
@@ -146,6 +154,26 @@ def main(argv: list[str] | None = None) -> int:
         }
         (out / "worklog.json").write_text(json.dumps(worklog, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"ok": bool(result.get("ok")), "task_id": tid, "result": result}, indent=2))
+        return 0 if result.get("ok") else 1
+
+    if dispatch.get("mode") == "model_involved_semantic_revision":
+        started = utc()
+        from control_plane.semantic_revise import orchestrate
+
+        result = orchestrate(inbox=inbox, repo_root=ROOT)
+        out = inbox / "deliverables"
+        out.mkdir(parents=True, exist_ok=True)
+        worklog = {
+            "task_id": tid,
+            "worker_entry": "scripts/worker_run_task.py",
+            "mode": "model_involved_semantic_revision",
+            "paid_api_called": bool(result.get("paid_api_called")),
+            "started_utc": started,
+            "finished_utc": utc(),
+            "result": result,
+        }
+        (out / "worklog.json").write_text(json.dumps(worklog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(json.dumps({"ok": bool(result.get("ok")), "task_id": tid, "result": result}, indent=2, ensure_ascii=False))
         return 0 if result.get("ok") else 1
 
     return _run_legacy(inbox, tid)

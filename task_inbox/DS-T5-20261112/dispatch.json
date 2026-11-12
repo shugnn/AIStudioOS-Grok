@@ -1,0 +1,28 @@
+{
+  "task_id": "DS-T5-20261112",
+  "card_published_utc": "2026-11-12T09:49:31Z",
+  "source_comments": [
+    "6820308282"
+  ],
+  "receive_ack_comment": "6821767846",
+  "inbox": "task_inbox/DS-T5-20261112/",
+  "mode": "model_involved_semantic_revision",
+  "network": "model_api_only",
+  "paid": true,
+  "cost_policy": "D-023 cap 5.00 CNY per run",
+  "input": {
+    "path": "data/appts.csv",
+    "bytes": 12350,
+    "lines_including_header": 301,
+    "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+    "reused_from": "PR #20 task_inbox/DS-T4-20261112/data/appts.csv @ d723cfc5cebebd249040d3482ebba4d490a81a08"
+  },
+  "starting_candidate": "candidate_v3.json",
+  "l2_2_clock": "NOT_STARTED",
+  "production_7x24": "NOT_ACCEPTED",
+  "observation_track_acceptance": "NOT_CLAIMED",
+  "status": "READY_FOR_PAID_RUN",
+  "founder_paid_confirmation": "2026-11-13T07:49:00+08:00 this chat: 按 D-023 执行 T5",
+  "worker": "scripts/worker_run_task.py --task-id DS-T5-20261112",
+  "verifier": "python -m control_plane.semantic_verifier"
+}

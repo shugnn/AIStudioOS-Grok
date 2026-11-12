@@ -1,0 +1,11 @@
+{
+  "path": "data/appts.csv",
+  "bytes": 12350,
+  "lines_including_header": 301,
+  "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+  "source": "https://github.com/shugnn/AIStudioOS-Grok/blob/d723cfc5cebebd249040d3482ebba4d490a81a08/task_inbox/DS-T4-20261112/data/appts.csv",
+  "source_pr": "https://github.com/shugnn/AIStudioOS-Grok/pull/20",
+  "source_commit": "d723cfc5cebebd249040d3482ebba4d490a81a08",
+  "matches_official_card": true,
+  "verified_at": "2026-11-13T00:13:20+08:00"
+}

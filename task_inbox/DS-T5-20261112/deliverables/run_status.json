@@ -1,0 +1,27 @@
+{
+  "task_id": "DS-T5-20261112",
+  "kind": "observation-track submission",
+  "claim": {
+    "observation_track_acceptance": "NOT_CLAIMED",
+    "l3_semantic_revision_acceptance": "NOT_CLAIMED",
+    "t5_acceptance": "NOT_CLAIMED",
+    "production_7x24": "NOT_ACCEPTED",
+    "l2_2_clock": "NOT_STARTED"
+  },
+  "paid_api_called": true,
+  "founder_confirmation": "this chat, 2026-11-13 07:49 Asia/Shanghai, phrase 按 D-023 执行 T5",
+  "model": "deepseek-flash",
+  "calls": 1,
+  "prompt_tokens": 868,
+  "completion_tokens": 284,
+  "estimated_cny": "0.002004",
+  "product_verifier_verdict": "ACCEPTED",
+  "input": {
+    "path": "data/appts.csv",
+    "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+    "bytes": 12350,
+    "lines": 301
+  },
+  "a4_separate_steps": true,
+  "note": "product_verifier_verdict ACCEPTED is the product Verifier judgment of this run. It is not observation-track acceptance and not production 7x24 acceptance."
+}

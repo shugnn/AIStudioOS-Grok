@@ -1,0 +1,15 @@
+{
+  "include_statuses": [
+    "completed"
+  ],
+  "include_departments": [
+    "med",
+    "surg",
+    "ped",
+    "derm"
+  ],
+  "amount_format": "two_decimal_string",
+  "preserve_paths": [
+    "by_month"
+  ]
+}

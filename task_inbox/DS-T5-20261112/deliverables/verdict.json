@@ -1,0 +1,35 @@
+{
+  "verdict": "ACCEPTED",
+  "checks": [
+    {
+      "name": "A-1_fingerprint",
+      "ok": true,
+      "detail": "sha256=a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28 bytes=12350 lines=301"
+    },
+    {
+      "name": "A-4_interpretation",
+      "ok": true,
+      "detail": "interpretation.json must have 4 complaint items with required fields"
+    },
+    {
+      "name": "A-2_model_usage",
+      "ok": true,
+      "detail": "step=interpret_complaint calls=1 prompt_tokens=868 completion_tokens=284 estimated_cny=0.002004"
+    },
+    {
+      "name": "A-6_cost_cap",
+      "ok": true,
+      "detail": "estimated_cny=0.002004 cap=5.00"
+    },
+    {
+      "name": "A-3_candidate_matches_plan",
+      "ok": true,
+      "detail": "candidate_v4 must match a deterministic apply of the model recount_plan"
+    },
+    {
+      "name": "A-3_months_untouched_if_preserved",
+      "ok": true,
+      "detail": "by_month values preserved from candidate_v3 (format may be normalized)"
+    }
+  ]
+}

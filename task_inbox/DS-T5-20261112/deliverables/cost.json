@@ -1,0 +1,17 @@
+{
+  "record_type": "completed_paid_run",
+  "status": "COMPLETED",
+  "blocked": false,
+  "completed_paid_run": true,
+  "paid_api_called": true,
+  "model": "deepseek-flash",
+  "calls": 1,
+  "prompt_tokens": 868,
+  "completion_tokens": 284,
+  "estimated_cny": "0.002004",
+  "estimated_cny_exact": "0.0020040",
+  "tariff_window": "idle",
+  "cap_cny": "5.00",
+  "policy": "D-023",
+  "pricing_source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+}

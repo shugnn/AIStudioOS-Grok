@@ -1,0 +1,26 @@
+[
+  {
+    "complaint": 1,
+    "understood_as": "Total revenue is overstated because cancelled and no-show appointments are being counted; only completed appointments should contribute to revenue.",
+    "target_path": "total_revenue",
+    "fix": "Recompute total_revenue from the CSV including only completed appointments."
+  },
+  {
+    "complaint": 2,
+    "understood_as": "The by_dept block is missing a department (derm), so it does not match the actual departments present.",
+    "target_path": "by_dept",
+    "fix": "Include all observed departments in by_dept, adding derm even if its count would be 0."
+  },
+  {
+    "complaint": 3,
+    "understood_as": "Per-department counts are wrong because cancelled appointments are being counted as visits; counts should reflect only completed appointments.",
+    "target_path": "by_dept",
+    "fix": "Recompute each department's count from the CSV including only completed appointments."
+  },
+  {
+    "complaint": 4,
+    "understood_as": "Monetary amounts are inconsistently formatted, some with one decimal; all amounts should be shown with exactly two decimal places.",
+    "target_path": "total_revenue",
+    "fix": "Format all monetary values with exactly two decimal places."
+  }
+]

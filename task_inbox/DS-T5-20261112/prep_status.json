@@ -1,0 +1,19 @@
+{
+  "task_id": "DS-T5-20261112",
+  "status": "UNPAID_PREP",
+  "prepared_at": "2026-11-13T00:13:20+08:00",
+  "timezone": "Asia/Shanghai",
+  "prepared_on": "box",
+  "input_verified": true,
+  "paid_api_called": false,
+  "model_called": false,
+  "complaints_hand_translated_into_rules": false,
+  "l2_2_clock": "NOT_STARTED",
+  "production_7x24": "NOT_ACCEPTED",
+  "notes": [
+    "Unpaid preparation only, per founder choice in this chat.",
+    "No interpretation.json, candidate_v4.json, model_usage.json, or verdict.json were written.",
+    "candidate_v3.json is a verbatim copy of the official card JSON.",
+    "Ubuntu dirty T1 worktree was left untouched; this pack can be copied into a clean worktree later."
+  ]
+}

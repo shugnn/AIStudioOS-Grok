@@ -1,0 +1,45 @@
+{
+  "task_id": "DS-T5-20261112",
+  "files": {
+    "data/appts.csv": {
+      "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+      "bytes": 12350
+    },
+    "candidate_v3.json": {
+      "sha256": "00d47f0d1776cc98e2932245ca1b73ee3f75893a53444791481f51735a86e959",
+      "bytes": 492
+    },
+    "deliverables/interpretation.json": {
+      "sha256": "5affd1d7786595ce91c8bb22b59b4d05a0f0c6879d4e0d356666df264af2dbdb",
+      "bytes": 1233
+    },
+    "deliverables/recount_plan.json": {
+      "sha256": "f4206eaf73c67f2121291f3d753cb4f678b3091c9de88c42598b054e926d7dbd",
+      "bytes": 208
+    },
+    "deliverables/candidate_v4.json": {
+      "sha256": "21cb9c1801b5662e51eb72430d8152fc71d31a9f022e66cb685406dbd50ef794",
+      "bytes": 587
+    },
+    "deliverables/model_usage.json": {
+      "sha256": "bfd46cb7025aadeb9b424aca947da1e7bc93b3fb062e08a4921ca04c3a143f84",
+      "bytes": 754
+    },
+    "deliverables/verdict.json": {
+      "sha256": "add10190a9c68f828a1ee29004b70ed93147726830e7ef36f45b30f1d1274751",
+      "bytes": 1001
+    },
+    "deliverables/cost.json": {
+      "sha256": "58fab3acfcb65be3366a762b7e14bbaa1ad637688af05cf8dbac3736108e3c4c",
+      "bytes": 456
+    },
+    "deliverables/run_status.json": {
+      "sha256": "b97dd4cea1ebf4939e388fcebf8981d6bcc7c7c29c9ff73feb4ece16091793b0",
+      "bytes": 964
+    },
+    "deliverables/step_evidence.json": {
+      "sha256": "73b9f48bcb050604e22564dc07b307ef7c5785ceab0960cb9d6aa990a3248b2a",
+      "bytes": 3770
+    }
+  }
+}

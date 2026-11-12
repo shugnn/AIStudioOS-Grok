@@ -1,0 +1,42 @@
+{
+  "task_id": "DS-T5-20261112",
+  "worker_entry": "scripts/worker_run_task.py",
+  "mode": "model_involved_semantic_revision",
+  "paid_api_called": true,
+  "started_utc": "2026-11-12T23:53:59Z",
+  "finished_utc": "2026-11-12T23:54:01Z",
+  "result": {
+    "ok": true,
+    "task_id": "DS-T5-20261112",
+    "input_sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+    "input_bytes": 12350,
+    "input_lines": 301,
+    "verdict": "ACCEPTED",
+    "model": "deepseek-flash",
+    "calls": 1,
+    "estimated_cny": "0.002004",
+    "paid_api_called": true,
+    "steps": [
+      {
+        "step": "verify_input",
+        "role": "worker",
+        "pid": 1402698
+      },
+      {
+        "step": "interpret_complaint",
+        "role": "worker",
+        "pid": 1402699
+      },
+      {
+        "step": "revise",
+        "role": "worker",
+        "pid": 1402700
+      },
+      {
+        "step": "verify",
+        "role": "verifier",
+        "pid": 1402701
+      }
+    ]
+  }
+}

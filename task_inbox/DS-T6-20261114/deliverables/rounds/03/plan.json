@@ -1,0 +1,9 @@
+{
+  "rule_targeted": "R1",
+  "model_reasoning": "R1未通过，金额仍为浮点数，需转为两位小数字符串。",
+  "model_reasoning_full": "R1未通过，金额仍为浮点数，需转为两位小数字符串。",
+  "patch": {
+    "op": "format_amounts",
+    "amount_format": "two_decimal_string"
+  }
+}

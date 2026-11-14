@@ -1,0 +1,11 @@
+{
+  "path": "data/appts.csv",
+  "bytes": 12350,
+  "lines_including_header": 301,
+  "sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+  "source": "copied from T5 worktree task_inbox/DS-T5-20261112/data/appts.csv",
+  "source_pr": "https://github.com/shugnn/AIStudioOS-Grok/pull/21",
+  "source_commit": "bb56a98ddde7751991510fd0cd7a8a396d22c6ae",
+  "matches_official_card": true,
+  "verified_at": "2026-11-14T22:42:00+08:00"
+}

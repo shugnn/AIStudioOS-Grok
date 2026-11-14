@@ -1,0 +1,17 @@
+{
+  "rule_targeted": "R2",
+  "model_reasoning": "by_dept 缺少 derm，需按 completed 状态补入缺失科室。",
+  "model_reasoning_full": "by_dept 缺少 derm，需按 completed 状态补入缺失科室。",
+  "patch": {
+    "op": "ensure_departments",
+    "departments": [
+      "med",
+      "surg",
+      "ped",
+      "derm"
+    ],
+    "include_statuses": [
+      "completed"
+    ]
+  }
+}

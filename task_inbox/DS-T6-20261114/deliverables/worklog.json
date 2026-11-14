@@ -1,0 +1,19 @@
+{
+  "task_id": "DS-T6-20261114",
+  "worker_entry": "scripts/worker_run_task.py",
+  "mode": "bounded_self_iteration_l4",
+  "paid_api_called": true,
+  "started_utc": "2026-11-14T14:47:59Z",
+  "finished_utc": "2026-11-14T14:48:04Z",
+  "result": {
+    "ok": true,
+    "task_id": "DS-T6-20261114",
+    "stop_reason": "SCORE_5",
+    "rounds": 4,
+    "final_score": "5/5",
+    "goal_status": "ACHIEVED",
+    "total_cost_cny": "0.00522",
+    "total_tokens": 4824,
+    "paid_api_called": true
+  }
+}

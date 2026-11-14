@@ -1,0 +1,30 @@
+{
+  "step": "propose_fix",
+  "round": 2,
+  "model": "deepseek-flash",
+  "requested_model": "deepseek-flash",
+  "calls": 1,
+  "prompt_tokens": 1209,
+  "completion_tokens": 54,
+  "total_tokens": 1263,
+  "prompt_cache_hit_tokens": 128,
+  "prompt_cache_miss_tokens": 1081,
+  "estimated_cny": "0.0013",
+  "estimated_cny_exact": "0.0012996",
+  "tariff_window": "idle",
+  "tariff": {
+    "cache_hit": 128,
+    "cache_miss": 1081,
+    "output": 54,
+    "prices_cny_per_mtoken": {
+      "cache_hit": "0.02",
+      "cache_miss": "1",
+      "output": "4"
+    }
+  },
+  "pricing_source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+  "thinking_mode": "disabled",
+  "started_at": "2026-11-14T22:48:01+08:00",
+  "api_id": "286da372-9283-4bb4-a7d1-b2c41b26efa1",
+  "mocked": false
+}

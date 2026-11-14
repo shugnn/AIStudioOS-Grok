@@ -1,0 +1,19 @@
+{
+  "record_type": "completed_run",
+  "status": "COMPLETED",
+  "blocked": false,
+  "completed_paid_run": true,
+  "paid_api_called": true,
+  "calls": 4,
+  "total_tokens": 4824,
+  "estimated_cny": "0.00522",
+  "estimated_cny_exact": "0.0052188",
+  "cap_cny": "5.00",
+  "policy": "D-023",
+  "round_costs": [
+    "0.0015530",
+    "0.0012996",
+    "0.0011866",
+    "0.0011796"
+  ]
+}

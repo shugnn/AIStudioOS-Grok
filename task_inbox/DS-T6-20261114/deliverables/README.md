@@ -1,0 +1,1 @@
+Official T6 deliverables (`iterations.jsonl`, `final_candidate.json`, `stop_report.json`, `verifier_final.json`) are written by `scripts/worker_run_task.py --task-id DS-T6-20261114` after a confirmed paid run. Do not prewrite them.

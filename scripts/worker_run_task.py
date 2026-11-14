@@ -4,6 +4,7 @@
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T1-20261108
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T4-20261112
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T5-20261112
+  PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T6-20261114
 
 DS-T4 reject-then-revise mode spawns the Worker and the Verifier as separate
 processes. The parent records the result. It does not judge the candidate and
@@ -12,6 +13,10 @@ it does not call a model API.
 DS-T5 model-involved semantic revision likewise spawns Worker and Verifier as
 separate processes. Only the interpret_complaint Worker step may call the
 model API, and only when the founder has confirmed a paid run.
+
+DS-T6 bounded self-iteration likewise spawns Worker and Verifier as separate
+processes. Only the propose_fix Worker step may call the model API, once per
+iteration round, and only when the founder has confirmed a paid run.
 """
 from __future__ import annotations
 
@@ -31,7 +36,7 @@ BLOCKED_TASK_IDS = frozenset(
         "DS-T3-20261111",
     }
 )
-WORKER_STEPS = ("prepare_input", "verify_input", "interpret_complaint", "revise")
+WORKER_STEPS = ("prepare_input", "verify_input", "interpret_complaint", "revise", "propose_fix", "apply_fix")
 
 
 def utc() -> str:
@@ -72,6 +77,10 @@ def _run_worker_step(inbox: Path, task_id: str, step: str) -> int:
             result = mod.interpret_complaint(inbox=inbox)
         elif step == "revise":
             result = mod.revise(inbox=inbox, task_id=task_id)
+        elif step == "propose_fix":
+            result = mod.propose_fix(inbox=inbox, task_id=task_id)
+        elif step == "apply_fix":
+            result = mod.apply_fix(inbox=inbox, task_id=task_id)
         else:
             result = {"ok": False, "error": "unknown_step"}
     except Exception as exc:  # noqa: BLE001 — child process boundary
@@ -167,6 +176,26 @@ def main(argv: list[str] | None = None) -> int:
             "task_id": tid,
             "worker_entry": "scripts/worker_run_task.py",
             "mode": "model_involved_semantic_revision",
+            "paid_api_called": bool(result.get("paid_api_called")),
+            "started_utc": started,
+            "finished_utc": utc(),
+            "result": result,
+        }
+        (out / "worklog.json").write_text(json.dumps(worklog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(json.dumps({"ok": bool(result.get("ok")), "task_id": tid, "result": result}, indent=2, ensure_ascii=False))
+        return 0 if result.get("ok") else 1
+
+    if dispatch.get("mode") == "bounded_self_iteration_l4":
+        started = utc()
+        from control_plane.iteration_loop import orchestrate
+
+        result = orchestrate(inbox=inbox, repo_root=ROOT)
+        out = inbox / "deliverables"
+        out.mkdir(parents=True, exist_ok=True)
+        worklog = {
+            "task_id": tid,
+            "worker_entry": "scripts/worker_run_task.py",
+            "mode": "bounded_self_iteration_l4",
             "paid_api_called": bool(result.get("paid_api_called")),
             "started_utc": started,
             "finished_utc": utc(),

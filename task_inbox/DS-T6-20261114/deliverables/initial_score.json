@@ -1,0 +1,41 @@
+{
+  "score": "1/5",
+  "passed": 1,
+  "total": 5,
+  "checks": {
+    "R1": {
+      "pass": false,
+      "reason": "non-compliant amounts: [('total_revenue', 186035.32, 'float'), ('by_dept.med.revenue', 42211.74, 'float'), ('by_dept.surg.revenue', 40186.6, 'float'), ('by_dept.ped.revenue', 54911.06, 'float')]"
+    },
+    "R2": {
+      "pass": false,
+      "reason": "by_dept keys=['med', 'ped', 'surg']; required=['med', 'surg', 'ped', 'derm']; missing=['derm']"
+    },
+    "R3": {
+      "pass": true,
+      "reason": "by_month keys=['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']; data months=['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']; ascending=True"
+    },
+    "R4": {
+      "pass": false,
+      "reason": "total_revenue 18603532 != completed-only 14258610; by_dept.med.count 78 != 64; by_dept.med.revenue cents 4221174 != 3349879; by_dept.surg.count 67 != 49; by_dept.surg.revenue cents 4018660 != 2828769; by_dept.ped.count 80 != 65; by_dept.ped.revenue cents 5491106 != 4503837"
+    },
+    "R5": {
+      "pass": false,
+      "reason": "generated_from=None; expected=a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28"
+    }
+  },
+  "input_sha256": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28",
+  "failing": [
+    "R1",
+    "R2",
+    "R4",
+    "R5"
+  ],
+  "passing": [
+    "R3"
+  ],
+  "task_id": "DS-T6-20261114",
+  "round": 0,
+  "paid_api_called": false,
+  "model_called": false
+}

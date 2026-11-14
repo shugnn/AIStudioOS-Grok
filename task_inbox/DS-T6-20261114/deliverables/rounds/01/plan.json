@@ -1,0 +1,9 @@
+{
+  "rule_targeted": "R5",
+  "model_reasoning": "R5未通过，generated_from为空，应设为输入SHA256值。",
+  "model_reasoning_full": "R5未通过，generated_from为空，应设为输入SHA256值。",
+  "patch": {
+    "op": "set_generated_from",
+    "value": "a82ef503933d3c5edc60e80f5b7f03faf0b3f736a04591de4f9a2338f7a61c28"
+  }
+}

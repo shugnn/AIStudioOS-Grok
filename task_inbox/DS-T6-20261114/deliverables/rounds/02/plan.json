@@ -1,0 +1,11 @@
+{
+  "rule_targeted": "R4",
+  "model_reasoning": "R4未通过：total_revenue与各部门计数/收入含非completed状态，需按completed重算。",
+  "model_reasoning_full": "R4未通过：total_revenue与各部门计数/收入含非completed状态，需按completed重算。",
+  "patch": {
+    "op": "filter_statuses",
+    "include_statuses": [
+      "completed"
+    ]
+  }
+}

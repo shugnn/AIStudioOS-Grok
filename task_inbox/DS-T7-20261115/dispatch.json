@@ -1,0 +1,7 @@
+{
+  "task_id": "DS-T7-20261115",
+  "entry": "scripts/worker_run_task.py",
+  "mode": "production_soak_72h",
+  "cost_cap_cny": "1.00",
+  "paid_api_allowed": false
+}

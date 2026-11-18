@@ -1,0 +1,19 @@
+{
+  "t0_utc": "2026-11-15T08:19:43Z",
+  "t_end_utc": "2026-11-18T08:20:01Z",
+  "wall_elapsed_s": 259218,
+  "planned_s": 259200,
+  "cycle_count": 288,
+  "verified_count": 288,
+  "effective_rate": 1.0,
+  "gaps_over_10min": 0,
+  "total_cost_cny": "0.00",
+  "model_calls": 0,
+  "clock_basis": "utc_wall",
+  "t0_registered_utc": "2026-11-15T08:19:43Z",
+  "task_id": "DS-T7-20261115",
+  "detection_latency_s_reported": {
+    "n": 0,
+    "note": "runner incidents did not record detection_latency_s; values left null rather than invented"
+  }
+}

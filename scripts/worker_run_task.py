@@ -5,6 +5,7 @@
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T4-20261112
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T5-20261112
   PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T6-20261114
+  PYTHONPATH=. python scripts/worker_run_task.py --task-id DS-T7-20261115
 
 DS-T4 reject-then-revise mode spawns the Worker and the Verifier as separate
 processes. The parent records the result. It does not judge the candidate and
@@ -13,6 +14,9 @@ it does not call a model API.
 DS-T5 model-involved semantic revision likewise spawns Worker and Verifier as
 separate processes. Only the interpret_complaint Worker step may call the
 model API, and only when the founder has confirmed a paid run.
+
+DS-T7 72h production soak uses the legacy worker_jobs.run path to ensure
+the runner and guardian daemons and returns immediately; it does not wait 72h.
 
 DS-T6 bounded self-iteration likewise spawns Worker and Verifier as separate
 processes. Only the propose_fix Worker step may call the model API, once per

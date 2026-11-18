@@ -1,0 +1,12 @@
+{
+  "task_id": "DS-T7-20261115",
+  "generated_utc": "2026-11-18T08:27:55Z",
+  "code_sha": "fb6a0eab24293ce79976e6f81732795efe4b2663",
+  "files": {
+    "soak_summary.json": "4c365fbad55e747e65ebf425a64f5cd18d24ccc1895d4f514eeab3aaaf8361d1",
+    "soak_timeline.jsonl": "db949b1cc884fe782eee10407ac87fcf12501c7767b4341552b6eb8040813321",
+    "incidents.jsonl": "72a35319fe713b97c81b000e7dfd8c345f545de754a146820b0c1349c414f6a1"
+  },
+  "sha_full_spec": "sha256(canonical json of plan_wake,actual_wake,round,appts_sha256,result,facts)",
+  "clock_basis": "utc_wall"
+}

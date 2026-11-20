@@ -1,0 +1,14 @@
+{
+  "code_sha": "a0b69cc15cb00a239c4ee25f02a38c0a34bcf1bb9183247f084de9ef5699167f",
+  "code_sha_spec": "sha256 of pipeline.py bytes",
+  "files": {
+    "README.md": "e1265ed282387762dbb7903ddfc49cbb3575e0b5c8ab76e35bd022eeea55067b",
+    "pipeline.py": "a0b69cc15cb00a239c4ee25f02a38c0a34bcf1bb9183247f084de9ef5699167f",
+    "provenance.json": "f5d22b580e8fff5685680e716dc4b92fd4f534db1bdc9899048ae437cc499327",
+    "scorecard.json": "d26b1cdcde8b83e90869a35379021fb585a4753f059efbdcf7edcf3f804f2372"
+  },
+  "generated_utc": "2026-11-20T01:02:50Z",
+  "model_calls": 0,
+  "task_id": "DS-P1-20261120",
+  "total_cost_cny": 0
+}

@@ -1,89 +1,97 @@
 # 工人取件通道（INBOX）
 
 仓库：https://github.com/shugnn/AIStudioOS-Grok  
-文档日期：2026-11-20（亚洲/上海）  
-性质：如实记录**当前**取件通道，并写明目标协议。不把未上线的机制写成已在跑。
+文档日期：2026-11-21（亚洲/上海）  
+依据：[Issue #9 comment 7044085120](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7044085120)（协议 v1）、[comment 7044312076](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7044312076)（地址与命名最终口径）、创始人 2026-11-21 00:23（亚洲/上海）正式确认。  
+本文件取代 2026-11-20 版。旧版中的 `task_inbox` 入站口说法、私聊转贴兜底、工作日 09:00–19:00 时窗，全部作废。
 
-## 1. 唯一收件箱
+## 1. 时窗
 
-目标路径规范：
+- 09:00–23:00（亚洲/上海），每日（含周末）每 2 小时一轮，整点：09/11/13/15/17/19/21/23。
+- 允许 ±15 分钟抖动；抖动耗时计入 `intake_latency_effective_s`。
+- 夜间 00:00–09:00：不运行、不轮询、不要求回执。23:00 这一档最晚到 23:15；此后到次日 08:45 为夜窗。
+- 红线事件不受节拍限制：若本会话在夜窗被唤醒且 Issue #9 出现红线 `dispatch-comment`，当轮立即处理。夜间没有另设轮询进程，不能在未唤醒时主动发现红线。
 
-- 目录：`task_inbox/<task_id>/`
-- 任务卡文件名：`任务卡.md`（历史 T1 曾用 `TASK.md`，新卡统一用 `任务卡.md`）
-- 必含字段：`task_id`、目标、交付物、截止
-- 取件回执：同目录 `ack.json`
-- 指标记录：同目录 `intake.json`（含 `intake_latency_s`）
+## 2. 三个地址（名字互不可替换）
 
-**当前事实（2026-11-20 核实）：**
+| 角色 | 地址 | 名字 |
+|---|---|---|
+| 发布源（权威） | 本仓库 [Issue #9](https://github.com/shugnn/AIStudioOS-Grok/issues/9) 的一条评论，必须含卡片全文 + `card_sha256` + 观察轨 commit | `dispatch-comment` |
+| 存档与指纹锚 | 观察轨仓 `_observe/tasks/<task_id>/任务卡.md`，仅校验用，不是取件入口 | `task-card` |
+| 回执与产物 | 本仓库 `worker_outbox/<task_id>/`，只放 `ack.json`、产物、封存件，不是入站口 | `worker-outbox` |
 
-- 本仓库默认分支 `main`（`a081c2e985ecae06b1e30ce9fd93be4b301ca5e0`）的 `task_inbox/` **只有** `DS-T1-20261108/`（`TASK.md`、`dispatch.json`、`worker_jobs.py`），没有 P1/P2 的任务卡目录。
-- 观察轨官方卡的实际发布入口是 [Issue #9](https://github.com/shugnn/AIStudioOS-Grok/issues/9) 评论；全文在观察轨仓 `AIStudioOS-DS` 的 `_observe/tasks/<短号>/任务卡.md`。
-- 本轮 P2 卡文件路径（不在本仓库）：https://github.com/shugnn/AIStudioOS-DS/blob/main/_observe/tasks/P2-20261120/任务卡.md  
-  发布评论：[Issue #9 comment 7039777786](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7039777786)  
-  ref=`main`，size=5006，git blob SHA `24f03ecd0b8a6f25b5bbfe4e06b09c0aee563721`。
-- 交付物另放在工人分支 `bot/<task_id>/task_inbox/<task_id>/`，不得改 `main`、不得为此合并 PR。
+两处正文不一致时，以 `dispatch-comment` 为准。只给观察轨仓链接、没有卡片全文的评论，不等于已发卡。历史目录映射见 `worker_outbox/PATHS.md`。新任务一律 `worker_outbox/<task_id>/`。
 
-## 2. 取件协议
+## 3. 轮询命令
 
-### 2.1 当前正在运行的机制
+实际取件进程是 Grok Bot 例行任务「AIStudioOS dispatch 巡检」（id `aistudioos-task-inbox`）：
 
-- **不是** GitHub Actions：本仓库 `list_workflows` 返回 `total_count=0`，默认分支也没有 `.github/workflows/`。
-- **不是** 仓库内或主机上的 crontab 守护进程在监视 `task_inbox/`。
-- **是** Grok Bot 例行任务「AIStudioOS task_inbox 巡检」（id `aistudioos-task-inbox`）：
-  - 日程：`CRON_TZ=Asia/Shanghai 0 9,11,13,15,17,19 * * 1-5`
-  - 窗口：可提前或延后最多 15 分钟（服务器实际起点为 `45 8,10,12,14,16,18 * * 1-5`）
-  - 工作日 09:00–19:00（亚洲/上海）每 2 小时一轮；周末无槽。
-  - 每轮读取 [Issue #9](https://github.com/shugnn/AIStudioOS-Grok/issues/9) 最新评论，并检查 `task_inbox/`；若有新官方卡或新裁定，须在当轮回 Issue ACK，并在本聊天通知创始人。
-- 另有「AIStudioOS 日间主动推进」，工作日约 09:00 一次，不是 2 小时收件巡检。
+- 日程：`CRON_TZ=Asia/Shanghai 0 9,11,13,15,17,19,21,23 * * *`
+- 窗口：flexible，提前或延后最多 15 分钟（服务器起点为 `52 8,10,12,14,16,18,20,22`，即 08:52 起每两小时）。
+- 不是 GitHub Actions（本仓库 workflow 数为 0；Actions 日程必须在默认分支，当前约定不改 `main`）。
+- 不是主机 crontab：乌斑兔用户 crontab 在 2026-11-20 23:43 已删除 `# DS-T7-20261115` 的每 5 分钟与 `@reboot` 两行；现仅剩与取件无关的 `AISTUDIO-SENTINEL`（每小时 `run.sh`、每 15 分钟 `run-watchdog.sh`）。主机 cron 不能唤醒本 bot，也不能完成 ACK。因此没有再安装“扫 Issue #9”的本机 cron，避免造成第二条取件通道的假象。
 
-### 2.2 取到后第一步（本协议，即日起执行）
+每轮固定顺序：
 
-1. 写下 `task_inbox/<task_id>/ack.json`（本分支，不改 `main`）。
-2. 在 Issue #9 回一行：`ACK <task_id>`，并写明 `task_id`、承诺交付时间、预算口径、`intake_latency_s`、任务卡 SHA256（或无法逐字节核验时的诚实说明）、以及触发类型。
-3. 任何卡取到后 **30 分钟内**完成上述 Issue ACK。
-4. 若由创始人私聊转贴才发现，必须注明「人工转贴触发」，不得记为自动。
+1. 读本文件与 `worker_outbox/INBOX_STATE.json`（工人分支 `bot/ds-p2-20261120`，并与本机 `/workspace/worker_outbox/INBOX_STATE.json` 对齐）。
+2. 拉取 [Issue #9](https://github.com/shugnn/AIStudioOS-Grok/issues/9) 评论，过滤 `comment.id > last_seen_comment_id`。
+3. 识别新的 `dispatch-comment`（须含卡片全文、`card_sha256`、观察轨 commit）及其他须同步的裁定。
+4. 发 ACK 或 `INTAKE_FAILURE` 之前，先在 Issue #9 远端去重。
+5. 回执写到 Issue #9，产物写到 `worker_outbox/<task_id>/`，且可公开取回。
+6. 处理完成后把水位推进到本轮见到的最大 `comment.id`（先回执，再写水位，避免先推进导致漏单；若回执已发出但水位未写入，靠远端去重防止重复 ACK）。
 
-## 3. 失效兜底（必须写明）
+## 4. 水位字段
 
-- 工作日 19:00 窗口结束之后，到下一个工作日 08:45 之前，以及整个周末：**没有已上线的自动取件进程**。
-- 这段时间若要在 30 分钟内 ACK，**当前唯一可靠入口是创始人私聊转贴或一次被唤醒的会话**。不是“也许还有别的守护进程”。
-- 发现方式：目前没有独立的看门狗。漏检要等下一档工作日巡检、创始人转贴、或人工查看 Issue #9 才会被发现。
-- 恢复时间：下一档巡检最多间隔约 2 小时（仅工作日 08:45–19:15）；若卡发在周五 19:15 之后，自动恢复要等到下周一 08:45，可能超过 60 小时。
-- 本仓库没有 GitHub Actions 可在巡检挂掉时顶上。若要加密巡检或加 Actions，必须先在 Issue #9 报方案与影响面，经创始人批准后再上，不得自行启用。
+文件：`worker_outbox/INBOX_STATE.json`（只在工人分支维护，不改 `main`）。
 
-## 4. 回执义务
+| 字段 | 含义 |
+|---|---|
+| `schema` | `inbox_state.v1` |
+| `repo` | `shugnn/AIStudioOS-Grok` |
+| `issue_number` | `9` |
+| `last_seen_comment_id` | 已处理的最大 Issue 评论 id（整数） |
+| `last_seen_comment_created_at` | 该评论的 GitHub `created_at` |
+| `updated_at` | 本水位写入时间（亚洲/上海偏移） |
+| `state_branch` | 本文件所在分支 |
 
-Issue ACK 必须在取到后 30 分钟内发出，内容至少含：
+同一 `comment.id` 的事后编辑不会再次进入过滤集（已知限制，记入失败原因，不假装能发现）。
 
-- `task_id`
-- 承诺交付时间
-- 预算口径（本指令与 P2 均为 ¥0 / 0 次模型调用）
-- `intake_latency_s`
-- 任务卡文件 SHA256（能逐字节核验时）；否则写明障碍，不虚报
-- 触发类型：`巡检自动` 或 `人工转贴触发`
+## 5. 取件、去重与回执
 
-## 5. 监测指标
+- 只接受 `intake_mode=auto`。创始人不再转贴；私聊转贴不是任何兜底，不得据此发 ACK。
+- 同轮次须在本轮启动后 30 分钟内发出 `ACK <task_id>` 或 `INTAKE_FAILURE <task_id> <原因>`。
+- 发 ACK 前必须检索 Issue #9 是否已有同 `task_id` 的 `ACK` 或 `INTAKE_FAILURE`：已有则不再发，只补水位与本地 `ack.json`（若缺失）。
+- `ACK <task_id>` 必含：`intake_latency_effective_s`、`intake_mode=auto`、实际读到的 `card_sha256`、承诺交付时间、预算口径。缺一项视为回执不完整。
+- `card_sha256` 必须是本轮从 `dispatch-comment` 正文实际读到的卡片指纹，并与评论声明值一致；不一致或缺少全文 / `card_sha256` / 观察轨 commit，视为未收到，发 `INTAKE_FAILURE`，不得发 ACK。
+- 交付与 `SEALED <manifest_sha256>` 同样回 Issue #9，并给出工人分支上可公开打开的路径（任何人无需私聊即可取回）。
 
-`intake_latency_s` = ACK 时刻 − 发布时刻（秒）。
+`intake_latency_effective_s` = ACK 评论 `created_at` 与 `dispatch-comment` 的 `created_at` 之间、落在当日及跨日 09:00–23:00（亚洲/上海）之内的秒数。00:00–09:00 与 23:00–24:00 不计入。抖动耗时若落在 09:00–23:00 内，照常计入。
 
-- ACK 时刻以 Issue 评论的 GitHub `created_at` 为准。
-- 发布时刻：同时记录（a）任务卡声明时间、（b）Issue 发布评论 `created_at`，两条都写，避免口径混用。
-- 硬指标（由观察轨测量，不接受自述单独生效）：`intake_latency_s ≤ 1800`（目标 ≤ 600）；发布后 60 分钟内无 ACK 记一次漏单；自动 ACK 不得把人工转贴写成自动。
+## 6. 可达延迟
 
-已发生记录：
+在上述日程下，相邻窗口之间有 90 分钟空档（例如 09:15 结束，10:45 下一档最早启动）。
 
-| task_id | 发布（+08） | ACK（+08） | intake_latency_s | 触发 | 漏单（60min） |
-|---|---|---|---:|---|---|
-| DS-P1-20261120 | 2026-11-19 23:57:48（[7014411433](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7014411433)） | 2026-11-20 08:56:23（[7026936065](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7026936065)） | 32315 | 巡检自动（次日 09:00 窗口） | 是 |
-| DS-P2-20261120 | 卡面 2026-11-20 20:45:00；Issue 20:40:21（[7039777786](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7039777786)） | 2026-11-20 20:57:23（[7040111914](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7040111914)） | 743（相对卡面）/ 1022（相对 Issue） | 人工转贴触发 | 否 |
+- 若 `dispatch-comment` 落在某窗口进行中，且本轮 30 分钟内完成 ACK，则可达到验收线 `intake_latency_effective_s ≤ 1800`。
+- 上界（诚实值，不作 1800 宣传）：发卡落在窗口刚结束后（例如 09:16），下一轮最早 10:45 启动、最迟约 11:15 回执，有效延迟约 7140 秒（全在 09:00–23:00 内）。夜窗发布的卡片，有效延迟从次日 09:00 起算。
+- 本通道不保证任意发布时间都 ≤ 1800 秒。P3 实测若要对齐该验收线，发卡需落在窗口内或窗口开始前足够近。
 
-P1 空窗证据：Issue #9 在 7014411433 与 7026936065 之间无任何评论；本仓库 Actions 为 0；巡检 cron 在 19:00 之后、次日 08:45 之前无槽。这是日程空窗，不是“进程在重试但失败”的日志。
+## 7. 夜间策略
 
-## 6. 待批方案（未上线）
+- 例行任务在 23:15 之后至次日 08:45 不启动。
+- 此期间不轮询 Issue #9，不要求回执；不把夜窗等待计入 `intake_latency_effective_s`。
+- 无转贴补漏。次日第一档（08:45–09:15）按水位自动取件。
+- 红线见第 1 节：无夜间轮询，仅在被唤醒时立即处理。
 
-为达到 `intake_latency_s ≤ 1800`（目标 ≤ 600）且漏单数为 0，需要加密取件。**尚未启用。** 建议在 Issue #9 讨论后由创始人批准再改：
+## 8. 失败处理
 
-- 将「task_inbox 巡检」改为每日（含周末）08:00–22:00 每 15 或 30 分钟一轮，仍只读 Issue #9 与 `task_inbox/`，仍 ¥0，不改 `main`、不合并 PR、不触碰其他仓库。
-- 影响面：例行唤醒次数增加，用量上升；仍依赖 Grok Bot 例行任务能够实际跑起来，不是主机 cron，也不是 Actions。
-- 若要把官方卡文件同步进本仓库 `task_inbox/<task_id>/任务卡.md` 以便就地计算 SHA256，也须单独批准（可只推到工人分支，不改 `main`）。
+未在自己轮次取到或不能诚实 ACK 时，在 Issue #9 回：
 
+`INTAKE_FAILURE <task_id> <原因>`
+
+并在 24 小时内提交本文件的整改（仍推工人分支，不改 `main`），不得等待转贴。观察轨记 `intake_mode=failed`、任务顺延、不计本轨延迟责任。连续 3 次失败，该轨由观察轨标为「通道不可用」。
+
+## 9. 边界与验收
+
+- 不改 `main`、不合并 PR、不付费、不修改其他仓库。
+- P3 在本文件与 `worker_outbox/PATHS.md`、`worker_outbox/INBOX_STATE.json` 到位后才发布，不测旧管道。
+- 验收（由观察轨测量，不接受自述单独生效）：`intake_mode=auto`，`miss_count=0`，`ack_completeness=100%`，`intake_latency_effective_s ≤ 1800`。

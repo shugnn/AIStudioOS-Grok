@@ -1,0 +1,27 @@
+{
+  "task_id": "DS-P2-20261120",
+  "trigger": "人工转贴触发",
+  "trigger_note": "创始人于 2026-11-20 20:50 亚洲/上海在工人私聊下达取件指令；非巡检自动发现。",
+  "published_card_declared_plus08": "2026-11-20T20:45:00+08:00",
+  "published_issue_comment_id": 7039777786,
+  "published_issue_created_at": "2026-11-20T12:40:21Z",
+  "ack_issue_comment_id": 7040111914,
+  "ack_created_at": "2026-11-20T12:57:23Z",
+  "ack_plus08": "2026-11-20T20:57:23+08:00",
+  "intake_latency_s_from_card_declared": 743,
+  "intake_latency_s_from_issue_comment": 1022,
+  "card_repo": "shugnn/AIStudioOS-DS",
+  "card_path": "_observe/tasks/P2-20261120/任务卡.md",
+  "card_ref": "main",
+  "card_size_bytes": 5006,
+  "card_git_blob_sha": "24f03ecd0b8a6f25b5bbfe4e06b09c0aee563721",
+  "card_sha256": null,
+  "card_sha256_note": "已通过认证接口读到卡文全文与 git blob 元数据；该私有仓 raw 下载 404，本轮未独立核实 git blob 逐字节的 SHA256，故不虚报。",
+  "promised_delivery": {
+    "INBOX.md": "2026-11-21T23:59:00+08:00",
+    "P2_deliverables": "2026-11-22T23:59:00+08:00"
+  },
+  "budget_cny": 0,
+  "model_calls": 0,
+  "correction_comment_id": 7040117563
+}

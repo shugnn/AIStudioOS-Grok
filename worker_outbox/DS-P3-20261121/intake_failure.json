@@ -1,0 +1,33 @@
+{
+  "schema": "intake_failure.v1",
+  "task_id": "DS-P3-20261121",
+  "result": "INTAKE_FAILURE",
+  "intake_mode": "failed",
+  "dispatch_comment_id": 7056141600,
+  "dispatch_utc": "2026-11-21T02:45:25Z",
+  "dispatch_url": "https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7056141600",
+  "pickup_round_planned_utc": "2026-11-21T03:00:00Z",
+  "pickup_actual_utc": "2026-11-21T02:52:32Z",
+  "failure_comment_id": 7056271954,
+  "failure_utc": "2026-11-21T02:57:06Z",
+  "failure_url": "https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7056271954",
+  "failure_author": "shugnn",
+  "intake_latency_wall_s": 701,
+  "intake_latency_effective_s": 701,
+  "declared_card_sha256": "c739a9142bccae20d9ab807d7f9193a90f4218b72f0d98d9348c0a255d2238b9",
+  "computed_card_sha256_strip": "808fdad50ae38c5babf05ea260111e043394df946b2673e36e3c36dbe440e94a",
+  "sha_match": false,
+  "declared_observe_commit": "a75c018",
+  "observe_commit_resolvable_on_AIStudioOS_DS": false,
+  "fingerprint_anchor": {
+    "repo": "shugnn/AIStudioOS-DS",
+    "path": "_observe/tasks/P3-20261121/任务卡.md",
+    "commit": "784bc20d1c77c2c950a09a38bb75c289a5ea6843",
+    "sha256": "c739a9142bccae20d9ab807d7f9193a90f4218b72f0d98d9348c0a255d2238b9",
+    "matches_declared": true,
+    "used_as_intake": false
+  },
+  "reason": "dispatch-comment 7056141600 已含声明 card_sha256 与观察轨 commit，但权威卡片全文区间为乱码（80 处 ASCII '?' 及专用区码点，无法无损还原）；对评论正文多种切片计算的 SHA256 均与声明值不符。按协议评论文本优先，不得用存档任务卡代替发 ACK。观察轨短 SHA a75c018 在 AIStudioOS-DS 上未能解析为 commit。",
+  "first_round": true,
+  "posted_within_30min_of_run_start": true
+}

@@ -1,0 +1,1 @@
+{"task_id":"DS-P3-20261121","scheduled_for_utc":"2026-11-21T07:20:00Z","fired_utc":null,"one_shot":true,"cleanup":"auto","action_taken":"scheduled","evidence_url":null,"routine_id":"p3-v2-20min","dispatch_comment_id":7057824038,"note":"15:20 +08 自查已创建（exact one-shot）；真实触发后回填 fired_utc 与 evidence_url"}

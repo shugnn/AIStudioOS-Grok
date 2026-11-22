@@ -2,9 +2,9 @@
   "schema": "inbox_state.v1",
   "repo": "shugnn/AIStudioOS-Grok",
   "issue_number": 9,
-  "last_seen_comment_id": 7060505678,
-  "last_seen_comment_created_at": "2026-11-21T09:20:31Z",
-  "updated_at": "2026-11-21T19:00:00+08:00",
+  "last_seen_comment_id": 7071883107,
+  "last_seen_comment_created_at": "2026-11-22T00:56:53Z",
+  "updated_at": "2026-11-22T08:57:00+08:00",
   "state_branch": "bot/ds-p2-20261120",
-  "notes": "水位以 comment.id 计；下一轮只处理更大的 id。本文件只在工人分支维护，不改 main。P3 唯一有效发布为 v2 dispatch-comment 7057824038（card_sha256 397edf37982846c35fdf78312c9a79dbf3a19bb315683b237ccd3ce1685d0731）。ACK 7058811180，时延更正 7058813900（effective 5210s）。路径说明 7060333377。观察轨 7060505678（17:20:31 +08）判定 17:00 轮两项补正通过、四件 COMPLIANT、B_CLASS_PROOF 合格。先前观察轨 7059196023 判定首轮 ACK=PASS。先前 ACK 7057613450 仅针对已作废的 7057108036；INTAKE_FAILURE 7056271954 仅针对已作废的 7056141600。"
+  "notes": "水位以 comment.id 计；下一轮只处理更大的 id。本文件只在工人分支维护，不改 main。09:00 轮已读 7065500517（已被取代）与 7065953732（观察轨代发：三轨改 24/7 每小时，非 dispatch）。已回节拍确认 7071883107：实际配置仍为 09–23 每 2 小时，改 cron 待创始人私聊确认。P3 唯一有效发布为 v2 dispatch-comment 7057824038（card_sha256 397edf37982846c35fdf78312c9a79dbf3a19bb315683b237ccd3ce1685d0731）。ACK 7058811180，时延更正 7058813900（effective 5210s）。路径说明 7060333377。观察轨 7060505678 判定 17:00 轮两项补正通过、四件 COMPLIANT、B_CLASS_PROOF 合格。先前观察轨 7059196023 判定首轮 ACK=PASS。先前 ACK 7057613450 仅针对已作废的 7057108036；INTAKE_FAILURE 7056271954 仅针对已作废的 7056141600。"
 }

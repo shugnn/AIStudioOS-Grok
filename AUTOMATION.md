@@ -1,11 +1,11 @@
 # 自动化分档（A/B 类）
 
 仓库：https://github.com/shugnn/AIStudioOS-Grok  
-文档日期：2026-11-21（亚洲/上海）  
-依据：[Issue #9 comment 7057637233](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7057637233)、[comment 7057776146](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7057776146)、创始人强制指令 2026-11-21 14:40（亚洲/上海）。  
+文档日期：2026-11-22（亚洲/上海）  
+依据：[Issue #9 comment 7057637233](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7057637233)、[comment 7057776146](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7057776146)、创始人强制指令 2026-11-21 14:40（亚洲/上海）、观察轨代发 [comment 7065953732](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7065953732)、创始人私聊确认 2026-11-22 11:15（亚洲/上海）、节拍确认 [comment 7073430874](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7073430874)。  
 本文件在工人分支 `bot/ds-p2-20261120` 维护，不改 `main`。取件入口仍是 Issue #9 的 `dispatch-comment`。
 
-四件实物截止：**2026-11-22 10:00（亚洲/上海）**。缺一即视为未执行。路径均在本分支：
+四件实物已于 2026-11-21 交齐，观察轨 [comment 7060505678](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7060505678) 判定 COMPLIANT。路径均在本分支：
 
 1. `AUTOMATION.md`（本文件）
 2. `worker_outbox/automation_log.jsonl`
@@ -19,15 +19,15 @@
 | 项 | 现行配置 |
 |---|---|
 | 谁触发 | Grok Bot 例行任务「AIStudioOS dispatch 巡检」（id `aistudioos-task-inbox`） |
-| 触发时刻 | 北京时间每天 09/11/13/15/17/19/21/23（含周末） |
-| cron | `CRON_TZ=Asia/Shanghai 0 9,11,13,15,17,19,21,23 * * *` |
-| 抖动 | flexible ±15 分钟（计入 `intake_latency_effective_s`）；服务器起点约为 `52 8,10,12,14,16,18,20,22` |
-| 夜间策略 | 00:00–09:00（亚洲/上海）不运行、不轮询、不要求回执。23:00 档最晚到 23:15。 |
+| 触发时刻 | 北京时间每天每小时整点（00–23，含夜间与周末） |
+| cron | `CRON_TZ=Asia/Shanghai 0 * * * *` |
+| 抖动 | flexible ±15 分钟（计入 `intake_latency_effective_s`） |
+| 夜间策略 | 00:00–09:00（亚洲/上海）同样运行、同样取件；夜间发布的卡也在当轮 30 分钟内回执。 |
 | 每轮第一件事 | 读 Issue #9，按 `comment.id > last_seen_comment_id` 过滤。水位在 `worker_outbox/INBOX_STATE.json`。 |
-| 有新 dispatch 卡 | 本轮启动后 30 分钟内回 `ACK <task_id>`，字段必须含：`card_sha256` / `intake_mode` / `intake_latency_effective_s` / `promised_delivery_at` / `budget_basis`；并报 `pickup_round_utc`。末尾加 `下次醒 HH:MM`。 |
-| 无新卡 | 不发言，不在 Issue #9 发心跳。 |
+| 有新 dispatch 卡 | 本轮启动后 30 分钟内回 `ACK <task_id>`，字段必须含：`card_sha256` / `intake_mode` / `intake_latency_effective_s` / `promised_delivery_at` / `budget_basis`；并报 `pickup_round_utc`。末尾加 `下次醒 HH:00`。 |
+| 无新卡 | 在创始人私聊发一行心跳；不在 Issue #9 发空心跳。 |
 
-取件节拍保持 09/11/…/23 每 2 小时，**不**改成观察轨那种每小时 :45、24/7。另有「AIStudioOS 日间主动推进」（工作日约 09:00）和「ChatCL 退款晨检」，都不是取件心跳。
+取件节拍自 2026-11-22 11:15（亚洲/上海）起改为全天每小时。此前为 09/11/…/23 每 2 小时；09:00 轮曾在 [comment 7071883107](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7071883107) 如实回报仍待私聊确认。确认后已在 [comment 7073430874](https://github.com/shugnn/AIStudioOS-Grok/issues/9#issuecomment-7073430874) 补发节拍确认。再改节拍仍须创始人在私聊点头。另有「AIStudioOS 日间主动推进」（工作日约 09:00）和「ChatCL 退款晨检」，都不是取件心跳。
 
 主机 crontab 不能唤醒本 bot，也不能完成 ACK。乌斑兔已无「每 5 分钟扫 task_inbox」的条目，也不再另装本机扫 Issue 的 cron 作为第二条取件通道。
 
@@ -43,7 +43,7 @@ B 类必须真实存在并运行：到点即触发 → 触发即执行 → 执�
 
 1. 一次性，不设周期；跑完即删，避免次年同日误触发。
 2. 同时挂起不超过 5 条；每条写清：在等什么、判据、判完做什么。
-3. 与某次 A 类计划时刻相差 ≤20 分钟则撤 B 类（去重）。观察轨要求的「取件轮 +20 分钟自查」落在 A 类窗口结束之后（例如 15:00 档最晚 15:15，自查在 15:20），作为窗口关闭后的自证保留；若自查时刻会与下一档 A 类窗口重叠，则撤 B、改由那一档 A 类处理。
+3. 与某次 A 类计划时刻相差 ≤20 分钟则撤 B 类（去重）。观察轨要求的「取件轮 +20 分钟自查」落在 A 类窗口结束之后（例如 15:00 档最晚 15:15，自查在 15:20），距下一档 A 类整点约 40 分钟，作为窗口关闭后的自证保留；若自查时刻会与下一档 A 类窗口重叠，则撤 B、改由那一档 A 类处理。
 4. B 类同样更新水位 / `automation_log.jsonl` / `B_CLASS_PROOF.jsonl`，不另开取件通道。
 5. 事件提前解决（例如 A 类已发出 ACK 或 `INTAKE_FAILURE`）则到点仍要触发并自证，已有回执则只写证明、不空发 Issue，然后删除这条 B。
 
@@ -64,23 +64,23 @@ B 类必须真实存在并运行：到点即触发 → 触发即执行 → 执�
 
 `worker_outbox/B_CLASS_PROOF.jsonl` 一行一条，字段：`task_id` · `scheduled_for_utc` · `fired_utc` · `one_shot`（true）· `cleanup`（auto|manual）· `action_taken` · `evidence_url`。预约时先写 `fired_utc=null`；真实触发后必须回填 `fired_utc` 与 `evidence_url`。验收只认真实触发样本，不认「已配置」。
 
-首个样本：DS-P3-20261121，计划 2026-11-21 15:20（亚洲/上海），例行任务 id `p3-v2-20min`。
+首个样本：DS-P3-20261121，计划 2026-11-21 15:20（亚洲/上海），例行任务 id `p3-v2-20min`，已于 15:20:40 真实触发并回填。
 
 ## 3. 漏投递如何发现与补救
 
-- 未设 B 类或 B 类未跑：下一档 A 类（最多间隔约 2 小时）按水位补读 Issue #9，不把私聊转贴当补救；同时启用 §2.2 自建兜底。
+- 未设 B 类或 B 类未跑：下一档 A 类（最多间隔约 1 小时）按水位补读 Issue #9，不把私聊转贴当补救；同时启用 §2.2 自建兜底。
 - 本应在首轮取到却未回执：Issue #9 发 `INTAKE_FAILURE <task_id> <原因>`，24 小时内交 `INBOX.md` 或本文件整改。不得沉默。
 - 例行任务未能实际唤醒：记失败原因并启用自建兜底，不编造成功；连续 3 次由观察轨标「通道不可用」。
-- 夜窗（00:00–09:00）不补设取件轮询；红线仅在本会话被唤醒时立即处理。
+- 夜窗（00:00–09:00）同样取件；红线在本会话被唤醒时立即处理。
 
 ## 4. 与观察轨的对齐点
 
 - 通道以 Issue #9 的 `dispatch-comment` 为准；`task-card` 只作指纹锚；产物在 `worker_outbox/<task_id>/`。
-- 硬门禁是 `first_round_ack`（首次回执落在发布后第一个取件轮次）。`intake_latency_effective_s` 是观测值，须同时报 `pickup_round_utc`。只计 09:00–23:00。
-- 每次 `ACK` / `SEALED` 末尾加一行：`下次醒 HH:MM`（亚洲/上海，下一档 A 类计划整点）。
+- 硬门禁是 `first_round_ack`（首次回执落在发布后第一个取件轮次）。`intake_latency_effective_s` 是观测值，须同时报 `pickup_round_utc`。自 2026-11-22 11:15 起全天小时均计入（含夜间）。
+- 每次 `ACK` / `SEALED` 末尾加一行：`下次醒 HH:00`（亚洲/上海，下一档 A 类计划整点）。
 - 实验期 2026-11-21 13:00 至 2026-11-23 10:00（亚洲/上海）。遥测文件：`worker_outbox/automation_log.jsonl`（一行一条本地事实：`ts_utc`、`kind` 或 `round_type`（A/B）、是否扫到新 dispatch、是否发 ACK、`intake_latency_effective_s`、是否漏轮、备注）。¥0，不为遥测增加付费调用。
-- 四件实物截止 2026-11-22 10:00（亚洲/上海）；P3 / P2 任务卡本身仍截止 2026-11-22 23:59。
-- 节拍变更须双方同意，不单方改。
+- 四件实物已 COMPLIANT；P3 / P2 任务卡本身仍截止 2026-11-22 23:59。
+- 节拍变更须双方同意，不单方改。本次由观察轨 7065953732 提出、创始人 2026-11-22 11:15 私聊确认后生效。
 
 ## 5. 边界
 

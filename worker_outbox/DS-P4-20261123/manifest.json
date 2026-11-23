@@ -1,0 +1,34 @@
+{
+  "autonomous_point": "c",
+  "budget_cny": 0,
+  "card_sha256": "2e16b9d610f3d93a7d325f7fce6862e1f378c7a684c172e7dd0074725688d9fb",
+  "dispatch_comment_id": 7092086383,
+  "files": {
+    "AUTONOMOUS.md": "206fdd751428e56d26fb524263bbf7083f7a85938fe0b10e36d11630fddb4b9f",
+    "p3_rerun/compare.json": "cc6e7e17a9817cfd973d0bbc91ea1ae3134e6bf4b32bda39af616300376c6694",
+    "p3_rerun/rebuild-run1/provenance.json": "f5d22b580e8fff5685680e716dc4b92fd4f534db1bdc9899048ae437cc499327",
+    "p3_rerun/rebuild-run1/scorecard.json": "d26b1cdcde8b83e90869a35379021fb585a4753f059efbdcf7edcf3f804f2372",
+    "p3_rerun/rebuild-run2/provenance.json": "f5d22b580e8fff5685680e716dc4b92fd4f534db1bdc9899048ae437cc499327",
+    "p3_rerun/rebuild-run2/scorecard.json": "d26b1cdcde8b83e90869a35379021fb585a4753f059efbdcf7edcf3f804f2372",
+    "rebuild.py": "fdc9920b07daff7e32a248ff19e1f56c3bf7086606198880c01a690fa4006a54",
+    "reject_tests.py": "694d1b072f7a7a0b3d19acd12712248ce143b8090508719521e41e9be90f54b5",
+    "reject_tests_run.txt": "f1b93f2bbadb943c1a399536a1947580ccf150f2bbf58177ee2b6aa7bef49ca2"
+  },
+  "generated_utc": "2026-11-23T07:00:00Z",
+  "input_sha": [
+    "t7/soak_summary.json:4c365fbad55e747e65ebf425a64f5cd18d24ccc1895d4f514eeab3aaaf8361d1",
+    "t7/soak_timeline.jsonl:db949b1cc884fe782eee10407ac87fcf12501c7767b4341552b6eb8040813321",
+    "t7/incidents.jsonl:72a35319fe713b97c81b000e7dfd8c345f545de754a146820b0c1349c414f6a1",
+    "p1/pipeline.py:a0b69cc15cb00a239c4ee25f02a38c0a34bcf1bb9183247f084de9ef5699167f",
+    "p3/manifest.json:ccab547b165c217e7faef6023c9048d7470a2f8b33c1398976d835a7d72c77ce",
+    "p3/scorecard.json:d26b1cdcde8b83e90869a35379021fb585a4753f059efbdcf7edcf3f804f2372",
+    "p3/provenance.json:f5d22b580e8fff5685680e716dc4b92fd4f534db1bdc9899048ae437cc499327"
+  ],
+  "light_verify": "sidecar at worker_outbox/DS-P4-20261123/light_verify.md; not stored inside the ZIP so the recorded zip sha256 can be self-consistent",
+  "model_calls": 0,
+  "p3_rerun_matches_published": true,
+  "t7_p1_p3_originals_unmodified": true,
+  "task_id": "DS-P4-20261123",
+  "tool_version": "Python 3.13.5; reject_tests.py sha256 694d1b072f7a7a0b3d19acd12712248ce143b8090508719521e41e9be90f54b5; rebuild.py sha256 fdc9920b07daff7e32a248ff19e1f56c3bf7086606198880c01a690fa4006a54",
+  "total_cost_cny": 0
+}

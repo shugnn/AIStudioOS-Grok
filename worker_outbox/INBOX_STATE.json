@@ -2,10 +2,10 @@
   "schema": "inbox_state.v1",
   "repo": "shugnn/AIStudioOS-Grok",
   "issue_number": 9,
-  "last_seen_comment_id": 7077508315,
-  "last_seen_comment_created_at": "2026-11-22T10:00:18Z",
-  "updated_at": "2026-11-22T19:03:22+08:00",
+  "last_seen_comment_id": 7092895402,
+  "last_seen_comment_created_at": "2026-11-23T05:58:35Z",
+  "updated_at": "2026-11-23T14:00:00+08:00",
   "state_branch": "bot/ds-p2-20261120",
-  "notes": "水位以 comment.id 计；下一轮只处理更大的 id。本文件只在工人分支维护，不改 main。19:00 轮已读 7077508315（观察轨代发：P3 截止前 6 小时提醒，非 dispatch，未另发 ACK）。P3 唯一有效发布为 v2 dispatch-comment 7057824038（card_sha256 397edf37982846c35fdf78312c9a79dbf3a19bb315683b237ccd3ce1685d0731）。ACK 7058811180，时延更正 7058813900（effective 5210s）。路径说明 7060333377。观察轨 7060505678 判定 17:00 轮两项补正通过、四件 COMPLIANT、B_CLASS_PROOF 合格。先前观察轨 7059196023 判定首轮 ACK=PASS。节拍确认 7073430874：A 类 24/7 每小时。先前 ACK 7057613450 仅针对已作废的 7057108036；INTAKE_FAILURE 7056271954 仅针对已作废的 7056141600。",
-  "note": "水位推进至观察轨提醒 7077508315；A 类为 24/7 每小时（创始人 2026-11-22 11:15 确认）。"
+  "notes": "水位以 comment.id 计；下一轮只处理更大的 id。本文件只在工人分支维护，不改 main。14:00 轮取到 P4 首卡 dispatch-comment 7092086383（2026-11-23T05:03:41Z，card_sha256 2e16b9d610f3d93a7d325f7fce6862e1f378c7a684c172e7dd0074725688d9fb），已发首轮 ACK 7092887199，时延更正 7092895402（intake_latency_effective_s=3261）。截止 2026-11-23 19:10 +08。输入三件齐，未回 BLOCKED。P3 最终判决仍为 7083086940=ACCEPTED（附注首次逾期）。P2 补交至 2026-11-24 23:59 +08。节拍确认 7073430874。",
+  "note": "本地水位推进至时延更正 7092895402；远程分支副本此前停在 7077508315。A 类为 24/7 每小时（创始人 2026-11-22 11:15 确认）。"
 }

@@ -31,3 +31,9 @@ docs/progress/exp02_auto_loop/cp_state.json
 docs/progress/exp02_auto_loop/cp_state.bak
 docs/progress/exp02_auto_loop/cp_state.snapshot.json
 docs/progress/exp02_auto_loop/goal_id.txt
+# Runtime Control Plane state for the human-direct-control CLI
+control_plane/state.json
+control_plane/state.bak
+control_plane/state.tmp
+# Scaffold demo artifacts (human loop)
+artifacts/human_loop/
